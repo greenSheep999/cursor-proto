@@ -11,6 +11,7 @@
 //	POST /v1/chat/completions    (OpenAI Chat Completion)
 //	POST /v1/messages            (Anthropic Messages)
 //	POST /v1/responses           (OpenAI Responses — codex CLI)
+//	POST /v1/completions         (OpenAI legacy text completion)
 //
 // The proxy reads Cursor auth from Cursor IDE's SQLite storage (macOS default).
 package main
@@ -156,6 +157,7 @@ func main() {
 	mux.HandleFunc("/v1/chat/completions", openaiChatHandler(c, cacheStore))
 	mux.HandleFunc("/v1/messages", anthropicMessagesHandler(c, cacheStore))
 	mux.HandleFunc("/v1/responses", responsesHandler(c, cacheStore))
+	mux.HandleFunc("/v1/completions", completionsHandler(c, cacheStore))
 
 	handler := RequireAPIKeys(apiKeys, mux)
 	log.Fatal(http.ListenAndServe(*addr, handler))
