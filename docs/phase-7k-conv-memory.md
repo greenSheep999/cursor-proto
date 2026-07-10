@@ -159,6 +159,6 @@ against the splice is small. Motivation would be cleanliness, not tokens.
 ## Reproduction
 
 ```
-cd /Users/danlio/Repositories/cursor-proto-wt/conv-id-memory
+cd <cursor-proto>   # any checkout of this repository
 CGO_ENABLED=1 go run ./cmd/test-conv-memory -runs 3 -probe-prepend=true -out-json /tmp/conv-memory-results.json
 ```
