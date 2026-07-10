@@ -133,21 +133,21 @@ func accessTokenFromStorage(storage []byte) string {
 // Only the fields the executor actually consumes are declared;
 // unknown fields are ignored.
 type executorRequest struct {
-	AuthID          string          `json:"AuthID"`
-	AuthProvider    string          `json:"AuthProvider"`
-	Model           string          `json:"Model"`
-	Format          string          `json:"Format"`
-	Stream          bool            `json:"Stream"`
-	Alt             string          `json:"Alt"`
+	AuthID          string              `json:"AuthID"`
+	AuthProvider    string              `json:"AuthProvider"`
+	Model           string              `json:"Model"`
+	Format          string              `json:"Format"`
+	Stream          bool                `json:"Stream"`
+	Alt             string              `json:"Alt"`
 	Headers         map[string][]string `json:"Headers"`
-	OriginalRequest []byte          `json:"OriginalRequest"`
-	SourceFormat    string          `json:"SourceFormat"`
-	Payload         []byte          `json:"Payload"`
-	StorageJSON     []byte          `json:"StorageJSON"`
-	AuthMetadata    map[string]any  `json:"AuthMetadata"`
-	AuthAttributes  map[string]string `json:"AuthAttributes"`
-	StreamID        string          `json:"stream_id,omitempty"`
-	HostCallbackID  string          `json:"host_callback_id,omitempty"`
+	OriginalRequest []byte              `json:"OriginalRequest"`
+	SourceFormat    string              `json:"SourceFormat"`
+	Payload         []byte              `json:"Payload"`
+	StorageJSON     []byte              `json:"StorageJSON"`
+	AuthMetadata    map[string]any      `json:"AuthMetadata"`
+	AuthAttributes  map[string]string   `json:"AuthAttributes"`
+	StreamID        string              `json:"stream_id,omitempty"`
+	HostCallbackID  string              `json:"host_callback_id,omitempty"`
 	// Metadata may carry per-request extras (e.g. requested_model,
 	// interceptor-set headers). Not consumed today.
 	Metadata json.RawMessage `json:"Metadata,omitempty"`
@@ -195,8 +195,8 @@ type chatShape struct {
 // user message becomes UserMessage, and function-tools populate Tools.
 func parseOpenAIPayload(body []byte) (chatShape, error) {
 	var req struct {
-		Model         string `json:"model"`
-		Messages      []struct {
+		Model    string `json:"model"`
+		Messages []struct {
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
 		} `json:"messages"`

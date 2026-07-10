@@ -8,8 +8,15 @@
 // Endpoints:
 //
 //	GET  /v1/models
+//	GET  /v1/models/{id}         (single-model detail)
 //	POST /v1/chat/completions    (OpenAI Chat Completion)
 //	POST /v1/messages            (Anthropic Messages)
+//	POST /v1/messages/count_tokens (heuristic estimator)
+//	POST /v1/responses           (OpenAI Responses — codex CLI)
+//	POST /v1/completions         (OpenAI legacy text completion)
+//	GET  /v1beta/models          (Gemini SDK)
+//	POST /v1beta/models/{model}:generateContent
+//	POST /v1beta/models/{model}:streamGenerateContent
 //
 // The proxy reads Cursor auth from Cursor IDE's SQLite storage (macOS default).
 package main
@@ -150,10 +157,21 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/models", modelsHandler(c))
+	// GET /v1/models/{id} — single-model detail. Registered with an
+	// explicit GET pattern so ServeMux distinguishes it from the list.
+	mux.HandleFunc("GET /v1/models/{id}", modelDetailHandler(c))
 	mux.HandleFunc("/v1/usage", usageHandler(c))
 	mux.HandleFunc("/v1/usage/prometheus", usagePrometheusHandler(c))
 	mux.HandleFunc("/v1/chat/completions", openaiChatHandler(c, cacheStore))
 	mux.HandleFunc("/v1/messages", anthropicMessagesHandler(c, cacheStore))
+	mux.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
+	mux.HandleFunc("/v1/responses", responsesHandler(c, cacheStore))
+	mux.HandleFunc("/v1/completions", completionsHandler(c, cacheStore))
+
+	// Gemini native surface (used by @google/gemini-cli, google-generativeai).
+	// Route splits on `{model}:{method}` internally.
+	mux.HandleFunc("GET /v1beta/models", geminiModelsListHandler(c))
+	mux.HandleFunc("POST /v1beta/models/{tail}", geminiRouter(c, cacheStore))
 
 	handler := RequireAPIKeys(apiKeys, mux)
 	log.Fatal(http.ListenAndServe(*addr, handler))
