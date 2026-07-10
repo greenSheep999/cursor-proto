@@ -10,6 +10,7 @@
 //	GET  /v1/models
 //	POST /v1/chat/completions    (OpenAI Chat Completion)
 //	POST /v1/messages            (Anthropic Messages)
+//	POST /v1/responses           (OpenAI Responses — codex CLI)
 //
 // The proxy reads Cursor auth from Cursor IDE's SQLite storage (macOS default).
 package main
@@ -154,6 +155,7 @@ func main() {
 	mux.HandleFunc("/v1/usage/prometheus", usagePrometheusHandler(c))
 	mux.HandleFunc("/v1/chat/completions", openaiChatHandler(c, cacheStore))
 	mux.HandleFunc("/v1/messages", anthropicMessagesHandler(c, cacheStore))
+	mux.HandleFunc("/v1/responses", responsesHandler(c, cacheStore))
 
 	handler := RequireAPIKeys(apiKeys, mux)
 	log.Fatal(http.ListenAndServe(*addr, handler))
