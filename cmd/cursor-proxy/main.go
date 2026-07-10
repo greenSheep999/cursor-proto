@@ -14,6 +14,9 @@
 //	POST /v1/messages/count_tokens (heuristic estimator)
 //	POST /v1/responses           (OpenAI Responses — codex CLI)
 //	POST /v1/completions         (OpenAI legacy text completion)
+//	GET  /v1beta/models          (Gemini SDK)
+//	POST /v1beta/models/{model}:generateContent
+//	POST /v1beta/models/{model}:streamGenerateContent
 //
 // The proxy reads Cursor auth from Cursor IDE's SQLite storage (macOS default).
 package main
@@ -164,6 +167,11 @@ func main() {
 	mux.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
 	mux.HandleFunc("/v1/responses", responsesHandler(c, cacheStore))
 	mux.HandleFunc("/v1/completions", completionsHandler(c, cacheStore))
+
+	// Gemini native surface (used by @google/gemini-cli, google-generativeai).
+	// Route splits on `{model}:{method}` internally.
+	mux.HandleFunc("GET /v1beta/models", geminiModelsListHandler(c))
+	mux.HandleFunc("POST /v1beta/models/{tail}", geminiRouter(c, cacheStore))
 
 	handler := RequireAPIKeys(apiKeys, mux)
 	log.Fatal(http.ListenAndServe(*addr, handler))
