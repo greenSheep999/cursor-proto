@@ -3,7 +3,8 @@
 //
 // Turn 1: "Remember the number 42."   → capture assistant text A1.
 // Turn 2: user="What was the number?" History=[user:turn1, assistant:A1]
-//         → assistant text A2 must mention "42".
+//
+//	→ assistant text A2 must mention "42".
 //
 // Both turns share a single ConversationId so Cursor treats them as one
 // session.
