@@ -251,9 +251,21 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 				if !ok {
 					break
 				}
+				// IMPORTANT: `payload` and `rest` both alias the underlying
+				// `buf` array. If we compact `buf` before consuming
+				// `payload`, the memmove that `append(buf[:0], rest...)`
+				// performs overwrites the bytes that `payload` points at,
+				// silently tripping proto.Unmarshal and dropping the
+				// frame. That is the root cause of Claude's turns going
+				// through with empty content: Claude packs the assistant
+				// text into short back-to-back frames, and the first
+				// frame's payload gets clobbered before we can decode it.
+				// `rest` itself survives because `append` is memmove
+				// (overlap-safe); we only need to detach `payload`.
+				payload = append([]byte(nil), payload...)
 				buf = append(buf[:0], rest...)
 
-				ev := ChatEvent{Trailer: isTrailer, Raw: append([]byte(nil), payload...)}
+				ev := ChatEvent{Trailer: isTrailer, Raw: payload}
 				if !isTrailer {
 					msg := &cursorpb.AgentV1_AgentServerMessage{}
 					if e := proto.Unmarshal(payload, msg); e == nil {
