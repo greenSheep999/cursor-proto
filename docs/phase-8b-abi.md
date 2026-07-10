@@ -1,9 +1,9 @@
 # Phase 8b — CPA plugin executor ABI
 
-This is the outcome of an archaeology dig into
-`/Users/danlio/Repositories/CLIProxyAPI` (v7). It records what the plugin
-must marshal and unmarshal for the three executor methods so future
-readers do not repeat the trip.
+This is the outcome of an archaeology dig into a local checkout of
+[`router-for-me/CLIProxyAPI`](https://github.com/router-for-me/CLIProxyAPI)
+(v7). It records what the plugin must marshal and unmarshal for the
+three executor methods so future readers do not repeat the trip.
 
 ## Envelope (all methods)
 

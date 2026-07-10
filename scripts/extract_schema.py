@@ -13,13 +13,17 @@ Enums:
 Services:
     XXX = { typeName: "...", methods: {...} }
 """
+import os
 import re
 import json
 import sys
 from pathlib import Path
 from collections import OrderedDict
 
-WB = Path("/Users/danlio/Repositories/cursor-proto/captures/wb-3.10.20.js")
+# Resolve the workbench source relative to this script so the extractor
+# works from any checkout without hard-coding an absolute path.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+WB = Path(os.environ.get("CURSOR_PROTO_WB", _REPO_ROOT / "captures" / "wb-3.10.20.js"))
 
 SCALAR_TYPES = {
     1: "double", 2: "float", 3: "int64", 4: "uint64", 5: "int32",
