@@ -272,36 +272,56 @@ func convertResponsesTools(in []responsesTool) []executor.ToolDefinition {
 // ---------- Streaming path ----------
 
 func streamResponses(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
-	w.Header().Set("content-type", "text/event-stream")
-	w.Header().Set("cache-control", "no-cache")
-	w.Header().Set("x-accel-buffering", "no")
 	flusher, _ := w.(http.Flusher)
-
-	tr := translator.NewOpenAIResponsesStreamWriter(model)
-	// response.created + response.in_progress up front so the client sees
-	// activity even before Cursor's first text delta.
-	if init := tr.InitialFrames(); len(init) > 0 {
-		w.Write(init)
+	headersWritten := false
+	commit := func() {
+		if headersWritten {
+			return
+		}
+		headersWritten = true
+		w.Header().Set("content-type", "text/event-stream")
+		w.Header().Set("cache-control", "no-cache")
+		w.Header().Set("x-accel-buffering", "no")
+	}
+	writeSSE := func(payload []byte) {
+		if len(payload) == 0 {
+			return
+		}
+		commit()
+		w.Write(payload)
 		if flusher != nil {
 			flusher.Flush()
 		}
 	}
 
+	tr := translator.NewOpenAIResponsesStreamWriter(model)
+	// response.created + response.in_progress: delayed until we actually see
+	// data or a benign end; a trailer error before that surfaces as a normal
+	// HTTP error instead.
+	initFrames := tr.InitialFrames()
+
 	assistantSent := ""
 	sawTurnEnd := false
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
+		}
+		if !headersWritten && len(initFrames) > 0 {
+			writeSSE(initFrames)
+			initFrames = nil
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
-				payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
+				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
 		}
@@ -310,42 +330,29 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 			continue
 		}
 		switch trEv.Kind {
+		case translator.EventTextDelta:
+			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
-			if payload := tr.Encode(trEv); len(payload) > 0 {
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
-			}
+			writeSSE(tr.Encode(trEv))
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
 			decision.applyToUsage(trEv.Usage, false)
-			if payload := tr.Encode(trEv); len(payload) > 0 {
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
-			}
+			writeSSE(tr.Encode(trEv))
 		}
 	}
-	// If the stream ended without an explicit turn_ended (e.g. mid-tool-call
-	// with AutoStopOnToolCall), synthesize the terminal frame so codex sees
-	// a well-formed stream.
+	if !headersWritten && trailerErr != nil {
+		writeUpstreamOpenAIError(w, trailerErr)
+		return
+	}
+	// Late fallback: never emitted init frames because the whole stream was
+	// heartbeats — commit and emit them now so codex sees a valid stream.
+	if len(initFrames) > 0 {
+		writeSSE(initFrames)
+	}
 	if !sawTurnEnd {
-		if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}); len(payload) > 0 {
-			w.Write(payload)
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
+		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}))
 	}
-	// Idempotent: emits nothing if response.completed already fired above.
-	if final := tr.FinalCompletedFrame(); len(final) > 0 {
-		w.Write(final)
-		if flusher != nil {
-			flusher.Flush()
-		}
-	}
+	writeSSE(tr.FinalCompletedFrame())
 }
 
 // ---------- Non-streaming path ----------
@@ -353,7 +360,14 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 func nonStreamResponses(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
 	acc := translator.ResponsesNonStreamingAccumulator{Model: model}
 	assistantSent := ""
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -370,6 +384,10 @@ func nonStreamResponses(w http.ResponseWriter, model string, events <-chan execu
 			continue
 		}
 		acc.Consume(trEv)
+	}
+	if trailerErr != nil && !acc.HasOutput() {
+		writeUpstreamOpenAIError(w, trailerErr)
+		return
 	}
 	var realCacheRead int64
 	if acc.Usage != nil {

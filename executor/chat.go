@@ -104,6 +104,10 @@ type ChatEvent struct {
 	Server *cursorpb.AgentV1_AgentServerMessage
 	// Raw payload bytes (in case Server failed to unmarshal).
 	Raw []byte
+	// Status carries the parsed grpc-status trailer when Trailer is true.
+	// A non-OK Status (code != 0) is the signal handlers should surface as
+	// an HTTP error rather than an empty-content 200. Nil on data frames.
+	Status *TrailerStatus
 }
 
 // RunChat starts an agent run and yields decoded server messages until the
@@ -266,7 +270,9 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 				buf = append(buf[:0], rest...)
 
 				ev := ChatEvent{Trailer: isTrailer, Raw: payload}
-				if !isTrailer {
+				if isTrailer {
+					ev.Status = ParseTrailer(payload)
+				} else {
 					msg := &cursorpb.AgentV1_AgentServerMessage{}
 					if e := proto.Unmarshal(payload, msg); e == nil {
 						ev.Server = msg

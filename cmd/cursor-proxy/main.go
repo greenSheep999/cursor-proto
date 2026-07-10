@@ -322,16 +322,43 @@ func convertAnthropicTools(in []anthropicTool) []executor.ToolDefinition {
 }
 
 func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, includeUsage bool, decision simCacheDecision) {
-	w.Header().Set("content-type", "text/event-stream")
-	w.Header().Set("cache-control", "no-cache")
-	w.Header().Set("x-accel-buffering", "no")
+	// Defer committing SSE headers until we've either seen a data frame or an
+	// error trailer, so a fast-fail model-gate error can be surfaced as a
+	// proper HTTP status code rather than a 200 with empty content.
 	flusher, _ := w.(http.Flusher)
+	headersWritten := false
+	commit := func() {
+		if headersWritten {
+			return
+		}
+		headersWritten = true
+		w.Header().Set("content-type", "text/event-stream")
+		w.Header().Set("cache-control", "no-cache")
+		w.Header().Set("x-accel-buffering", "no")
+	}
+	writeSSE := func(payload []byte) {
+		if len(payload) == 0 {
+			return
+		}
+		commit()
+		w.Write(payload)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
 
 	tr := translator.NewOpenAIStreamWriter(model)
 	tr.IncludeUsage = includeUsage
 	assistantSent := ""
 	sawTurnEnd := false
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -339,11 +366,7 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
-				payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
+				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
 		}
@@ -352,44 +375,32 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 			continue
 		}
 		switch trEv.Kind {
+		case translator.EventTextDelta:
+			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta:
-			if payload := tr.Encode(trEv); len(payload) > 0 {
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
-			}
+			writeSSE(tr.Encode(trEv))
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
-			// Rewrite usage before handing the event to the writer. Anthropic
-			// cache-creation marking is skipped here (OpenAI schema has no
-			// equivalent field).
 			decision.applyToUsage(trEv.Usage, false)
-			if payload := tr.Encode(trEv); len(payload) > 0 {
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
-			}
+			writeSSE(tr.Encode(trEv))
 		}
+	}
+	// If we've written nothing yet and the trailer reported an error, respond
+	// with a proper HTTP error instead of an empty SSE stream. Composer /
+	// grok / kimi flows always emit data frames first, so this branch is
+	// scoped to hard-fail cases (region gates, auth, etc.).
+	if !headersWritten && trailerErr != nil {
+		writeUpstreamOpenAIError(w, trailerErr)
+		return
 	}
 	// If a tool call arrived but the server never sent turn_ended (typical
 	// when Cursor is waiting on a BidiAppend tool result), synthesize a
 	// finish_reason=tool_calls terminator so OpenAI clients see a valid stop.
 	if !sawTurnEnd && tr.SawToolCall {
-		if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}); len(payload) > 0 {
-			w.Write(payload)
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
+		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}))
 	}
-	if payload := tr.FinalUsageFrame(); len(payload) > 0 {
-		w.Write(payload)
-		if flusher != nil {
-			flusher.Flush()
-		}
-	}
+	writeSSE(tr.FinalUsageFrame())
+	commit()
 	w.Write(tr.FinalDone())
 	if flusher != nil {
 		flusher.Flush()
@@ -398,7 +409,14 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 
 func nonStreamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
 	acc := translator.NonStreamingAccumulator{Model: model}
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -411,12 +429,20 @@ func nonStreamOpenAI(w http.ResponseWriter, model string, events <-chan executor
 			continue
 		}
 		switch trEv.Kind {
+		case translator.EventTextDelta:
+			acc.Consume(trEv)
 		case translator.EventToolCallStarted:
 			acc.Consume(trEv)
 		case translator.EventTurnEnded:
 			acc.Usage = trEv.Usage
 			acc.FinishStop = true
 		}
+	}
+	// Surface hard upstream errors (region gate, auth, etc.) as proper HTTP
+	// errors instead of an empty 200 with `content:""`.
+	if trailerErr != nil && acc.Text == "" && len(acc.ToolCalls) == 0 {
+		writeUpstreamOpenAIError(w, trailerErr)
+		return
 	}
 	// Non-streaming: we can see Cursor's real cache_read before writing, so
 	// set the accurate three-state header (real / simulated / mixed).
@@ -503,15 +529,39 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 }
 
 func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
-	w.Header().Set("content-type", "text/event-stream")
-	w.Header().Set("cache-control", "no-cache")
-	w.Header().Set("x-accel-buffering", "no")
 	flusher, _ := w.(http.Flusher)
+	headersWritten := false
+	commit := func() {
+		if headersWritten {
+			return
+		}
+		headersWritten = true
+		w.Header().Set("content-type", "text/event-stream")
+		w.Header().Set("cache-control", "no-cache")
+		w.Header().Set("x-accel-buffering", "no")
+	}
+	writeSSE := func(payload []byte) {
+		if len(payload) == 0 {
+			return
+		}
+		commit()
+		w.Write(payload)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
 
 	tr := translator.NewAnthropicStreamWriter(model)
 	assistantSent := ""
 	var lastUsage *translator.Usage
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -519,10 +569,7 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
-				w.Write(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
-				if flusher != nil {
-					flusher.Flush()
-				}
+				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
 		}
@@ -531,33 +578,38 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 			continue
 		}
 		switch trEv.Kind {
+		case translator.EventTextDelta:
+			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
-			if payload := tr.Encode(trEv); len(payload) > 0 {
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
-			}
+			writeSSE(tr.Encode(trEv))
 		case translator.EventTurnEnded:
 			lastUsage = trEv.Usage
 		}
+	}
+	if !headersWritten && trailerErr != nil {
+		writeUpstreamAnthropicError(w, trailerErr)
+		return
 	}
 	// Anthropic streaming: on a miss, advertise cache_creation_input_tokens
 	// so the Anthropic-style prompt-cache lifecycle is visible. On a hit,
 	// rewrite cache_read_input_tokens to max(real, simulated).
 	decision.applyToUsage(lastUsage, true)
 	end := &translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}
-	w.Write(tr.Encode(end))
-	if flusher != nil {
-		flusher.Flush()
-	}
+	writeSSE(tr.Encode(end))
 }
 
 func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
 	assistantText := ""
 	var usage *translator.Usage
 	var toolUses []map[string]any
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -570,6 +622,8 @@ func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan execu
 			continue
 		}
 		switch trEv.Kind {
+		case translator.EventTextDelta:
+			assistantText += trEv.Text
 		case translator.EventToolCallStarted:
 			var input any = map[string]any{}
 			if trEv.ToolArgsDelta != "" {
@@ -587,6 +641,10 @@ func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan execu
 		case translator.EventTurnEnded:
 			usage = trEv.Usage
 		}
+	}
+	if trailerErr != nil && assistantText == "" && len(toolUses) == 0 {
+		writeUpstreamAnthropicError(w, trailerErr)
+		return
 	}
 	content := []map[string]any{}
 	if assistantText != "" {

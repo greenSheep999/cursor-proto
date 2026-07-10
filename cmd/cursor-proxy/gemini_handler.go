@@ -262,15 +262,39 @@ func convertGeminiTools(in []geminiToolGroup) []executor.ToolDefinition {
 // ---------- Streaming path ----------
 
 func streamGemini(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
-	w.Header().Set("content-type", "text/event-stream")
-	w.Header().Set("cache-control", "no-cache")
-	w.Header().Set("x-accel-buffering", "no")
 	flusher, _ := w.(http.Flusher)
+	headersWritten := false
+	commit := func() {
+		if headersWritten {
+			return
+		}
+		headersWritten = true
+		w.Header().Set("content-type", "text/event-stream")
+		w.Header().Set("cache-control", "no-cache")
+		w.Header().Set("x-accel-buffering", "no")
+	}
+	writeSSE := func(payload []byte) {
+		if len(payload) == 0 {
+			return
+		}
+		commit()
+		w.Write(payload)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
 
 	tr := translator.NewGeminiStreamWriter(model)
 	assistantSent := ""
 	sawTurnEnd := false
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -278,12 +302,7 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
-				if payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}); len(payload) > 0 {
-					w.Write(payload)
-					if flusher != nil {
-						flusher.Flush()
-					}
-				}
+				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
 		}
@@ -292,27 +311,23 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 			continue
 		}
 		switch trEv.Kind {
+		case translator.EventTextDelta:
+			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta:
 			// Gemini writer buffers tool calls until turn_ended.
 			tr.Encode(trEv)
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
 			decision.applyToUsage(trEv.Usage, false)
-			if payload := tr.Encode(trEv); len(payload) > 0 {
-				w.Write(payload)
-				if flusher != nil {
-					flusher.Flush()
-				}
-			}
+			writeSSE(tr.Encode(trEv))
 		}
 	}
+	if !headersWritten && trailerErr != nil {
+		writeUpstreamGeminiError(w, trailerErr)
+		return
+	}
 	if !sawTurnEnd {
-		if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}); len(payload) > 0 {
-			w.Write(payload)
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
+		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}))
 	}
 }
 
@@ -321,7 +336,14 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
 	acc := translator.GeminiNonStreamingAccumulator{Model: model}
 	assistantSent := ""
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -338,6 +360,10 @@ func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor
 			continue
 		}
 		acc.Consume(trEv)
+	}
+	if trailerErr != nil && !acc.HasOutput() {
+		writeUpstreamGeminiError(w, trailerErr)
+		return
 	}
 	var realCacheRead int64
 	if acc.Usage != nil {

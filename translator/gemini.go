@@ -248,6 +248,13 @@ func (a *GeminiNonStreamingAccumulator) Consume(ev *Event) {
 	}
 }
 
+// HasOutput reports whether the accumulator captured any user-visible output.
+// Handlers use it to decide whether an upstream trailer error should be
+// surfaced as an HTTP error instead of an empty 200.
+func (a *GeminiNonStreamingAccumulator) HasOutput() bool {
+	return a.Text != "" || len(a.ToolCalls) > 0
+}
+
 // Response returns the JSON body for a non-streaming call.
 func (a *GeminiNonStreamingAccumulator) Response() []byte {
 	parts := []any{}

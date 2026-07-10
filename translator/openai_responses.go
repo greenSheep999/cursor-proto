@@ -486,6 +486,13 @@ func (a *ResponsesNonStreamingAccumulator) Consume(ev *Event) {
 	}
 }
 
+// HasOutput reports whether the accumulator captured any user-visible output
+// (text or tool call). Handlers use it to distinguish an empty-content success
+// from a hard-fail upstream error worth surfacing as HTTP 4xx/5xx.
+func (a *ResponsesNonStreamingAccumulator) HasOutput() bool {
+	return a.Text != "" || len(a.toolCalls) > 0
+}
+
 // Response builds the full non-streaming JSON payload.
 func (a *ResponsesNonStreamingAccumulator) Response(id string) []byte {
 	output := []map[string]any{}

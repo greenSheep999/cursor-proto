@@ -100,17 +100,32 @@ func flattenLegacyPrompt(raw json.RawMessage) (string, error) {
 // ---------- Streaming path ----------
 
 func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
-	w.Header().Set("content-type", "text/event-stream")
-	w.Header().Set("cache-control", "no-cache")
-	w.Header().Set("x-accel-buffering", "no")
 	flusher, _ := w.(http.Flusher)
+	headersWritten := false
+	commit := func() {
+		if headersWritten {
+			return
+		}
+		headersWritten = true
+		w.Header().Set("content-type", "text/event-stream")
+		w.Header().Set("cache-control", "no-cache")
+		w.Header().Set("x-accel-buffering", "no")
+	}
 
 	id := "cmpl-" + uuid.NewString()
 	created := time.Now().Unix()
 	assistantSent := ""
 	sawFinish := false
+	sawAnyOutput := false
+	var trailerErr *executor.TrailerStatus
 
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -118,7 +133,9 @@ func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan 
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
+				commit()
 				writeLegacyChunk(w, flusher, id, created, model, delta, "")
+				sawAnyOutput = true
 			}
 			continue
 		}
@@ -126,16 +143,30 @@ func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan 
 		if trEv == nil {
 			continue
 		}
-		if trEv.Kind == translator.EventTurnEnded {
+		switch trEv.Kind {
+		case translator.EventTextDelta:
+			if trEv.Text != "" {
+				commit()
+				writeLegacyChunk(w, flusher, id, created, model, trEv.Text, "")
+				sawAnyOutput = true
+			}
+		case translator.EventTurnEnded:
 			sawFinish = true
 			decision.applyToUsage(trEv.Usage, false)
+			commit()
 			writeLegacyChunk(w, flusher, id, created, model, "", "stop")
-			break
 		}
 	}
+	if !headersWritten && trailerErr != nil {
+		writeUpstreamOpenAIError(w, trailerErr)
+		return
+	}
+	_ = sawAnyOutput
 	if !sawFinish {
+		commit()
 		writeLegacyChunk(w, flusher, id, created, model, "", "stop")
 	}
+	commit()
 	_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	if flusher != nil {
 		flusher.Flush()
@@ -170,7 +201,14 @@ func writeLegacyChunk(w http.ResponseWriter, flusher http.Flusher, id string, cr
 
 func nonStreamLegacyCompletions(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
 	acc := translator.NonStreamingAccumulator{Model: model}
+	var trailerErr *executor.TrailerStatus
 	for ev := range events {
+		if ev.Trailer {
+			if ev.Status != nil && !ev.Status.OK() {
+				trailerErr = ev.Status
+			}
+			continue
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -182,10 +220,17 @@ func nonStreamLegacyCompletions(w http.ResponseWriter, model string, events <-ch
 		if trEv == nil {
 			continue
 		}
-		if trEv.Kind == translator.EventTurnEnded {
+		switch trEv.Kind {
+		case translator.EventTextDelta:
+			acc.Text += trEv.Text
+		case translator.EventTurnEnded:
 			acc.Usage = trEv.Usage
 			acc.FinishStop = true
 		}
+	}
+	if trailerErr != nil && acc.Text == "" {
+		writeUpstreamOpenAIError(w, trailerErr)
+		return
 	}
 	var realCacheRead int64
 	if acc.Usage != nil {
