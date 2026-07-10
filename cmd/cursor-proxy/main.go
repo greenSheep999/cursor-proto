@@ -8,6 +8,7 @@
 // Endpoints:
 //
 //	GET  /v1/models
+//	GET  /v1/models/{id}         (single-model detail)
 //	POST /v1/chat/completions    (OpenAI Chat Completion)
 //	POST /v1/messages            (Anthropic Messages)
 //	POST /v1/responses           (OpenAI Responses — codex CLI)
@@ -152,6 +153,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/models", modelsHandler(c))
+	// GET /v1/models/{id} — single-model detail. Registered with an
+	// explicit GET pattern so ServeMux distinguishes it from the list.
+	mux.HandleFunc("GET /v1/models/{id}", modelDetailHandler(c))
 	mux.HandleFunc("/v1/usage", usageHandler(c))
 	mux.HandleFunc("/v1/usage/prometheus", usagePrometheusHandler(c))
 	mux.HandleFunc("/v1/chat/completions", openaiChatHandler(c, cacheStore))
