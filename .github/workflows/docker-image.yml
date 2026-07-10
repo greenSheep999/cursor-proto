@@ -1,0 +1,126 @@
+name: docker-image
+
+# Build multi-arch cursor-proxy images and push to GHCR.
+#
+# Triggers:
+#   - push to main → tags: main-<sha>, latest
+#   - push v*.*.* tag → tags: v*.*.*, latest, plus a semver alias
+#   - workflow_dispatch → tag: manual-<sha>
+#
+# amd64 runs on ubuntu-latest, arm64 on the free public-repo ubuntu-24.04-arm
+# runner. A final manifest job stitches the two per-arch tags into a
+# multi-platform :latest / :<semver> tag.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/cursor-proxy
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase image name
+        id: img
+        run: echo "name=${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags (per-arch)
+        id: tags
+        run: |
+          IMG="${{ env.REGISTRY }}/${{ steps.img.outputs.name }}"
+          SHA=${GITHUB_SHA::7}
+          ARCH=${{ matrix.arch }}
+          TAGS="${IMG}:sha-${SHA}-${ARCH}"
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            TAGS="${TAGS},${IMG}:latest-${ARCH}"
+          fi
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            TAGS="${TAGS},${IMG}:${VERSION}-${ARCH},${IMG}:latest-${ARCH}"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.arch }},mode=max
+
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lowercase image name
+        id: img
+        run: echo "name=${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble multi-arch manifests
+        run: |
+          IMG="${{ env.REGISTRY }}/${{ steps.img.outputs.name }}"
+          SHA=${GITHUB_SHA::7}
+
+          # sha-<sha> multi-arch (always)
+          docker buildx imagetools create \
+            --tag "${IMG}:sha-${SHA}" \
+            "${IMG}:sha-${SHA}-amd64" \
+            "${IMG}:sha-${SHA}-arm64"
+
+          # latest on main + tags
+          if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == refs/tags/v* ]]; then
+            docker buildx imagetools create \
+              --tag "${IMG}:latest" \
+              "${IMG}:latest-amd64" \
+              "${IMG}:latest-arm64"
+          fi
+
+          # semver alias on tag builds
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            docker buildx imagetools create \
+              --tag "${IMG}:${VERSION}" \
+              "${IMG}:${VERSION}-amd64" \
+              "${IMG}:${VERSION}-arm64"
+          fi

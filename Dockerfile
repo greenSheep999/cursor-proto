@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------- builder ----------
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # CGO deps for mattn/go-sqlite3
 RUN apk add --no-cache gcc musl-dev sqlite-dev git
