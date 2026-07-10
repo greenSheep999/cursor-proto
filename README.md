@@ -157,8 +157,10 @@ cursor-proto/
 ├── proto/           cursor.proto (source of gen/*)
 ├── gen/cursor/      Generated Go protobuf types (cursor package = cursorpb)
 ├── cmd/
-│   ├── cursor-proxy/   OpenAI + Anthropic HTTP endpoint backed by Cursor
+│   ├── cursor-proxy/   OpenAI + Anthropic + Gemini + Responses HTTP endpoints backed by Cursor
 │   ├── cursor-login/   Interactive OAuth CLI, writes account JSON
+│   ├── cursor-export/  One-shot: reads the signed-in Cursor IDE account and writes a CPA-compatible auth JSON
+│   ├── cursor-to-cpa/  Converts a cursor-login account JSON into CPA auth JSON (batch mode too)
 │   ├── test-chat/      End-to-end RunSSE dumper
 │   ├── test-connect/   Unary AvailableModels verifier
 │   ├── test-features/  SystemPrompt / PureMode / AutoStop toggles
@@ -338,8 +340,10 @@ Documented in `docs/`:
 
 | Binary | What it does |
 |---|---|
-| `cursor-proxy` | The HTTP bridge (OpenAI + Anthropic) |
+| `cursor-proxy` | The HTTP bridge (OpenAI Chat + Responses + Anthropic + Gemini) |
 | `cursor-login` | Runs the OAuth device flow, writes an account JSON file |
+| `cursor-export` | Reads the currently signed-in Cursor IDE account from `state.vscdb` and writes a CPA-compatible auth JSON in one step |
+| `cursor-to-cpa` | Converts a `cursor-login` account JSON into CPA auth JSON (single-file or `--dir-in` batch) |
 | `test-chat` | Streams a single chat and dumps every server event |
 | `test-connect` | Sanity-checks `/v1/models` end-to-end |
 | `test-features` | Toggle SystemPrompt / PureMode / Harness / AutoStop |
