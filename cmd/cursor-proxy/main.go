@@ -11,6 +11,7 @@
 //	GET  /v1/models/{id}         (single-model detail)
 //	POST /v1/chat/completions    (OpenAI Chat Completion)
 //	POST /v1/messages            (Anthropic Messages)
+//	POST /v1/messages/count_tokens (heuristic estimator)
 //	POST /v1/responses           (OpenAI Responses — codex CLI)
 //	POST /v1/completions         (OpenAI legacy text completion)
 //
@@ -160,6 +161,7 @@ func main() {
 	mux.HandleFunc("/v1/usage/prometheus", usagePrometheusHandler(c))
 	mux.HandleFunc("/v1/chat/completions", openaiChatHandler(c, cacheStore))
 	mux.HandleFunc("/v1/messages", anthropicMessagesHandler(c, cacheStore))
+	mux.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
 	mux.HandleFunc("/v1/responses", responsesHandler(c, cacheStore))
 	mux.HandleFunc("/v1/completions", completionsHandler(c, cacheStore))
 
