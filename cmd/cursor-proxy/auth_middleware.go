@@ -38,13 +38,21 @@ func LoadAPIKeys(flagValue string) []string {
 	return keys
 }
 
-// RequireAPIKeys wraps next with a bearer-token gate. When keys is empty the
-// wrapper is a passthrough so existing deployments (no auth) keep working. When
-// keys is non-empty, every request must carry
+// RequireAPIKeys wraps next with an API-key gate. When keys is empty the
+// wrapper is a passthrough so existing deployments (no auth) keep working.
+// When keys is non-empty, every request must present one of the configured
+// keys via one of the following channels, checked in priority order:
 //
-//	Authorization: Bearer <one of the configured keys>
+//  1. Authorization: Bearer <key>   — OpenAI/Anthropic/Cursor default
+//  2. x-api-key: <key>              — Anthropic SDK, Kilo Code, others
+//  3. x-goog-api-key: <key>         — Gemini SDK
+//  4. ?key=<key>                    — Gemini SDK query fallback
 //
-// and requests that fail the check are answered with an OpenAI-compatible
+// Additional headers callers may send (e.g. OpenRouter's `HTTP-Referer`,
+// `X-Title`) are ignored, not rejected — Kilo Code and Cline occasionally
+// tag requests with them and they don't affect auth.
+//
+// Requests that fail the check are answered with an OpenAI-compatible
 // 401 error body.
 //
 // The comparison against each configured key uses crypto/subtle.ConstantTimeCompare
@@ -59,9 +67,9 @@ func RequireAPIKeys(keys []string, next http.Handler) http.Handler {
 		keyBytes[i] = []byte(k)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		presented, ok := extractBearer(r.Header.Get("Authorization"))
+		presented, ok := extractAPIKey(r)
 		if !ok {
-			writeInvalidAPIKey(w, "Missing bearer token in Authorization header.")
+			writeInvalidAPIKey(w, "Missing API key. Provide one via Authorization: Bearer, x-api-key, x-goog-api-key, or ?key=.")
 			return
 		}
 		presentedBytes := []byte(presented)
@@ -79,6 +87,29 @@ func RequireAPIKeys(keys []string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// extractAPIKey returns the first non-empty API key surfaced by the request
+// across the four supported channels, in priority order:
+//
+//  1. Authorization: Bearer <key>
+//  2. x-api-key
+//  3. x-goog-api-key
+//  4. ?key= query parameter
+func extractAPIKey(r *http.Request) (string, bool) {
+	if tok, ok := extractBearer(r.Header.Get("Authorization")); ok {
+		return tok, true
+	}
+	if v := strings.TrimSpace(r.Header.Get("x-api-key")); v != "" {
+		return v, true
+	}
+	if v := strings.TrimSpace(r.Header.Get("x-goog-api-key")); v != "" {
+		return v, true
+	}
+	if v := strings.TrimSpace(r.URL.Query().Get("key")); v != "" {
+		return v, true
+	}
+	return "", false
 }
 
 // extractBearer returns the token portion of an "Authorization: Bearer <token>"

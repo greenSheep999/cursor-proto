@@ -121,6 +121,136 @@ func TestRequireAPIKeys_CaseInsensitiveScheme(t *testing.T) {
 	}
 }
 
+func TestRequireAPIKeys_XAPIKeyHeader(t *testing.T) {
+	stub := &stubOK{}
+	h := RequireAPIKeys([]string{"sk-good"}, stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/messages", nil)
+	req.Header.Set("x-api-key", "sk-good")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body=%s)", rec.Code, rec.Body.String())
+	}
+	if stub.called != 1 {
+		t.Fatalf("downstream should have run once, called=%d", stub.called)
+	}
+}
+
+func TestRequireAPIKeys_XGoogAPIKeyHeader(t *testing.T) {
+	stub := &stubOK{}
+	h := RequireAPIKeys([]string{"sk-good"}, stub)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1beta/models/m:generateContent", nil)
+	req.Header.Set("x-goog-api-key", "sk-good")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body=%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRequireAPIKeys_QueryKeyFallback(t *testing.T) {
+	stub := &stubOK{}
+	h := RequireAPIKeys([]string{"sk-good"}, stub)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1beta/models/m:generateContent?key=sk-good", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body=%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRequireAPIKeys_PriorityOrder(t *testing.T) {
+	// When multiple channels are populated, the Authorization: Bearer wins.
+	// Verifies that a WRONG value in the Bearer header rejects the request
+	// even if x-api-key would have been valid.
+	stub := &stubOK{}
+	h := RequireAPIKeys([]string{"sk-good"}, stub)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	req.Header.Set("Authorization", "Bearer sk-bad")
+	req.Header.Set("x-api-key", "sk-good")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 (Authorization takes priority), got %d", rec.Code)
+	}
+	if stub.called != 0 {
+		t.Fatalf("downstream must not run when priority channel fails")
+	}
+}
+
+func TestRequireAPIKeys_IgnoresOpenRouterHeaders(t *testing.T) {
+	// Kilo Code / Cline sometimes tag requests with OpenRouter-style
+	// metadata headers. They must not affect authentication.
+	stub := &stubOK{}
+	h := RequireAPIKeys([]string{"sk-good"}, stub)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req.Header.Set("Authorization", "Bearer sk-good")
+	req.Header.Set("HTTP-Referer", "https://kilocode.example")
+	req.Header.Set("X-Title", "Kilo Code")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("OpenRouter-style tag headers should not affect auth, got %d", rec.Code)
+	}
+}
+
+func TestExtractAPIKey_TableDriven(t *testing.T) {
+	cases := []struct {
+		name     string
+		bearer   string
+		xAPIKey  string
+		xGoogKey string
+		queryKey string
+		want     string
+		wantOk   bool
+	}{
+		{name: "nothing", wantOk: false},
+		{name: "bearer only", bearer: "b1", want: "b1", wantOk: true},
+		{name: "x-api-key only", xAPIKey: "x1", want: "x1", wantOk: true},
+		{name: "x-goog only", xGoogKey: "g1", want: "g1", wantOk: true},
+		{name: "query only", queryKey: "q1", want: "q1", wantOk: true},
+		{name: "bearer beats x-api-key", bearer: "b1", xAPIKey: "x1", want: "b1", wantOk: true},
+		{name: "x-api-key beats x-goog", xAPIKey: "x1", xGoogKey: "g1", want: "x1", wantOk: true},
+		{name: "x-goog beats query", xGoogKey: "g1", queryKey: "q1", want: "g1", wantOk: true},
+		{name: "trim whitespace on x-api-key", xAPIKey: "  x1  ", want: "x1", wantOk: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			url := "/v1/models"
+			if tc.queryKey != "" {
+				url += "?key=" + tc.queryKey
+			}
+			r := httptest.NewRequest(http.MethodGet, url, nil)
+			if tc.bearer != "" {
+				r.Header.Set("Authorization", "Bearer "+tc.bearer)
+			}
+			if tc.xAPIKey != "" {
+				r.Header.Set("x-api-key", tc.xAPIKey)
+			}
+			if tc.xGoogKey != "" {
+				r.Header.Set("x-goog-api-key", tc.xGoogKey)
+			}
+			got, ok := extractAPIKey(r)
+			if ok != tc.wantOk {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOk)
+			}
+			if got != tc.want {
+				t.Fatalf("got = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRequireAPIKeys_EmptyConfigIsPassthrough(t *testing.T) {
 	stub := &stubOK{}
 	h := RequireAPIKeys(nil, stub)
