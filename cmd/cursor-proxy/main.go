@@ -103,10 +103,36 @@ func main() {
 	apiKeysFlag := flag.String("api-keys", "", "comma-separated API keys required in Authorization: Bearer header; falls back to $"+apiKeysEnv+" when unset")
 	tokenFile := flag.String("token-file", "", "path to account JSON (overrides IDE SQLite lookup); "+
 		"env CURSOR_PROXY_ACCOUNT_FILE is used when this flag is empty")
+	upstreamProxy := flag.String("upstream-proxy", "", "outbound proxy for calls to Cursor's backend "+
+		"(http://[user:pass@]host:port, https://…, or socks5://…). Falls back to $HTTPS_PROXY / $HTTP_PROXY. "+
+		"Required when your account is region-gated (Cursor returns ERROR_UNSUPPORTED_REGION on the "+
+		"claude-*, gpt-*, gemini-* families without a non-CN egress).")
 	simulateCache := flag.Bool("simulate-cache", true, "enable local prompt-cache simulator; env CURSOR_PROXY_SIMULATE_CACHE=false disables it")
 	cacheTTL := flag.String("cache-ttl", "10m", "simulator entry TTL (duration string)")
 	cacheSize := flag.Int("cache-size", 1000, "simulator max entries")
 	flag.Parse()
+
+	// Resolve upstream proxy: -upstream-proxy > $CURSOR_PROXY_UPSTREAM > $HTTPS_PROXY > $HTTP_PROXY.
+	// Setting it here (before executor.NewClient) is what actually plumbs the
+	// proxy through to the Connect stream — Go's http.DefaultTransport reads
+	// HTTPS_PROXY on init, but we set it programmatically to make the flag
+	// deterministic across shells and containers.
+	if strings.TrimSpace(*upstreamProxy) == "" {
+		for _, k := range []string{"CURSOR_PROXY_UPSTREAM", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+			if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+				*upstreamProxy = v
+				break
+			}
+		}
+	}
+	if p := strings.TrimSpace(*upstreamProxy); p != "" {
+		// Setting the env is enough: net/http.DefaultTransport reads
+		// HTTPS_PROXY via httpproxy.FromEnvironment on every Do(), so this
+		// affects both the RunSSE stream and BidiAppend.
+		_ = os.Setenv("HTTPS_PROXY", p)
+		_ = os.Setenv("HTTP_PROXY", p)
+		log.Printf("[proxy] upstream proxy: %s", p)
+	}
 
 	// Env override for the on/off toggle. Any value that parses as boolean is
 	// respected; an unparseable value falls back to the flag default so a
