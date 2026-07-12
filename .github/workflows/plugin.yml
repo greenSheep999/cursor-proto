@@ -1,0 +1,67 @@
+name: build-cursor-plugin
+
+# Builds cursor.so (CPA plugin ABI, c-shared) for Linux/arm64 on a native
+# arm64 runner. Triggered manually via workflow_dispatch; artifact is
+# downloaded with `gh run download` and scp'd to the target server.
+
+on:
+  workflow_dispatch:
+    inputs:
+      goarch:
+        description: "Target GOARCH (arm64|amd64)"
+        required: true
+        default: "arm64"
+        type: choice
+        options: [arm64, amd64]
+  push:
+    branches: [main, "ci/cursor-plugin-arm64"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build cursor.so ${{ inputs.goarch || 'arm64' }}
+    runs-on: ${{ (inputs.goarch || 'arm64') == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache: true
+
+      - name: Show toolchain
+        run: |
+          go version
+          uname -a
+          gcc --version | head -1
+
+      - name: Build cursor.so (c-shared)
+        env:
+          CGO_ENABLED: "1"
+          GOOS: linux
+          GOARCH: ${{ inputs.goarch || 'arm64' }}
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" \
+            -buildmode=c-shared \
+            -o dist/cursor.so \
+            ./plugin/cursor
+          ls -la dist/
+          file dist/cursor.so
+
+      - name: Sanity check exports
+        run: |
+          nm -D dist/cursor.so | grep -E "cliproxy_plugin_init|cliproxyPlugin(Call|Free|Shutdown)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-plugin-linux-${{ inputs.goarch || 'arm64' }}
+          path: |
+            dist/cursor.so
+          if-no-files-found: error
+          retention-days: 7
