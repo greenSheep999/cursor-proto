@@ -149,9 +149,9 @@ func dispatch(method string, payload []byte) ([]byte, int) {
 	case "auth.refresh":
 		return handleAuthRefresh(payload)
 	case "auth.login.start":
-		return ErrorEnvelope("not_implemented", "cursor login is performed by cursor-proto's cmd/cursor-login binary; convert its output with cursor-to-cpa", false), 1
+		return handleAuthLoginStart(payload)
 	case "auth.login.poll":
-		return ErrorEnvelope("not_implemented", "cursor login poll is not exposed through the plugin ABI", false), 1
+		return handleAuthLoginPoll(payload)
 
 	case "executor.identifier":
 		return okEnvelopeJSON(identifierResult()), 0
