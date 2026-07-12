@@ -122,6 +122,7 @@ type loginEntry struct {
 	Mode        string
 	OAuthSess   *auth.LoginSession
 	Preresolved *authData // populated for ide mode; poll returns this immediately
+	OTPState    *otpState // populated for otp mode; carries cookies+challenge
 	Message     string    // sticky Message returned by Poll (e.g. OTP hint)
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
@@ -300,15 +301,79 @@ func pollLoginPreresolved(state string, entry *loginEntry) ([]byte, int) {
 	return finalizeSuccessPoll(&a)
 }
 
-// pollLoginOTP returns a pending status forever, with a message
-// telling the operator to run login-hub. The plugin cannot drive
-// Turnstile itself.
+// pollLoginOTP drives the second half of the Cursor magic-code flow:
+// wait for the OTP email (or use a literal), submit the code, follow
+// the callback chain, and materialise a full AuthData. If the OTP has
+// not yet arrived we return a pending status so CPA calls us again.
 func pollLoginOTP(state string, entry *loginEntry) ([]byte, int) {
-	msg := entry.Message
-	if msg == "" {
-		msg = otpPendingMessage()
+	// Legacy manual-workflow session? Return the sticky pending
+	// message so old CPA panels keep working during a rollout.
+	if entry.OTPState == nil {
+		msg := entry.Message
+		if msg == "" {
+			msg = otpPendingMessage()
+		}
+		return finalizePendingPoll(msg)
 	}
-	return finalizePendingPoll(msg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	res := pollCursorOTP(ctx, entry.OTPState)
+	switch res.Outcome {
+	case otpOutcomePending:
+		msg := res.Message
+		if msg == "" {
+			msg = "waiting for cursor magic-code email"
+		}
+		return finalizePendingPoll(msg)
+	case otpOutcomeError:
+		return finalizeErrorPoll(res.Message)
+	}
+
+	// Success — turn the tokens into an AuthData record.
+	authFile := buildAuthFileFromOTP(res)
+	authRecord, err := buildAuthData(authFile, state)
+	if err != nil {
+		return finalizeErrorPoll(fmt.Sprintf("build auth data: %v", err))
+	}
+	loginSessions.Delete(state)
+	return finalizeSuccessPoll(authRecord)
+}
+
+// buildAuthFileFromOTP packages the tokens from cursor.com/api/auth/me
+// into the CPA on-disk shape. Mirrors buildAuthFileFromPoll but for
+// OTP mode: we already have the email upfront (unlike OAuth, where we
+// have to lift it out of the JWT sub claim).
+func buildAuthFileFromOTP(res *otpPollResult) *cpaformat.AuthFile {
+	now := time.Now()
+	email := res.Email
+	if email == "" {
+		email = extractEmailFromJWT(res.AccessToken)
+	}
+	userID := res.UserID
+	if userID == "" {
+		userID = extractUserIDFromAuthID(res.AuthID)
+	}
+	kind := res.AuthKind
+	if kind == "" {
+		kind = "email-otp"
+	}
+	return &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:         cpaformat.ProviderType,
+			AccessToken:  res.AccessToken,
+			RefreshToken: res.RefreshToken,
+			Email:        email,
+			UserID:       userID,
+			AuthID:       res.AuthID,
+			AuthKind:     kind,
+			IssuedAt:     cpaformat.FormatTime(now),
+			LastRefresh:  cpaformat.FormatTime(now),
+			Expired:      cpaformat.FormatTime(auth.ExpiresAtFromJWT(res.AccessToken)),
+			Refreshable:  res.RefreshToken != "",
+		},
+	}
 }
 
 // startLoginIDE reads the local Cursor IDE state.vscdb and packages
@@ -364,9 +429,92 @@ func startLoginIDE(req *authLoginStartRequest) ([]byte, int) {
 	return okEnvelopeJSON(string(buf)), 0
 }
 
-// startLoginOTP registers a pending session and points the operator
-// at login-hub's docs.
+// startLoginOTP performs the first half of the Cursor magic-code
+// flow: hit /? to lift the Turnstile sitekey + Next.js action id,
+// solve Turnstile via YesCaptcha, POST intent=magic-code and stash
+// the returned challenge id in the sync.Map. Poll picks up from
+// there.
+//
+// The legacy "manual login-hub" mode is preserved for backwards
+// compatibility: pass metadata.manual=true (or leave metadata.email
+// blank) and Start returns the old pending message.
 func startLoginOTP(req *authLoginStartRequest) ([]byte, int) {
+	email := strings.TrimSpace(metadataString(req.Metadata, "email"))
+	manual := metadataBool(req.Metadata, "manual")
+
+	// Legacy path: no email or explicit manual flag → return the
+	// login-hub instruction and stay pending forever.
+	if email == "" || manual {
+		return startLoginOTPManual(req)
+	}
+
+	yescaptchaKey := strings.TrimSpace(metadataString(req.Metadata, "yescaptcha_key"))
+	if yescaptchaKey == "" {
+		yescaptchaKey = strings.TrimSpace(os.Getenv("YESCAPTCHA_API_KEY"))
+	}
+	if yescaptchaKey == "" {
+		return errorEnvelope("otp_config", "otp mode requires YESCAPTCHA_API_KEY env or metadata.yescaptcha_key", false), 1
+	}
+
+	imapCfg := imapConfigFromMetadata(req.Metadata, email)
+	literalOTP := strings.TrimSpace(metadataString(req.Metadata, "otp"))
+	if literalOTP == "" && imapCfg == nil {
+		return errorEnvelope("otp_config",
+			"otp mode requires either metadata.otp (literal 6-digit code) or IMAP config (mail_host, mail_user, mail_pass)",
+			false), 1
+	}
+
+	// Test-only overrides — production callers do not set these.
+	opts := otpStartOptions{
+		AuthBase:       strings.TrimSpace(metadataString(req.Metadata, "auth_base_override")),
+		AuthMeEndpoint: strings.TrimSpace(metadataString(req.Metadata, "auth_me_override")),
+		YesCaptchaBase: strings.TrimSpace(metadataString(req.Metadata, "yescaptcha_base_override")),
+	}
+
+	// Bound the Start call so a stuck upstream doesn't stall CPA.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	otpSt, err := startCursorOTP(ctx, email, yescaptchaKey, imapCfg, literalOTP, opts)
+	if err != nil {
+		return errorEnvelope("otp_start", err.Error(), false), 1
+	}
+
+	state := uuid.NewString()
+	now := time.Now()
+	entry := &loginEntry{
+		Mode:      loginModeOTP,
+		OTPState:  otpSt,
+		CreatedAt: now,
+		ExpiresAt: now.Add(loginSessionTTL),
+	}
+	storeLoginEntry(state, entry)
+
+	resp := authLoginStartResponse{
+		Provider:  pluginName,
+		URL:       "",
+		State:     state,
+		ExpiresAt: entry.ExpiresAt,
+		Metadata: map[string]any{
+			"mode":         loginModeOTP,
+			"otp_pending":  true,
+			"email":        email,
+			"magic_state":  otpSt.ChallengeID,
+			"inbox_source": describeInboxSource(imapCfg, literalOTP),
+		},
+	}
+	buf, err := json.Marshal(resp)
+	if err != nil {
+		return errorEnvelope("marshal_response", err.Error(), false), 1
+	}
+	return okEnvelopeJSON(string(buf)), 0
+}
+
+// startLoginOTPManual is the legacy branch — returns the login-hub
+// hint URL and stays pending. Selected when the operator passes
+// metadata.manual=true or omits the email (which is the shape old CPA
+// callers used).
+func startLoginOTPManual(req *authLoginStartRequest) ([]byte, int) {
 	state := uuid.NewString()
 	now := time.Now()
 	msg := otpPendingMessage()
@@ -395,6 +543,81 @@ func startLoginOTP(req *authLoginStartRequest) ([]byte, int) {
 		return errorEnvelope("marshal_response", err.Error(), false), 1
 	}
 	return okEnvelopeJSON(string(buf)), 0
+}
+
+// imapConfigFromMetadata builds an imapConfig from the metadata bag,
+// or returns nil if no IMAP credentials were provided.
+func imapConfigFromMetadata(m map[string]any, email string) *imapConfig {
+	host := strings.TrimSpace(metadataString(m, "mail_host"))
+	user := strings.TrimSpace(metadataString(m, "mail_user"))
+	pass := strings.TrimSpace(metadataString(m, "mail_pass"))
+	if host == "" && user == "" && pass == "" {
+		return nil
+	}
+	if host == "" {
+		host = "outlook.office365.com"
+	}
+	if user == "" {
+		user = email
+	}
+	if pass == "" {
+		return nil
+	}
+	port := 993
+	if p := metadataInt(m, "mail_port"); p > 0 {
+		port = p
+	}
+	return &imapConfig{Host: host, Port: port, Username: user, Password: pass}
+}
+
+// describeInboxSource reports how Poll will fetch the OTP — used in
+// the Start response for operator visibility.
+func describeInboxSource(cfg *imapConfig, literal string) string {
+	if literal != "" {
+		return "literal"
+	}
+	if cfg != nil {
+		return "imap:" + cfg.Host
+	}
+	return "unknown"
+}
+
+// metadataBool returns the boolean value at key in m. Accepts real
+// bools and stringly "true"/"1"/"yes" values.
+func metadataBool(m map[string]any, key string) bool {
+	if v, ok := m[key]; ok {
+		switch t := v.(type) {
+		case bool:
+			return t
+		case string:
+			switch strings.ToLower(strings.TrimSpace(t)) {
+			case "true", "yes", "1", "on":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// metadataInt returns the int value at key in m, accepting numeric
+// and stringly forms.
+func metadataInt(m map[string]any, key string) int {
+	if v, ok := m[key]; ok {
+		switch t := v.(type) {
+		case int:
+			return t
+		case int64:
+			return int(t)
+		case float64:
+			return int(t)
+		case string:
+			var n int
+			if _, err := fmt.Sscanf(strings.TrimSpace(t), "%d", &n); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
 }
 
 // otpPendingMessage returns the constant instructional message
