@@ -41,6 +41,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -302,6 +303,11 @@ func pollCursorOTP(ctx context.Context, s *otpState) *otpPollResult {
 			return &otpPollResult{Outcome: otpOutcomeError, Message: fmt.Sprintf("turnstile solve (magic-code): %v", err)}
 		}
 		token = tok
+	} else if os.Getenv("CURSOR_OTP_ALLOW_MISSING_SITEKEY") != "1" {
+		return &otpPollResult{
+			Outcome: otpOutcomeError,
+			Message: "magic-code page had no Turnstile sitekey (Cursor may have changed the page — this used to be silently allowed; set env CURSOR_OTP_ALLOW_MISSING_SITEKEY=1 if you've verified magic-code doesn't need Turnstile).",
+		}
 	}
 
 	// 2c. POST the code.

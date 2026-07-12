@@ -150,6 +150,10 @@ func (c *captureRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 // challenge id. Poll uses a literal OTP, hits /magic-code, follows
 // the callback, and lifts tokens from /api/auth/me. Result: success.
 func TestOTPFlow_Happy(t *testing.T) {
+	// The mock /magic-code HTML below omits a sitekey to keep this
+	// test focused on the callback + auth/me path. Opt in to the
+	// legacy silent-skip behavior explicitly.
+	t.Setenv("CURSOR_OTP_ALLOW_MISSING_SITEKEY", "1")
 	yc := mockYesCaptcha(t, "turnstile-token-abc", 2)
 	auth := mockAuthenticator(t, &authenticatorBehavior{
 		StartHTML: `
@@ -284,12 +288,16 @@ func TestOTPFlow_FormRejected(t *testing.T) {
 // returns a non-303 status. The plugin should surface an error, not
 // a pending or a false success.
 func TestOTPFlow_WrongOTP(t *testing.T) {
+	// The mock /magic-code HTML below omits a sitekey to keep this
+	// test focused on the POST-side error. Opt in to the legacy
+	// silent-skip behavior explicitly.
+	t.Setenv("CURSOR_OTP_ALLOW_MISSING_SITEKEY", "1")
 	yc := mockYesCaptcha(t, "tok", 1)
 	auth := mockAuthenticator(t, &authenticatorBehavior{
 		StartHTML:       `<div class="cf-turnstile" data-sitekey="0x4AAAAAAA"></div><script>$$ACTION_ID_fef846a39073c935bea71b63308b177b113269b7</script>`,
 		StartPostStatus: http.StatusSeeOther,
 		ChallengeID:     "chal-1",
-		MagicHTML:       `<html></html>`, // no sitekey → skip second Turnstile solve
+		MagicHTML:       `<html></html>`, // no sitekey → skip second Turnstile solve (allowed via env)
 		OTPPostStatus:   http.StatusBadRequest,
 	})
 
@@ -529,5 +537,75 @@ func TestStartLoginOTP_MissingOTPAndIMAP(t *testing.T) {
 	}
 	if !strings.Contains(env.Error.Message, "IMAP") && !strings.Contains(env.Error.Message, "metadata.otp") {
 		t.Errorf("message should suggest otp or imap: %q", env.Error.Message)
+	}
+}
+
+// TestPoll_MissingSitekey_ReturnsError verifies that when the
+// /magic-code page returns HTML without a Turnstile sitekey, the
+// poll fails loudly by default rather than silently submitting the
+// OTP with an empty Turnstile token. This is the guard against the
+// "pending forever" symptom on real Cursor if the page ever changes
+// its Turnstile placement.
+func TestPoll_MissingSitekey_ReturnsError(t *testing.T) {
+	yc := mockYesCaptcha(t, "tok", 1)
+	auth := mockAuthenticator(t, &authenticatorBehavior{
+		StartHTML:       `<div class="cf-turnstile" data-sitekey="0x4AAAAAAA"></div><script>$$ACTION_ID_fef846a39073c935bea71b63308b177b113269b7</script>`,
+		StartPostStatus: http.StatusSeeOther,
+		ChallengeID:     "chal-missing-sk",
+		MagicHTML:       `<html><body>no widget here</body></html>`, // no sitekey
+		OTPPostStatus:   http.StatusSeeOther,
+		CallbackCode:    "cb-unreachable",
+	})
+
+	opts := otpStartOptions{AuthBase: auth.URL, YesCaptchaBase: yc.URL}
+	st, err := startCursorOTP(t.Context(), "someone@example.com", "yc-key", nil, "123456", opts)
+	if err != nil {
+		t.Fatalf("startCursorOTP: %v", err)
+	}
+	res := pollCursorOTP(t.Context(), st)
+	if res.Outcome != otpOutcomeError {
+		t.Fatalf("outcome = %v, want error (message=%q)", res.Outcome, res.Message)
+	}
+	if !strings.Contains(res.Message, "sitekey") {
+		t.Errorf("message should mention sitekey, got %q", res.Message)
+	}
+	if !strings.Contains(res.Message, "CURSOR_OTP_ALLOW_MISSING_SITEKEY") {
+		t.Errorf("message should mention the CURSOR_OTP_ALLOW_MISSING_SITEKEY escape hatch, got %q", res.Message)
+	}
+}
+
+// TestPoll_MissingSitekey_AllowFlagBypasses verifies that setting
+// CURSOR_OTP_ALLOW_MISSING_SITEKEY=1 restores the legacy silent-skip
+// behavior: no sitekey → submit with an empty Turnstile token and
+// continue. The final outcome depends on downstream steps, but it
+// must not be "error because sitekey was missing".
+func TestPoll_MissingSitekey_AllowFlagBypasses(t *testing.T) {
+	t.Setenv("CURSOR_OTP_ALLOW_MISSING_SITEKEY", "1")
+
+	yc := mockYesCaptcha(t, "tok", 1)
+	auth := mockAuthenticator(t, &authenticatorBehavior{
+		StartHTML:       `<div class="cf-turnstile" data-sitekey="0x4AAAAAAA"></div><script>$$ACTION_ID_fef846a39073c935bea71b63308b177b113269b7</script>`,
+		StartPostStatus: http.StatusSeeOther,
+		ChallengeID:     "chal-bypass",
+		MagicHTML:       `<html><body>no widget here</body></html>`, // no sitekey
+		OTPPostStatus:   http.StatusBadRequest,                      // rejects the empty-token POST
+	})
+
+	opts := otpStartOptions{AuthBase: auth.URL, YesCaptchaBase: yc.URL}
+	st, err := startCursorOTP(t.Context(), "someone@example.com", "yc-key", nil, "999999", opts)
+	if err != nil {
+		t.Fatalf("startCursorOTP: %v", err)
+	}
+	res := pollCursorOTP(t.Context(), st)
+	// The flag was honored iff the flow reached the POST step and
+	// surfaced its downstream error (HTTP 400) — not the sitekey guard.
+	if strings.Contains(res.Message, "CURSOR_OTP_ALLOW_MISSING_SITEKEY") {
+		t.Fatalf("flag should have bypassed the sitekey guard, but message still cites it: %q", res.Message)
+	}
+	if strings.Contains(strings.ToLower(res.Message), "no turnstile sitekey") {
+		t.Fatalf("flag should have bypassed the sitekey guard, got %q", res.Message)
+	}
+	if !strings.Contains(res.Message, "HTTP 400") {
+		t.Errorf("expected the flow to have reached the POST step (HTTP 400), got outcome=%v msg=%q", res.Outcome, res.Message)
 	}
 }
