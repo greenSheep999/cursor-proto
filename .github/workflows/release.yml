@@ -101,13 +101,19 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+          # GITHUB_REF_NAME is the raw tag (e.g. cursor3.11/v0.2.1) — that's
+          # exactly what we want to see reported by /v1/proxy-info and
+          # `cursor-proxy -version`, so downstream can confirm they got
+          # the release they pinned.
+          PROTO_TAG: ${{ github.ref_name }}
         run: |
           mkdir -p dist
           # Artifact naming: cursor-proxy-<cursor-line>-<goos>-<goarch>.
           # The <cursor-line> segment is intentionally kept in the filename
           # so cursor2api can download 3.10 and 3.11 side by side into the
           # same directory without collision. See docs/versioning.md.
-          go build -trimpath -ldflags="-s -w" \
+          go build -trimpath \
+            -ldflags="-s -w -X main.ProtoVersion=${PROTO_TAG}" \
             -o "dist/cursor-proxy-${CURSOR_LINE}-${{ matrix.name }}" \
             ./cmd/cursor-proxy
 

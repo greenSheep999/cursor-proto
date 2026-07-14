@@ -67,6 +67,13 @@ func RequireAPIKeys(keys []string, next http.Handler) http.Handler {
 		keyBytes[i] = []byte(k)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Metadata endpoints are always reachable — cursor2api's sidecar
+		// supervisor probes /v1/proxy-info before it has the API key
+		// wired up, and there's no secret in the response.
+		if r.URL.Path == "/v1/proxy-info" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		presented, ok := extractAPIKey(r)
 		if !ok {
 			writeInvalidAPIKey(w, "Missing API key. Provide one via Authorization: Bearer, x-api-key, x-goog-api-key, or ?key=.")

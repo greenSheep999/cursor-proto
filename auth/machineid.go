@@ -19,6 +19,22 @@ import (
 // (see nVg in workbench.desktop.main.js).
 const KnownReleaseHash_3_10_20 = "4071c661bcb367c518becc7b3d4d57cbd69d2291d8b302c558d79080f8fd4f75"
 
+// KnownReleaseHashFor returns the releaseHash for a specific Cursor
+// version, or "" if we don't have one on file. Used by
+// /v1/proxy-info and `cursor-proxy -version` to report the exact
+// value the running binary uses as the checksum fallback.
+//
+// This branch (release/cursor-3.10) only knows the 3.10.20 hash;
+// 3.11 lives on main and has its own copy of this function.
+func KnownReleaseHashFor(version string) string {
+	switch version {
+	case "3.10.20":
+		return KnownReleaseHash_3_10_20
+	default:
+		return ""
+	}
+}
+
 // GetMachineID returns SHA-256(IOPlatformUUID) on macOS, following Cursor's
 // _getTrueMachineId() in main.js: `l5(!0)`. On other platforms it uses the
 // equivalent platform-specific stable identifier.

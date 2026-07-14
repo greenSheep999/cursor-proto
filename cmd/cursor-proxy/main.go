@@ -100,6 +100,16 @@ type anthropicTool struct {
 
 // ---------- main ----------
 
+// ProtoVersion is the release tag this binary was built from (e.g.
+// "cursor3.11/v0.2.1"). Set at link time via
+//
+//	-ldflags="-X main.ProtoVersion=${GITHUB_REF_NAME}"
+//
+// See .github/workflows/release.yml. Local `go build` / `go run` keeps
+// the "dev" fallback so /v1/proxy-info surfaces the lack of a pinned
+// release.
+var ProtoVersion = "dev"
+
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8317", "listen address")
 	apiKeysFlag := flag.String("api-keys", "", "comma-separated API keys required in Authorization: Bearer header; falls back to $"+apiKeysEnv+" when unset")
@@ -112,7 +122,15 @@ func main() {
 	simulateCache := flag.Bool("simulate-cache", true, "enable local prompt-cache simulator; env CURSOR_PROXY_SIMULATE_CACHE=false disables it")
 	cacheTTL := flag.String("cache-ttl", "10m", "simulator entry TTL (duration string)")
 	cacheSize := flag.Int("cache-size", 1000, "simulator max entries")
+	showVersion := flag.Bool("version", false, "print JSON with Cursor line, impersonated version, commit, release hash, and proto tag, then exit")
 	flag.Parse()
+
+	if *showVersion {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(CurrentProxyInfo())
+		return
+	}
 
 	// Resolve upstream proxy: -upstream-proxy > $CURSOR_PROXY_UPSTREAM > $HTTPS_PROXY > $HTTP_PROXY.
 	// Setting it here (before executor.NewClient) is what actually plumbs the
@@ -197,6 +215,11 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	// /v1/proxy-info reports the Cursor line / impersonated version /
+	// release hash / proto tag. Registered BEFORE RequireAPIKeys wraps
+	// the mux so the endpoint is always reachable — cursor2api's sidecar
+	// supervisor probes this before wiring any API key.
+	mux.HandleFunc("GET /v1/proxy-info", proxyInfoHandler)
 	mux.HandleFunc("/v1/models", modelsHandler(c))
 	// GET /v1/models/{id} — single-model detail. Registered with an
 	// explicit GET pattern so ServeMux distinguishes it from the list.

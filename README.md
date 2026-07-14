@@ -16,9 +16,21 @@ axes: `cursor<major>.<minor>/v<semver>` (e.g. `cursor3.10/v0.1.1`,
 `release/cursor-<X.Y>` branches so they can receive patches after `main`
 has moved on.
 
+Any running binary can be introspected — no auth required:
+
+```bash
+cursor-proxy -version                          # CLI, prints JSON and exits
+curl -s http://127.0.0.1:8317/v1/proxy-info    # HTTP, same JSON
+```
+
+Returns `cursor_line`, `impersonated_version`, `impersonated_commit`,
+`release_hash`, and `proto_version` (the git tag CI built from, or
+`"dev"` for local builds).
+
 See [docs/versioning.md](docs/versioning.md) for the full release
-contract — tag scheme, artifact names, Docker image tags, and how
-downstream consumers (e.g. `cursor2api`) should pin.
+contract — tag scheme, artifact names, Docker image tags, the
+line-vs-impersonated distinction, and how downstream consumers (e.g.
+`cursor2api`) should pin and verify.
 
 ## Architecture
 
