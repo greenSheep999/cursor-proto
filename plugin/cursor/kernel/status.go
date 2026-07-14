@@ -39,6 +39,17 @@ import (
 	"github.com/router-for-me/cursor-proto/usage"
 )
 
+// TokenBreakdown is one window's worth of prompt / response / cache
+// token counts, mirroring usage.TokenUsage. Cache tokens matter for
+// Cursor: cache_read is effectively free, cache_write is billable
+// but at a reduced rate.
+type TokenBreakdown struct {
+	Input      int64 `json:"input"`
+	Output     int64 `json:"output"`
+	CacheRead  int64 `json:"cache_read"`
+	CacheWrite int64 `json:"cache_write"`
+}
+
 // AccountStatus is the rich per-account view CPA's admin panel needs.
 //
 // All monetary values are cents. Time fields serialise to RFC3339
@@ -55,15 +66,36 @@ type AccountStatus struct {
 	JwtExpiresIn time.Duration `json:"jwt_expires_in_ns,omitempty"`
 	Refreshable  bool          `json:"refreshable"`
 
-	// Cursor plan & quota
-	Plan           string `json:"plan"`
-	SignUpType     string `json:"sign_up_type,omitempty"`
-	SpendCents     int64  `json:"spend_cents"`
-	LimitCents     int64  `json:"limit_cents"`
-	RemainingCents int64  `json:"remaining_cents"`
-	Spend24hCents  int64  `json:"spend_24h_cents"`
-	Spend7dCents   int64  `json:"spend_7d_cents"`
-	Spend30dCents  int64  `json:"spend_30d_cents"`
+	// Cursor plan & quota — the three progress bars Cursor's own
+	// dashboard renders (Total / Auto+Composer / API) plus the
+	// windowed spend counters. Fields prefixed AutoSpend / APISpend
+	// / TotalPercent were added when v0.2.4 landed
+	// usage-snapshot-categorized-spend; keep this struct in lockstep
+	// with usage.Snapshot so admin-panel changes need only one edit.
+	Plan             string  `json:"plan"`
+	SignUpType       string  `json:"sign_up_type,omitempty"`
+	SpendCents       int64   `json:"spend_cents"`
+	LimitCents       int64   `json:"limit_cents"`
+	RemainingCents   int64   `json:"remaining_cents"`
+	Spend24hCents    int64   `json:"spend_24h_cents"`
+	Spend7dCents     int64   `json:"spend_7d_cents"`
+	Spend30dCents    int64   `json:"spend_30d_cents"`
+	AutoSpendCents   int64   `json:"auto_spend_cents"`
+	AutoLimitCents   int64   `json:"auto_limit_cents"`
+	AutoPercentUsed  float64 `json:"auto_percent_used"`
+	APISpendCents    int64   `json:"api_spend_cents"`
+	APILimitCents    int64   `json:"api_limit_cents"`
+	APIPercentUsed   float64 `json:"api_percent_used"`
+	TotalPercentUsed float64 `json:"total_percent_used"`
+
+	// Windowed token breakdown, one bucket per window. Same fields
+	// downstream saw appear on /v1/usage in v0.2.7 — surfacing them
+	// on the admin panel here so per-account drilldown gets the
+	// same detail. Zero values are legitimate ("no traffic in
+	// this window").
+	Tokens24h TokenBreakdown `json:"tokens_24h"`
+	Tokens7d  TokenBreakdown `json:"tokens_7d"`
+	Tokens30d TokenBreakdown `json:"tokens_30d"`
 
 	// Rate / slow pool
 	InSlowPool        bool      `json:"in_slow_pool"`
@@ -207,6 +239,23 @@ func applySnapshot(s *AccountStatus, snap *usage.Snapshot) {
 	s.Spend24hCents = snap.Spend24h
 	s.Spend7dCents = snap.Spend7d
 	s.Spend30dCents = snap.Spend30d
+	// Categorized spend (v0.2.4 addition on the wire; surfaced here
+	// so the admin panel matches Cursor's own dashboard three-bar
+	// view). Percent* are proto3 doubles precomputed by the backend
+	// — use them verbatim so downstream matches byte-for-byte.
+	s.AutoSpendCents = snap.AutoSpend
+	s.AutoLimitCents = snap.AutoLimit
+	s.AutoPercentUsed = snap.AutoPercentUsed
+	s.APISpendCents = snap.APISpend
+	s.APILimitCents = snap.APILimit
+	s.APIPercentUsed = snap.APIPercentUsed
+	s.TotalPercentUsed = snap.TotalPercentUsed
+	// Windowed token breakdown (v0.2.7). All four counters × three
+	// windows come from the same GetAggregatedUsageEvents RPC that
+	// already filled Spend24h/7d/30d — zero extra upstream calls.
+	s.Tokens24h = tokenBreakdownFrom(snap.Tokens24h)
+	s.Tokens7d = tokenBreakdownFrom(snap.Tokens7d)
+	s.Tokens30d = tokenBreakdownFrom(snap.Tokens30d)
 	s.InSlowPool = snap.InSlowPool
 	s.SlowReason = snap.SlowReason
 	if snap.RateLimitResetAt != nil {
@@ -215,6 +264,18 @@ func applySnapshot(s *AccountStatus, snap *usage.Snapshot) {
 	s.RateLimitDaysLeft = snap.RateLimitResetDaysRemaining
 	s.HardLimitCents = snap.HardLimit
 	s.Plan = derivePlan(snap)
+}
+
+// tokenBreakdownFrom converts a usage.TokenUsage into the plugin's
+// admin-panel-facing TokenBreakdown. Separate helper so
+// applySnapshot stays a straight assignment list.
+func tokenBreakdownFrom(t usage.TokenUsage) TokenBreakdown {
+	return TokenBreakdown{
+		Input:      t.Input,
+		Output:     t.Output,
+		CacheRead:  t.CacheRead,
+		CacheWrite: t.CacheWrite,
+	}
 }
 
 // derivePlan inspects the Snapshot fields to produce a human-readable

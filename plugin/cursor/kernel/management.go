@@ -59,6 +59,14 @@ func managementRegisterResult() string {
 			"Description": "Bust the AccountStatus cache and re-fetch from Cursor (?email=...).",
 		},
 		{
+			"Method": http.MethodGet,
+			"Path":   routePrefix + "/account/events",
+			"Description": "Paginated per-request event log for one account " +
+				"(?email=&since=&page=&limit=&model=). Backs the per-request " +
+				"table in the admin panel — same data as cursor-proxy's " +
+				"/v1/usage/events endpoint (introduced in cursor3.11/v0.3.1).",
+		},
+		{
 			"Method":      http.MethodGet,
 			"Path":        routePrefix + "/pool-summary",
 			"Description": "Aggregate view of the Cursor pool for the admin dashboard.",
@@ -136,6 +144,8 @@ func routeManagement(ctx context.Context, req managementRequest) managementRespo
 		return handleAccountRefresh(ctx, q.Get("email"), req.Body)
 	case method == http.MethodPost && suffix == "/account/probe":
 		return handleAccountProbe(ctx, q.Get("email"))
+	case method == http.MethodGet && suffix == "/account/events":
+		return handleAccountEvents(ctx, q)
 	case method == http.MethodGet && suffix == "/pool-summary":
 		return handlePoolSummary(ctx)
 	default:

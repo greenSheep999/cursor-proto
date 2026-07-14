@@ -28,6 +28,16 @@ func fakeSnapshot() *usage.Snapshot {
 		Spend24h:                         120,
 		Spend7d:                          450,
 		Spend30d:                         1200,
+		AutoSpend:                        30,
+		AutoLimit:                        6000,
+		AutoPercentUsed:                  0.005,
+		APISpend:                         1220,
+		APILimit:                         1500,
+		APIPercentUsed:                   0.81,
+		TotalPercentUsed:                 0.42,
+		Tokens24h:                        usage.TokenUsage{Input: 10240, Output: 8192, CacheRead: 4096, CacheWrite: 2048},
+		Tokens7d:                         usage.TokenUsage{Input: 51200, Output: 40960, CacheRead: 20480, CacheWrite: 10240},
+		Tokens30d:                        usage.TokenUsage{Input: 204800, Output: 163840, CacheRead: 81920, CacheWrite: 40960},
 		InSlowPool:                       false,
 		SlowReason:                       "",
 		RateLimitResetAt:                 &rlReset,
@@ -114,6 +124,25 @@ func TestFetchAccountStatus_ShapesJSON(t *testing.T) {
 	if status.HardLimitCents != 50000 {
 		t.Errorf("HardLimitCents = %d, want 50000", status.HardLimitCents)
 	}
+	// Categorized spend (v0.2.4 wire → v0.3.2 plugin). Auto + API +
+	// TotalPercent should all mirror the fake snapshot verbatim.
+	if status.AutoSpendCents != 30 || status.AutoLimitCents != 6000 || status.AutoPercentUsed != 0.005 {
+		t.Errorf("auto bucket wrong: %+v", status)
+	}
+	if status.APISpendCents != 1220 || status.APILimitCents != 1500 || status.APIPercentUsed != 0.81 {
+		t.Errorf("api bucket wrong: %+v", status)
+	}
+	if status.TotalPercentUsed != 0.42 {
+		t.Errorf("total_percent_used = %v", status.TotalPercentUsed)
+	}
+	// Token breakdown (v0.2.7 wire → v0.3.2 plugin). All three
+	// windows should be filled from the fake snapshot.
+	if status.Tokens24h.Input != 10240 || status.Tokens24h.CacheRead != 4096 {
+		t.Errorf("tokens_24h: %+v", status.Tokens24h)
+	}
+	if status.Tokens7d.Input != 51200 || status.Tokens30d.Input != 204800 {
+		t.Errorf("tokens_7d/30d wrong: %+v %+v", status.Tokens7d, status.Tokens30d)
+	}
 	if len(status.Models) == 0 {
 		t.Error("Models must be populated")
 	}
@@ -126,6 +155,8 @@ func TestFetchAccountStatus_ShapesJSON(t *testing.T) {
 	for _, key := range []string{
 		`"email"`, `"country"`, `"plan"`, `"spend_cents"`, `"remaining_cents"`,
 		`"in_slow_pool"`, `"can_call_claude"`, `"jwt_expires_at"`, `"models"`,
+		`"auto_spend_cents"`, `"api_spend_cents"`, `"total_percent_used"`,
+		`"tokens_24h"`, `"tokens_7d"`, `"tokens_30d"`,
 	} {
 		if !strings.Contains(string(buf), key) {
 			t.Errorf("JSON missing %s: %s", key, string(buf))
