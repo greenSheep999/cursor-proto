@@ -229,7 +229,9 @@ export class Runner {
 
     // Kick off the stream pump. Not awaited — the caller gets its
     // runId back synchronously and drains events via notifications.
-    const streamTask = this.pumpStream(runId, run.stream());
+    // pumpStream also handles the final run.wait() call so the
+    // run.done notification carries the authoritative RunResult.
+    const streamTask = this.pumpStream(runId, run);
     this.runs.set(runId, {
       runId,
       agentId: p.agentId,
@@ -260,20 +262,91 @@ export class Runner {
   }
 
   // ---- stream pump ----
+  //
+  // Drains the SDK event iterator, forwarding each raw SDKMessage
+  // over as a run.event notification, while also collecting a
+  // dedup'd tool_call summary along the way (tool_call events fire
+  // twice: status:"running" and status:"completed" — the docs are
+  // explicit that the wire format is otherwise unstable, so we
+  // only capture callId+name+args from the first observation of
+  // each callId).
+  //
+  // After the stream ends, we call run.wait() to fetch the
+  // authoritative RunResult (final text, cumulative usage, final
+  // status) per the SDK's own guidance. Then we emit a single
+  // run.done notification with all the structured fields — Go's
+  // aggregation code parses that instead of trying to re-derive
+  // final text from raw stream events.
 
-  private async pumpStream(runId: string, stream: AsyncIterable<unknown>): Promise<void> {
+  private async pumpStream(runId: string, run: {
+    readonly runId: string;
+    stream(): AsyncIterable<unknown>;
+    wait(): Promise<import("./sdkInterface.js").SdkRunResult>;
+  }): Promise<void> {
+    const seenToolCalls = new Set<string>();
+    const toolCalls: Array<{ callId: string; name: string; input?: unknown }> = [];
+
     try {
-      for await (const event of stream) {
+      for await (const event of run.stream()) {
+        // Passthrough — the Go side still needs raw SDKMessages for
+        // its SSE stream so downstream (Claude Code, etc.) sees
+        // thinking / tool_call lifecycle / task / etc. exactly as
+        // the SDK emits them.
         this.opts.emit({
           kind: "notify",
           method: "run.event",
           params: { runId, event },
         });
+
+        // Meanwhile collect tool_call summaries for the final
+        // run.done payload. Guard against non-object events and
+        // unknown shapes — the wire format is unstable per SDK docs.
+        if (event && typeof event === "object") {
+          const ev = event as { type?: string; call_id?: string; name?: string; args?: unknown };
+          if (ev.type === "tool_call" && typeof ev.call_id === "string" && !seenToolCalls.has(ev.call_id)) {
+            seenToolCalls.add(ev.call_id);
+            toolCalls.push({
+              callId: ev.call_id,
+              name: typeof ev.name === "string" ? ev.name : "",
+              input: ev.args,
+            });
+          }
+        }
       }
+
+      // Stream ended cleanly — fetch the RunResult for the final
+      // fields. wait() is documented safe to call after stream
+      // drain; it returns the same terminal snapshot.
+      let result: import("./sdkInterface.js").SdkRunResult;
+      try {
+        result = await run.wait();
+      } catch (e) {
+        // If wait() itself fails, degrade to a best-effort
+        // "finished" done payload so the Go side isn't stuck
+        // waiting for a notification.
+        this.opts.emit({
+          kind: "notify",
+          method: "run.error",
+          params: {
+            runId,
+            message: `run.wait failed: ${(e as Error).message ?? String(e)}`,
+            code: ERR_SDK_FAILURE,
+          },
+        });
+        return;
+      }
+
       this.opts.emit({
         kind: "notify",
         method: "run.done",
-        params: { runId },
+        params: {
+          runId,
+          finalText: result.result ?? "",
+          status: result.status,
+          usage: result.usage,
+          durationMs: result.durationMs,
+          toolCalls,
+        },
       });
     } catch (e) {
       const message = (e as Error).message ?? String(e);

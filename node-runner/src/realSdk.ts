@@ -37,6 +37,20 @@ interface CursorSdkAgent {
 
 interface CursorSdkRun {
   stream(): AsyncIterable<unknown>;
+  wait?: () => Promise<{
+    status: "finished" | "error" | "cancelled";
+    result?: string;
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+    };
+    durationMs?: number;
+    error?: { message: string; code?: string };
+  }>;
   cancel?: () => Promise<void>;
 }
 
@@ -104,6 +118,18 @@ class RealRun implements SdkRun {
 
   stream(): AsyncIterable<unknown> {
     return this.inner.stream();
+  }
+
+  async wait(): Promise<import("./sdkInterface.js").SdkRunResult> {
+    if (this.inner.wait) {
+      return await this.inner.wait();
+    }
+    // Older SDKs without wait(): drain the stream and synthesize a
+    // finished result with no usage — better than throwing.
+    for await (const _ of this.inner.stream()) {
+      // consume
+    }
+    return { status: "finished" };
   }
 
   async cancel(): Promise<void> {

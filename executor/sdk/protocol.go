@@ -146,10 +146,40 @@ type RunEvent struct {
 	Event json.RawMessage `json:"event"`
 }
 
+// RunDone is the terminal notification for a run. Payload mirrors
+// what the Node runner assembles from the SDK's RunResult (per
+// https://cursor.com/cn/docs/sdk/typescript#waiting-in-non-streaming-mode)
+// plus a dedup'd list of tool_call summaries collected during the
+// stream. Downstream should treat this as authoritative and not
+// try to reconstruct final_text / usage from raw run.event
+// notifications.
 type RunDone struct {
-	RunID     string          `json:"runId"`
-	FinalText string          `json:"finalText,omitempty"`
-	Usage     json.RawMessage `json:"usage,omitempty"`
+	RunID      string          `json:"runId"`
+	FinalText  string          `json:"finalText"`
+	Status     string          `json:"status"` // "finished" | "error" | "cancelled"
+	Usage      *TokenUsage     `json:"usage,omitempty"`
+	DurationMs int64           `json:"durationMs,omitempty"`
+	ToolCalls  []ToolCallSummary `json:"toolCalls,omitempty"`
+}
+
+// TokenUsage mirrors @cursor/sdk's TokenUsage. See
+// https://cursor.com/cn/docs/sdk/typescript#token-usage.
+type TokenUsage struct {
+	InputTokens      int64 `json:"inputTokens"`
+	OutputTokens     int64 `json:"outputTokens"`
+	CacheReadTokens  int64 `json:"cacheReadTokens"`
+	CacheWriteTokens int64 `json:"cacheWriteTokens"`
+	TotalTokens      int64 `json:"totalTokens"`
+	ReasoningTokens  int64 `json:"reasoningTokens,omitempty"`
+}
+
+// ToolCallSummary is one deduped tool call observed during a run.
+// The SDK docs mark args/result payloads as unstable so we only
+// keep name + input (which IS stable) and callId for correlation.
+type ToolCallSummary struct {
+	CallID string          `json:"callId"`
+	Name   string          `json:"name"`
+	Input  json.RawMessage `json:"input,omitempty"`
 }
 
 type RunError struct {

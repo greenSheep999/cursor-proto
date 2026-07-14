@@ -36,10 +36,38 @@ export interface SdkAgent {
 }
 
 /**
+ * @cursor/sdk's TokenUsage. See
+ * https://cursor.com/cn/docs/sdk/typescript#token-usage.
+ */
+export interface SdkTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  reasoningTokens?: number;
+}
+
+/**
+ * @cursor/sdk's RunResult, minus fields we don't surface. The SDK's
+ * own docs (SDK docs § "waiting in non-streaming mode") say
+ * `result.result` is the authoritative final assistant text — no
+ * more fishing through message/content/text ourselves.
+ */
+export interface SdkRunResult {
+  status: "finished" | "error" | "cancelled";
+  result?: string;
+  usage?: SdkTokenUsage;
+  durationMs?: number;
+  error?: { message: string; code?: string };
+}
+
+/**
  * One in-flight run. Callers consume the async iterator to receive
  * SDK events (assistant deltas, tool calls, thinking, task status,
  * etc.). The iterator ends when the run reaches end_turn / cancel /
- * error.
+ * error. wait() then gives you the structured RunResult with the
+ * final text + usage.
  */
 export interface SdkRun {
   readonly runId: string;
@@ -47,11 +75,11 @@ export interface SdkRun {
   /** Ordered stream of SDKMessage-like objects. */
   stream(): AsyncIterable<unknown>;
 
+  /** Wait for the run to reach a terminal state and return the result. */
+  wait(): Promise<SdkRunResult>;
+
   /** Best-effort cancel. Idempotent. */
   cancel(): Promise<void>;
-
-  /** Optional: usage snapshot after end_turn. May be undefined. */
-  usage?(): Promise<unknown | undefined>;
 }
 
 /**

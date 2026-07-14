@@ -169,10 +169,51 @@ export interface RunEventParams {
   event: unknown;
 }
 
+/**
+ * TokenUsage mirrors @cursor/sdk's TokenUsage type verbatim so the
+ * Go side can pass this straight through without a translation
+ * table. See https://cursor.com/cn/docs/sdk/typescript#token-usage.
+ */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  reasoningTokens?: number;
+}
+
+/**
+ * One tool call collected during a run. We keep only the fields
+ * downstream needs — the SDK's ToolCall type is a large disjoint
+ * union whose payloads the SDK docs explicitly mark as
+ * "unstable, parse defensively." We surface name + input (which
+ * IS stable) and drop the result blob into the SSE stream but not
+ * this summary — clients that need per-tool results should read
+ * the stream.
+ */
+export interface ToolCallSummary {
+  callId: string;
+  name: string;
+  input?: unknown;
+}
+
 export interface RunDoneParams {
   runId: string;
-  finalText?: string;
-  usage?: unknown;
+  /**
+   * Final assistant text from RunResult.result. Empty string when the
+   * SDK didn't produce one (e.g. the run only made tool calls without
+   * a wrap-up text).
+   */
+  finalText: string;
+  /** RunResult.status verbatim: "finished" | "error" | "cancelled". */
+  status: "finished" | "error" | "cancelled";
+  /** Cumulative TokenUsage. Absent when the runtime didn't report any. */
+  usage?: TokenUsage;
+  /** Wall-clock duration of the run, from RunResult.durationMs. */
+  durationMs?: number;
+  /** Deduped tool_call summary observed during the stream. */
+  toolCalls: ToolCallSummary[];
 }
 
 export interface RunErrorParams {

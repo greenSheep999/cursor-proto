@@ -20,6 +20,12 @@ class FakeRun implements SdkRun {
       yield e;
     }
   }
+  async wait() {
+    return {
+      status: (this.cancelled ? "cancelled" : "finished") as "cancelled" | "finished",
+      result: "",
+    };
+  }
   async cancel(): Promise<void> {
     this.cancelled = true;
   }

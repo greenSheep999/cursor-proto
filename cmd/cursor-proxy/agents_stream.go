@@ -134,20 +134,25 @@ func sseWriteRaw(w http.ResponseWriter, event string, data []byte) {
 // -------- non-streaming aggregation --------
 
 // nonStreamResponse is the JSON body /v1/agents/{id}/runs returns
-// when stream=false. Content aggregates all `assistant` deltas into
-// one text blob; tool calls emitted before end_turn are surfaced
-// as a parallel array so downstream can still render them.
+// when stream=false. All fields are copied verbatim from the
+// run.done notification the Node runner assembles from
+// @cursor/sdk's RunResult — we do NOT re-derive any of them from
+// raw stream events. See node-runner/src/runner.ts pumpStream()
+// and https://cursor.com/cn/docs/sdk/typescript#waiting-in-non-streaming-mode.
 type nonStreamResponse struct {
-	RunID     string          `json:"run_id"`
-	FinalText string          `json:"final_text"`
-	ToolCalls []toolCallEntry `json:"tool_calls,omitempty"`
-	Usage     json.RawMessage `json:"usage,omitempty"`
-	Error     *runErrorBody   `json:"error,omitempty"`
+	RunID      string           `json:"run_id"`
+	Status     string           `json:"status"`
+	FinalText  string           `json:"final_text"`
+	ToolCalls  []toolCallEntry  `json:"tool_calls,omitempty"`
+	Usage      *sdk.TokenUsage  `json:"usage,omitempty"`
+	DurationMs int64            `json:"duration_ms,omitempty"`
+	Error      *runErrorBody    `json:"error,omitempty"`
 }
 
 type toolCallEntry struct {
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
+	CallID string          `json:"call_id"`
+	Name   string          `json:"name"`
+	Input  json.RawMessage `json:"input,omitempty"`
 }
 
 type runErrorBody struct {
@@ -156,27 +161,16 @@ type runErrorBody struct {
 }
 
 // streamNonStreaming drains the events channel and produces one
-// JSON body. Blocks until run.done / run.error / channel close.
-// If the caller's ctx cancels, we return an error body rather than
-// leaving the connection hanging.
+// JSON body. Since the Node runner emits a fully-populated run.done
+// notification with final_text / usage / status / tool_calls, this
+// function just picks that up — the intervening run.event
+// notifications are drained but not aggregated (SDK docs mark those
+// payloads unstable; the RunResult in run.done is the stable view).
 func streamNonStreaming(ctx context.Context, w http.ResponseWriter, runID string, events <-chan sdk.RunStreamMsg) {
 	var (
-		textBuf   []byte
-		toolCalls []toolCallEntry
-		usage     json.RawMessage
-		errBody   *runErrorBody
+		done    *sdk.RunDone
+		errBody *runErrorBody
 	)
-
-	// Type of one SDK event, minimally destructured for the fields
-	// we accumulate. Anything else (thinking, task, status) is
-	// dropped silently for the non-streaming shape — clients that
-	// need it should use stream=true.
-	type sdkEvent struct {
-		Type  string          `json:"type"`
-		Delta string          `json:"delta"`
-		Name  string          `json:"name"`
-		Input json.RawMessage `json:"input"`
-	}
 
 	for {
 		select {
@@ -186,28 +180,11 @@ func streamNonStreaming(ctx context.Context, w http.ResponseWriter, runID string
 			}
 			switch {
 			case msg.Event != nil:
-				var ev sdkEvent
-				if err := json.Unmarshal(msg.Event.Event, &ev); err != nil {
-					// Unknown event shape — skip; not fatal.
-					continue
-				}
-				switch ev.Type {
-				case "assistant":
-					textBuf = append(textBuf, []byte(ev.Delta)...)
-				case "tool_call":
-					toolCalls = append(toolCalls, toolCallEntry{
-						Name:  ev.Name,
-						Input: ev.Input,
-					})
-				}
+				// Passthrough — SSE consumers see these, but the
+				// non-streaming aggregator relies exclusively on
+				// run.done for its fields.
 			case msg.Done != nil:
-				if msg.Done.FinalText != "" {
-					// FinalText, when present, replaces the accumulated
-					// deltas — the SDK sometimes provides a canonical
-					// full-text at end_turn.
-					textBuf = []byte(msg.Done.FinalText)
-				}
-				usage = msg.Done.Usage
+				done = msg.Done
 				goto finish
 			case msg.Error != nil:
 				errBody = &runErrorBody{
@@ -226,12 +203,26 @@ func streamNonStreaming(ctx context.Context, w http.ResponseWriter, runID string
 	}
 
 finish:
-	resp := nonStreamResponse{
-		RunID:     runID,
-		FinalText: string(textBuf),
-		ToolCalls: toolCalls,
-		Usage:     usage,
-		Error:     errBody,
+	resp := nonStreamResponse{RunID: runID, Error: errBody}
+	if done != nil {
+		resp.Status = done.Status
+		resp.FinalText = done.FinalText
+		resp.Usage = done.Usage
+		resp.DurationMs = done.DurationMs
+		// Translate SDK ToolCallSummary → HTTP toolCallEntry.
+		// Same fields, different JSON tag style (SDK uses camelCase
+		// for internal ToolCallSummary; HTTP surface uses snake_case
+		// for consistency with the rest of /v1/agents/*).
+		if len(done.ToolCalls) > 0 {
+			resp.ToolCalls = make([]toolCallEntry, len(done.ToolCalls))
+			for i, tc := range done.ToolCalls {
+				resp.ToolCalls[i] = toolCallEntry{
+					CallID: tc.CallID,
+					Name:   tc.Name,
+					Input:  tc.Input,
+				}
+			}
+		}
 	}
 	w.Header().Set("content-type", "application/json")
 	status := http.StatusOK
