@@ -35,6 +35,10 @@ type AnthropicStreamWriter struct {
 	blockOpen  bool
 	blockIndex int
 	sentStart  bool
+	// blockType tracks the type of the currently-open content block
+	// ("text", "thinking", "tool_use", or "" when closed) so we can
+	// close-and-reopen when the stream switches modalities mid-turn.
+	blockType string
 	// toolBlocks maps tool_call_id -> block index for its content_block.
 	toolBlocks  map[string]int
 	sawToolCall bool
@@ -73,8 +77,19 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 				},
 			})...)
 		}
+		// If a thinking block is currently open, close it before opening
+		// the text block — Anthropic streams one content block at a time.
+		if w.blockOpen && w.blockType != "text" {
+			buf = append(buf, w.frame("content_block_stop", map[string]any{
+				"type":  "content_block_stop",
+				"index": w.blockIndex,
+			})...)
+			w.blockOpen = false
+			w.blockIndex++
+		}
 		if !w.blockOpen {
 			w.blockOpen = true
+			w.blockType = "text"
 			buf = append(buf, w.frame("content_block_start", map[string]any{
 				"type":  "content_block_start",
 				"index": w.blockIndex,
@@ -90,6 +105,61 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			"delta": map[string]any{
 				"type": "text_delta",
 				"text": ev.Text,
+			},
+		})...)
+		return buf
+
+	case EventThinkingDelta:
+		// Anthropic Extended Thinking: emit a `thinking` content block
+		// with `thinking_delta` fragments. Cursor doesn't ship the
+		// signed cryptographic `signature` field the official API
+		// includes, so downstream clients that require it (e.g. the
+		// beta thinking passthrough loop) will treat the block as an
+		// unsigned thinking preview — sufficient for UI display, not
+		// for re-submission back to Anthropic.
+		if !w.sentStart {
+			w.sentStart = true
+			buf = append(buf, w.frame("message_start", map[string]any{
+				"type": "message_start",
+				"message": map[string]any{
+					"id":            w.ID,
+					"type":          "message",
+					"role":          "assistant",
+					"model":         w.Model,
+					"content":       []any{},
+					"stop_reason":   nil,
+					"stop_sequence": nil,
+					"usage":         map[string]int{"input_tokens": 0, "output_tokens": 0},
+				},
+			})...)
+		}
+		// Close any non-thinking block that's open.
+		if w.blockOpen && w.blockType != "thinking" {
+			buf = append(buf, w.frame("content_block_stop", map[string]any{
+				"type":  "content_block_stop",
+				"index": w.blockIndex,
+			})...)
+			w.blockOpen = false
+			w.blockIndex++
+		}
+		if !w.blockOpen {
+			w.blockOpen = true
+			w.blockType = "thinking"
+			buf = append(buf, w.frame("content_block_start", map[string]any{
+				"type":  "content_block_start",
+				"index": w.blockIndex,
+				"content_block": map[string]any{
+					"type":     "thinking",
+					"thinking": "",
+				},
+			})...)
+		}
+		buf = append(buf, w.frame("content_block_delta", map[string]any{
+			"type":  "content_block_delta",
+			"index": w.blockIndex,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": ev.Text,
 			},
 		})...)
 		return buf
@@ -125,11 +195,18 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			w.toolBlocks = map[string]int{}
 		}
 		toolIdx, seen := w.toolBlocks[ev.ToolCallID]
-		if !seen {
-			toolIdx = w.blockIndex
-			w.toolBlocks[ev.ToolCallID] = toolIdx
-			w.blockIndex++
+		if seen {
+			// Upstream sent tool_call_started twice for the same call_id
+			// (happens when Cursor re-emits during retries or when a
+			// nested step re-announces the tool). Anthropic clients
+			// treat a second content_block_start on the same index as a
+			// protocol error, so we drop the duplicate here — the block
+			// is already open and callers keep streaming into it.
+			return nil
 		}
+		toolIdx = w.blockIndex
+		w.toolBlocks[ev.ToolCallID] = toolIdx
+		w.blockIndex++
 		w.sawToolCall = true
 		buf = append(buf, w.frame("content_block_start", map[string]any{
 			"type":  "content_block_start",
@@ -209,6 +286,13 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		stopReason := "end_turn"
 		if w.sawToolCall {
 			stopReason = "tool_use"
+		}
+		// Callers can force a specific stop_reason (e.g. "error" when the
+		// upstream trailer surfaced a grpc-status != 0 after we'd already
+		// written the SSE headers). Otherwise fall through to the
+		// state-derived default.
+		if ev.StopReason != "" {
+			stopReason = ev.StopReason
 		}
 		buf = append(buf, w.frame("message_delta", map[string]any{
 			"type": "message_delta",

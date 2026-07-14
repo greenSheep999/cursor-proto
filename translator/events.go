@@ -49,6 +49,13 @@ type Event struct {
 
 	// Usage is populated on EventTurnEnded.
 	Usage *Usage
+
+	// StopReason lets callers override the stop_reason emitted on
+	// EventTurnEnded. Empty means "let the writer choose" (end_turn or
+	// tool_use, depending on state). Currently used by the streaming
+	// paths to surface a trailer error as stop_reason="error" instead
+	// of a misleading end_turn.
+	StopReason string
 }
 
 // Usage aggregates token counters.
@@ -92,6 +99,17 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	}
 	if s := iu.GetToolCallStarted(); s != nil {
 		tc := s.GetToolCall()
+		// MCP tools arrive twice from the upstream stream: once as a
+		// bare InteractionUpdate.tool_call_started (with no ToolCall
+		// oneof populated — the tc.GetTool() is nil), and again
+		// slightly later as an ExecServerMessage.mcp_args carrying the
+		// actual arg map. If we emit the bare one first, downstream
+		// writers register the tool_use content_block with no `input`
+		// and the follow-up MCP frame gets dropped by their duplicate
+		// guard. Skip the bare one and let the MCP branch drive it.
+		if tc == nil || tc.GetTool() == nil {
+			return nil
+		}
 		callID := s.GetCallId()
 		if callID == "" {
 			callID = extractToolCallID(tc)
@@ -182,15 +200,27 @@ func encodeMcpArgs(args map[string][]byte) string {
 	return b.String()
 }
 
-// decodeMcpArgValue turns one map value (a marshaled google.protobuf.Value)
-// into a JSON fragment. Falls back to raw JSON or a quoted string if the
-// bytes don't parse as a Value.
+// decodeMcpArgValue turns one map value into a JSON fragment. Cursor's MCP
+// value bytes may arrive in several shapes depending on the client that
+// authored the tool call:
+//
+//  1. A marshaled google.protobuf.Value ("`\x1a\x07Beijing`" for a string
+//     literal, wire tag 0x1a = field 3 (string_value) length 7).
+//  2. A JSON fragment ("Beijing" quoted, or {"nested":"struct"}) — the
+//     official MCP SDK writes this shape.
+//  3. Raw UTF-8 bytes without any protobuf envelope — happens with some
+//     older Cursor client versions.
+//
+// We try (1) first (protojson gives us the cleanest output when it works),
+// then (2), then fall back to (3) wrapped as a JSON string. Doing JSON
+// first would misparse bare strings like "42" as numbers and doubly-quote
+// values.
 func decodeMcpArgValue(raw []byte) []byte {
 	if len(raw) == 0 {
 		return []byte("null")
 	}
 	var v structpb.Value
-	if err := proto.Unmarshal(raw, &v); err == nil {
+	if err := proto.Unmarshal(raw, &v); err == nil && v.GetKind() != nil {
 		if b, err := protojson.Marshal(&v); err == nil {
 			return b
 		}
@@ -277,69 +307,83 @@ func extractToolCallID(tc *cursorpb.AgentV1_ToolCall) string {
 }
 
 // extractToolArgsFromStart returns the full JSON-encoded arguments for a
-// tool_call_started envelope. MCP tool calls arrive with the complete args
-// map on start (Cursor doesn't stream MCP args incrementally), so we serialize
-// them once and let downstream writers emit a single argument delta.
+// tool_call_started envelope. Cursor delivers the complete argument struct
+// on the started event for every tool type (MCP and native), so downstream
+// writers can emit a single argument delta with no further partial-JSON
+// concatenation — the ToolCallDelta stream that follows describes tool
+// EXECUTION progress (shell stdout, edit stream_content, task interaction),
+// NOT argument fragments.
 func extractToolArgsFromStart(tc *cursorpb.AgentV1_ToolCall) string {
 	if tc == nil {
 		return ""
 	}
-	mcp := tc.GetMcpToolCall()
-	if mcp == nil {
-		return ""
+	// MCP: args is a map<string, bytes> of marshaled Value proto.
+	if mcp := tc.GetMcpToolCall(); mcp != nil {
+		return mcpArgsToJSON(mcp.GetArgs())
 	}
-	a := mcp.GetArgs()
+	// Native tools: each has an `Args` submessage. protojson serialization
+	// gives us the canonical JSON shape.
+	var argsMsg proto.Message
+	switch {
+	case tc.GetShellToolCall() != nil:
+		argsMsg = tc.GetShellToolCall().GetArgs()
+	case tc.GetReadToolCall() != nil:
+		argsMsg = tc.GetReadToolCall().GetArgs()
+	case tc.GetGrepToolCall() != nil:
+		argsMsg = tc.GetGrepToolCall().GetArgs()
+	case tc.GetLsToolCall() != nil:
+		argsMsg = tc.GetLsToolCall().GetArgs()
+	case tc.GetGlobToolCall() != nil:
+		argsMsg = tc.GetGlobToolCall().GetArgs()
+	case tc.GetFetchToolCall() != nil:
+		argsMsg = tc.GetFetchToolCall().GetArgs()
+	case tc.GetEditToolCall() != nil:
+		argsMsg = tc.GetEditToolCall().GetArgs()
+	case tc.GetDeleteToolCall() != nil:
+		argsMsg = tc.GetDeleteToolCall().GetArgs()
+	case tc.GetAskQuestionToolCall() != nil:
+		argsMsg = tc.GetAskQuestionToolCall().GetArgs()
+	}
+	if argsMsg == nil {
+		return "{}"
+	}
+	// EmitUnpopulated keeps optional zero-value fields in the JSON so a
+	// client that expects a fixed shape (e.g. Claude tool loop) sees the
+	// full object. UseProtoNames=false emits camelCase (Anthropic clients
+	// expect that; snake_case would surprise the SDKs).
+	m := protojson.MarshalOptions{
+		UseProtoNames:   false,
+		EmitUnpopulated: false,
+	}
+	b, err := m.Marshal(argsMsg)
+	if err != nil || len(b) == 0 {
+		return "{}"
+	}
+	return string(b)
+}
+
+// mcpArgsToJSON is the MCP branch of extractToolArgsFromStart, factored out
+// so the native-tool switch stays readable. Delegates value decoding to
+// decodeMcpArgValue so both call sites (encodeMcpArgs and this one) use
+// the same protobuf-Value-first strategy — without this, string values
+// arrived to Anthropic clients wrapped in their raw wire tag prefix
+// (e.g. "Beijing" for "Beijing"), and JSON.parse choked.
+func mcpArgsToJSON(a *cursorpb.AgentV1_McpArgs) string {
 	if a == nil {
 		return ""
 	}
-	args := a.GetArgs()
-	if len(args) == 0 {
-		return ""
-	}
-	// McpArgs.args is a map<string, bytes> where each value is the JSON
-	// serialization of the argument value. Reassemble a single JSON object,
-	// keeping keys sorted for stable output.
-	keys := make([]string, 0, len(args))
-	for k := range args {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var b strings.Builder
-	b.WriteString("{")
-	for i, k := range keys {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		kb, _ := json.Marshal(k)
-		b.Write(kb)
-		b.WriteString(":")
-		v := args[k]
-		if len(v) == 0 || !json.Valid(v) {
-			// Fall back to a JSON string if the raw bytes aren't valid JSON.
-			sb, _ := json.Marshal(string(v))
-			b.Write(sb)
-			continue
-		}
-		b.Write(v)
-	}
-	b.WriteString("}")
-	return b.String()
+	return encodeMcpArgs(a.GetArgs())
 }
 
-// extractToolArgsDelta returns a raw JSON-ish string chunk from a ToolCallDelta.
-// The full argument shape depends on the tool; here we just surface the raw
-// bytes so the downstream translator can accumulate & flush as valid JSON on
-// completion.
-//
-// For MCP tool calls Cursor delivers the full arguments on tool_call_started
-// (see extractToolArgsFromStart) — this helper stays for native tools whose
-// wire shape isn't yet documented.
+// extractToolArgsDelta USED to try to surface incremental JSON from a
+// ToolCallDelta, but Cursor's ToolCallDelta doesn't carry argument
+// fragments — it carries EXECUTION progress (shell stdout, edit
+// stream_content, task interaction updates). Feeding that as
+// `input_json_delta` to Claude clients produces protobuf-debug garbage in
+// tool_use.input and hangs the client's JSON.parse. Returning "" here
+// suppresses those deltas; the full argument object was already delivered
+// on tool_call_started via extractToolArgsFromStart.
 func extractToolArgsDelta(d *cursorpb.AgentV1_ToolCallDelta) string {
-	if d == nil {
-		return ""
-	}
-	if s := d.String(); s != "" {
-		return s
-	}
+	_ = d
 	return ""
 }

@@ -79,6 +79,9 @@ func main() {
 				a := exec.GetMcpArgs()
 				fmt.Printf("     McpArgs name=%q tool_name=%q call_id=%s args=%d entries\n",
 					a.GetName(), a.GetToolName(), a.GetToolCallId(), len(a.GetArgs()))
+				for k, v := range a.GetArgs() {
+					fmt.Printf("       ARG %q hex=%x str=%q\n", k, v, string(v))
+				}
 				toolSeen = true
 			}
 			continue
@@ -101,6 +104,9 @@ func main() {
 				if mcp := tc.GetMcpToolCall(); mcp != nil {
 					if a := mcp.GetArgs(); a != nil {
 						fmt.Printf("     name=%q tool_name=%q args_len=%d\n", a.GetName(), a.GetToolName(), len(a.GetArgs()))
+						for k, v := range a.GetArgs() {
+							fmt.Printf("       ARG %q hex=%x str=%q\n", k, v, string(v))
+						}
 					}
 				}
 			}

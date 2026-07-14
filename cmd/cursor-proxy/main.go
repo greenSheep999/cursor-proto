@@ -85,6 +85,23 @@ type anthropicMessagesRequest struct {
 	Messages []anthropicMessage `json:"messages"`
 	Stream   bool               `json:"stream"`
 	Tools    []anthropicTool    `json:"tools"`
+	// OutputConfig.Effort maps onto Cursor's tier suffix (-low / -medium /
+	// -high). Anthropic clients that don't set it fall back to whatever
+	// tier is already baked into the model name.
+	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+	// Thinking.BudgetTokens (Extended Thinking) — presence means the
+	// client wants reasoning; we forward this to Cursor via the model
+	// tier suffix, using "high" when a budget is set.
+	Thinking *anthropicThinking `json:"thinking,omitempty"`
+}
+
+type anthropicOutputConfig struct {
+	Effort string `json:"effort"`
+}
+
+type anthropicThinking struct {
+	Type         string `json:"type"`
+	BudgetTokens int    `json:"budget_tokens"`
 }
 
 type anthropicMessage struct {
@@ -92,10 +109,33 @@ type anthropicMessage struct {
 	Content any    `json:"content"`
 }
 
+// anthropicTool covers both "custom" tools (user-defined, with input_schema)
+// and Anthropic's server-side tools (web_search_20250305, computer_20241022,
+// bash_20250124, text_editor_20250124, code_execution_20250825, …), which
+// are identified by their `type` field rather than by carrying an
+// input_schema. Cursor's upstream doesn't run any of these server tools —
+// they execute inside Anthropic's own infrastructure — so we surface a
+// clear 400 when we see one instead of silently dropping it (which used
+// to make clients hang waiting for a tool_use block that would never come).
 type anthropicTool struct {
+	Type        string         `json:"type"`
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"input_schema"`
+}
+
+// isAnthropicServerTool returns true when a tool entry describes one of
+// Anthropic's server-side tools (identified by a versioned `type` string
+// like "web_search_20250305"). Custom tools either have Type=="" or
+// Type=="custom" per the Messages API spec.
+func isAnthropicServerTool(t anthropicTool) bool {
+	if t.Type == "" || t.Type == "custom" {
+		return false
+	}
+	// Any typed tool that isn't a user-defined "custom" one is server-side
+	// as of the current Anthropic API (2025-2026). Being permissive here
+	// keeps us forward-compatible if Anthropic adds new server tools.
+	return true
 }
 
 // ---------- main ----------
@@ -366,13 +406,21 @@ func convertOpenAITools(in []openaiTool) []executor.ToolDefinition {
 }
 
 // convertAnthropicTools converts Anthropic-style `tools[]` into
-// executor.ToolDefinition.
-func convertAnthropicTools(in []anthropicTool) []executor.ToolDefinition {
+// executor.ToolDefinition. Returns the converted list plus, if any
+// server-side tools were rejected, a description of the first offender so
+// the handler can return a helpful 400 instead of dropping tools silently.
+func convertAnthropicTools(in []anthropicTool) (out []executor.ToolDefinition, unsupportedType string) {
 	if len(in) == 0 {
-		return nil
+		return nil, ""
 	}
-	out := make([]executor.ToolDefinition, 0, len(in))
+	out = make([]executor.ToolDefinition, 0, len(in))
 	for _, t := range in {
+		if isAnthropicServerTool(t) {
+			if unsupportedType == "" {
+				unsupportedType = t.Type
+			}
+			continue
+		}
 		if t.Name == "" {
 			continue
 		}
@@ -382,7 +430,7 @@ func convertAnthropicTools(in []anthropicTool) []executor.ToolDefinition {
 			InputSchema: t.InputSchema,
 		})
 	}
-	return out
+	return out, unsupportedType
 }
 
 func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, includeUsage bool, decision simCacheDecision) {
@@ -566,9 +614,36 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 		prefix := prefixFromOpenAI(strings.TrimSpace(systemPrompt), history)
 		decision := decideSimCache(cacheStore, prefix)
 
-		tools := convertAnthropicTools(req.Tools)
+		// Reject server-side Anthropic tools (web_search_20250305 etc.)
+		// with a 400 instead of silently dropping them — clients rely on
+		// tool_use blocks that Cursor's upstream will never emit for
+		// these, and the mismatch used to hang the stream.
+		tools, unsupportedTool := convertAnthropicTools(req.Tools)
+		if unsupportedTool != "" {
+			writeAnthropicError(w, http.StatusBadRequest,
+				"invalid_request_error",
+				fmt.Sprintf("Anthropic server-side tool %q is not supported when routed through Cursor. "+
+					"Cursor runs its own agent tools; only client-side custom tools (type=\"custom\" or omitted) are proxied.",
+					unsupportedTool))
+			return
+		}
+
+		// Resolve the target Cursor tier. Priority:
+		//   1. Explicit tier suffix already on req.Model (e.g. "claude-sonnet-5-high") wins.
+		//   2. output_config.effort — Anthropic's official knob.
+		//   3. thinking.budget_tokens (presence maps to "high").
+		//   4. Whatever the model alias table gives us (see canonicalizeAnthropicModel).
+		effort := ""
+		if req.OutputConfig != nil {
+			effort = strings.ToLower(strings.TrimSpace(req.OutputConfig.Effort))
+		}
+		if effort == "" && req.Thinking != nil && req.Thinking.BudgetTokens > 0 {
+			effort = "high"
+		}
+		modelForCursor := canonicalizeAnthropicModel(req.Model, effort)
+
 		events, err := c.RunChat(r.Context(), &executor.ChatRequest{
-			Model:              req.Model,
+			Model:              modelForCursor,
 			UserMessage:        userText,
 			SystemPrompt:       systemPrompt,
 			History:            history,
@@ -590,6 +665,78 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 		}
 		nonStreamAnthropic(w, req.Model, events, decision)
 	}
+}
+
+// writeAnthropicError sends an Anthropic-shaped error body. The Messages API
+// returns {"type":"error","error":{"type":"<type>","message":"..."}}.
+func writeAnthropicError(w http.ResponseWriter, status int, errType, message string) {
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"type": "error",
+		"error": map[string]any{
+			"type":    errType,
+			"message": message,
+		},
+	})
+}
+
+// canonicalizeAnthropicModel maps Anthropic's official bare model names
+// (e.g. "claude-sonnet-4-5-20250929", "claude-opus-4-5") to the Cursor
+// tier-suffixed names the upstream expects. When `effort` is set it wins
+// over any tier already in the alias — this lets output_config.effort
+// override the client's model string in a single normalized place.
+//
+// Bare names without an alias (or names already carrying a tier suffix)
+// pass through unchanged, so power users who type the Cursor name
+// directly still work.
+func canonicalizeAnthropicModel(model, effort string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return m
+	}
+	// Alias table: Anthropic bare name → Cursor tier-less base.
+	// Kept intentionally small; extend as new Claude generations ship.
+	aliases := map[string]string{
+		// Sonnet 4.5 family
+		"claude-sonnet-4-5":          "claude-4.5-sonnet",
+		"claude-sonnet-4-5-20250929": "claude-4.5-sonnet",
+		// Opus 4.5
+		"claude-opus-4-5":          "claude-4.5-opus",
+		"claude-opus-4-5-20250929": "claude-4.5-opus",
+		// Sonnet 5 (Cursor-style tier root)
+		"claude-sonnet-5": "claude-sonnet-5",
+		// Haiku 4.5
+		"claude-haiku-4-5":          "claude-4.5-haiku",
+		"claude-haiku-4-5-20251001": "claude-4.5-haiku",
+	}
+	base := m
+	wasAliased := false
+	if canonical, ok := aliases[m]; ok {
+		base = canonical
+		wasAliased = true
+	}
+	// Only tier-suffix models that came in as Anthropic bare names (i.e.
+	// the ones our alias table maps). Cursor-native names like `default`,
+	// `composer-2.5`, `cursor-grok-4.5-medium`, or a Cursor tier root
+	// like `claude-4.5-sonnet` that the caller typed directly are passed
+	// through unchanged — the caller either knows what they want or the
+	// name already carries its own tier. Appending `-medium` to
+	// `default` would produce `default-medium`, which the Cursor backend
+	// rejects as ERROR_BAD_MODEL_NAME.
+	if !wasAliased {
+		return base
+	}
+	if effort == "low" || effort == "medium" || effort == "high" {
+		if !strings.HasSuffix(base, "-low") &&
+			!strings.HasSuffix(base, "-medium") &&
+			!strings.HasSuffix(base, "-high") &&
+			!strings.HasSuffix(base, "-xhigh") &&
+			!strings.HasSuffix(base, "-fast") {
+			return base + "-" + effort
+		}
+	}
+	return base
 }
 
 func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
@@ -659,6 +806,13 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 	// rewrite cache_read_input_tokens to max(real, simulated).
 	decision.applyToUsage(lastUsage, true)
 	end := &translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}
+	// A trailer error that arrived AFTER we'd already committed SSE
+	// headers can't be turned into an HTTP status anymore, so surface it
+	// on the message_delta as stop_reason="error". This keeps clients
+	// from treating a partial stream as a successful end_turn.
+	if trailerErr != nil {
+		end.StopReason = "error"
+	}
 	writeSSE(tr.Encode(end))
 }
 
