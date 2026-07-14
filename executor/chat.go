@@ -185,7 +185,7 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 		return nil, err
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
-	ApplyCommonHeaders(sseReq, c.Account, requestID)
+	ApplyCommonHeaders(sseReq, c.CurrentAccount(), requestID)
 
 	// Use a client without a body timeout — the stream can be long.
 	sseClient := &http.Client{Timeout: 0}
@@ -387,7 +387,7 @@ func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, pa
 		return err
 	}
 	req.Header.Set("content-type", "application/proto")
-	ApplyCommonHeaders(req, c.Account, auth.GenerateRequestID())
+	ApplyCommonHeaders(req, c.CurrentAccount(), auth.GenerateRequestID())
 
 	cli := &http.Client{Timeout: 30 * time.Second}
 	resp, err := cli.Do(req)

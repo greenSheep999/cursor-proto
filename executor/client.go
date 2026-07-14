@@ -26,11 +26,26 @@ const (
 )
 
 // Client bundles an authenticated Cursor session.
+//
+// Account is loaded once at NewClient time, but can be hot-swapped by
+// setting AccountReloader — the executor will call it before every
+// upstream call and use the returned account if it's non-nil, otherwise
+// keep the existing one. The intended use case is "the user switched
+// accounts in the Cursor IDE while cursor-proxy is running" — see
+// cmd/cursor-proxy/main.go for the sqlite-mtime-check reloader that
+// wires this up.
 type Client struct {
+	// Account is the current authenticated identity. Read via CurrentAccount()
+	// so any reloader is given a chance to run first.
 	Account *auth.Account
-	API2    string // override for api2 host
-	API3    string // override for api3 host
-	HTTP    *http.Client
+	// AccountReloader, if non-nil, is invoked before every upstream call.
+	// A non-nil return replaces Account; a nil return keeps it. Cost of
+	// the callback should be near-zero when nothing changed (e.g. mtime
+	// stat + short-circuit).
+	AccountReloader func() *auth.Account
+	API2            string // override for api2 host
+	API3            string // override for api3 host
+	HTTP            *http.Client
 }
 
 // NewClient wires up defaults.
@@ -42,6 +57,19 @@ func NewClient(acc *auth.Account) *Client {
 		API3:    DefaultAPI3,
 		HTTP:    &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// CurrentAccount returns the account after giving the AccountReloader a
+// chance to run. Every request path that talks to Cursor upstream should
+// prefer this over the raw Account field so IDE-side account switches
+// take effect without a proxy restart.
+func (c *Client) CurrentAccount() *auth.Account {
+	if c.AccountReloader != nil {
+		if fresh := c.AccountReloader(); fresh != nil {
+			c.Account = fresh
+		}
+	}
+	return c.Account
 }
 
 // UnaryCall performs a Connect unary RPC: sends `msg` as raw proto to
@@ -66,7 +94,7 @@ func (c *Client) UnaryCall(service, method string, msg, into proto.Message) erro
 		return err
 	}
 	req.Header.Set("content-type", "application/proto")
-	ApplyCommonHeaders(req, c.Account, auth.GenerateRequestID())
+	ApplyCommonHeaders(req, c.CurrentAccount(), auth.GenerateRequestID())
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {

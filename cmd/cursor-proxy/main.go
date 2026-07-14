@@ -25,9 +25,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 	"strconv"
 	"strings"
 
@@ -149,6 +151,7 @@ func main() {
 	}
 
 	var acc *auth.Account
+	var ideReloader func() *auth.Account
 	if tokenPath != "" {
 		a, err := auth.LoadAccount(tokenPath)
 		if err != nil {
@@ -156,11 +159,23 @@ func main() {
 		}
 		acc = a
 	} else {
+		// IDE-backed account: install an mtime reloader so account switches
+		// in the running Cursor IDE take effect on the next upstream call
+		// (no proxy restart). See makeIDEAccountReloader for the contract.
+		dbPath := ideDBPath()
 		acc = loadAccountFromIDE()
+		var startMTime time.Time
+		if info, err := os.Stat(dbPath); err == nil {
+			startMTime = info.ModTime()
+		}
+		ideReloader = makeIDEAccountReloader(dbPath, startMTime)
 	}
 
 	c := executor.NewClient(acc)
 	c.API3 = c.API2 // chat also lives on api2
+	if ideReloader != nil {
+		c.AccountReloader = ideReloader
+	}
 
 	apiKeys := LoadAPIKeys(*apiKeysFlag)
 
@@ -753,16 +768,30 @@ func flattenAnthropicContent(c any) string {
 
 // ---------- auth loading ----------
 
+// ideDBPath is the on-disk location of the Cursor IDE's SQLite state store
+// on macOS. The IDE writes cursorAuth/accessToken + cachedEmail here every
+// time the user signs in or switches accounts.
+func ideDBPath() string {
+	return os.Getenv("HOME") + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+}
+
 func loadAccountFromIDE() *auth.Account {
-	dbPath := os.Getenv("HOME") + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+	acc, err := readAccountFromIDE(ideDBPath())
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return acc
+}
+
+func readAccountFromIDE(dbPath string) (*auth.Account, error) {
 	db, err := sql.Open("sqlite3", "file:"+dbPath+"?mode=ro")
 	if err != nil {
-		log.Fatalf("open sqlite: %v", err)
+		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	defer db.Close()
 	var access, email string
 	if err := db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'`).Scan(&access); err != nil {
-		log.Fatalf("no accessToken: %v", err)
+		return nil, fmt.Errorf("no accessToken: %w", err)
 	}
 	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'`).Scan(&email)
 
@@ -773,5 +802,38 @@ func loadAccountFromIDE() *auth.Account {
 		AccessToken:  access,
 		MachineID:    machineID,
 		MacMachineID: macID,
+	}, nil
+}
+
+// makeIDEAccountReloader returns a closure the executor.Client can call
+// before every upstream request to pick up account switches performed in
+// the running Cursor IDE. It's a mtime-check (cheap: one stat syscall);
+// the sqlite read only happens when the mtime advances.
+//
+// Zero-alloc happy path: same mtime → nil return → caller keeps its cached
+// account. On a change: reads the DB, builds a fresh Account, refreshes
+// session defaults, and returns it for atomic swap on the client.
+//
+// Errors are logged and treated as "keep current" — we don't want a
+// transient sqlite lock (IDE is busy writing) to knock the proxy offline.
+func makeIDEAccountReloader(dbPath string, initial time.Time) func() *auth.Account {
+	var lastMTime = initial
+	return func() *auth.Account {
+		info, err := os.Stat(dbPath)
+		if err != nil {
+			return nil
+		}
+		if !info.ModTime().After(lastMTime) {
+			return nil
+		}
+		acc, err := readAccountFromIDE(dbPath)
+		if err != nil {
+			log.Printf("[proxy] IDE sqlite changed but reload failed: %v", err)
+			return nil
+		}
+		acc.FillSessionDefaults(time.Now())
+		lastMTime = info.ModTime()
+		log.Printf("[proxy] IDE account reloaded: email=%s", acc.Email)
+		return acc
 	}
 }

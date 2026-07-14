@@ -63,7 +63,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 		return nil, err
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
-	ApplyCommonHeaders(sseReq, c.Account, requestID)
+	ApplyCommonHeaders(sseReq, c.CurrentAccount(), requestID)
 
 	sseClient := &http.Client{Timeout: 0}
 	sseResp, err := sseClient.Do(sseReq)
