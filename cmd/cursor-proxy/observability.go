@@ -92,6 +92,37 @@ type Capabilities struct {
 	// HTTPVersion: which upstream wire versions this build can pin
 	// to. Present since v0.2.5.
 	HTTPVersion []string `json:"http_version_options"`
+
+	// Agents: describes /v1/agents/* availability and the sub-
+	// features it enables. `supported: false` means this build was
+	// deployed without agent mode; the sub-flags are then all false
+	// so downstream can check one boolean.
+	Agents CapAgents `json:"agents"`
+}
+
+// CapAgents groups the agent-mode feature flags. When Supported is
+// false the sub-flags are all false regardless of what the code
+// COULD do — cursor2api treats Supported as the master switch.
+type CapAgents struct {
+	// Supported: this cursor-proxy has agent mode wired at build
+	// time AND (crucially) has a live Node runner running now. If
+	// the operator turned off agent mode via missing -cursor-api-key
+	// or -node-runner, this reflects reality, not build capability.
+	Supported bool `json:"supported"`
+
+	// Runtimes: local + cloud, per the SDK. Empty when Supported is false.
+	Runtimes []string `json:"runtimes"`
+
+	// MCPManagement: whether MCP servers can be configured via
+	// agent-config.yaml. False in the Phase 3 MVP; landing later.
+	MCPManagement bool `json:"mcp_management"`
+
+	// Skills / Hooks / Subagents / Artifacts: SDK features that the
+	// agent runtime honors. All follow-on-Phase work; false today.
+	Skills    bool `json:"skills"`
+	Hooks     bool `json:"hooks"`
+	Subagents bool `json:"subagents"`
+	Artifacts bool `json:"artifacts"`
 }
 
 // CapPromptCaching splits prompt-cache support into "we surface
@@ -126,6 +157,29 @@ var simcacheOn = true
 func setSimCacheEnabled(on bool) { simcacheOn = on }
 
 func currentCapabilities() Capabilities {
+	// Agent mode reports live availability (was the runner spawned
+	// AND is it currently answering pings). We keep sub-flags in
+	// lock-step with runtime state so cursor2api's UI toggles match
+	// what the endpoints actually deliver.
+	agents := CapAgents{}
+	if agentSupervisor != nil {
+		info := currentAgentModeInfo()
+		if info.Available {
+			agents = CapAgents{
+				Supported: true,
+				Runtimes:  info.Runtimes,
+				// MCP / skills / hooks / subagents / artifacts land
+				// in Phase 4b+ (agent-config layer). Advertise them
+				// as false until they actually work end-to-end —
+				// the honest signal beats aspirational marketing.
+				MCPManagement: false,
+				Skills:        false,
+				Hooks:         false,
+				Subagents:     false,
+				Artifacts:     false,
+			}
+		}
+	}
 	return Capabilities{
 		Streaming:             true,
 		ToolUseJSONInput:      true,
@@ -142,6 +196,7 @@ func currentCapabilities() Capabilities {
 			CacheControlHonored: false,
 		},
 		HTTPVersion: []string{"auto", "http1.1", "http1.0"},
+		Agents:      agents,
 	}
 }
 

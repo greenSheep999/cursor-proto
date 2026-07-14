@@ -174,6 +174,21 @@ func main() {
 			"h2 — forcing http1.1 without a middlebox in between will "+
 			"produce a 502 with a malformed HTTP response. Falls back "+
 			"to $CURSOR_PROXY_HTTP_VERSION when unset.")
+	cursorAPIKey := flag.String("cursor-api-key", "",
+		"Cursor dashboard-issued API key (crsr_...) used by the "+
+			"agent-mode Node runner. Falls back to $CURSOR_API_KEY. "+
+			"When unset, /v1/agents/* endpoints return 503 and agent "+
+			"mode is disabled — wire mode continues to work.")
+	nodeRunnerPath := flag.String("node-runner", "",
+		"Path to the compiled node-runner/dist/index.js. When set "+
+			"together with -cursor-api-key (or its env), spawns a Node "+
+			"child process on startup that exposes /v1/agents/*. Falls "+
+			"back to $CURSOR_PROXY_NODE_RUNNER. Leave empty to disable "+
+			"agent mode entirely (wire mode still works). See "+
+			"docs/sdk-integration.md.")
+	nodeBinary := flag.String("node-binary", "",
+		"Path to the `node` executable used to run the SDK runner. "+
+			"Defaults to `node` on PATH. Only consulted when -node-runner is set.")
 	showVersion := flag.Bool("version", false, "print JSON with Cursor line, impersonated version, commit, release hash, and proto tag, then exit")
 	flag.Parse()
 
@@ -279,7 +294,17 @@ func main() {
 	setSimCacheEnabled(*simulateCache)
 
 	log.Printf("[proxy] cursor account loaded: email=%s", acc.Email)
+	SetWireAccountEmail(acc.Email)
 	log.Printf("[proxy] upstream HTTP: %s", httpVer)
+
+	// Agent mode: optional. Spawn the Node SDK runner if both a
+	// runner path and an API key are configured. Either missing =>
+	// wire-only build; /v1/agents/* returns 503 with a clear body.
+	// Wire mode is unaffected either way.
+	if sup := maybeStartAgentSupervisor(*nodeRunnerPath, *nodeBinary, *cursorAPIKey); sup != nil {
+		setAgentSupervisor(sup)
+	}
+
 	log.Printf("[proxy] listening on http://%s", *addr)
 	if len(apiKeys) > 0 {
 		log.Printf("[proxy] api-key auth enabled: %d key(s) configured", len(apiKeys))
