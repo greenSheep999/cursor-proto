@@ -1,12 +1,16 @@
 # cursor-proto
 
-A Go client + reverse-engineered protocol library for Cursor 3.10.x IDE, plus
-an OpenAI- and Anthropic-compatible HTTP proxy so any existing OpenAI/Anthropic
+A Go client + reverse-engineered protocol library for Cursor IDE, plus an
+OpenAI- and Anthropic-compatible HTTP proxy so any existing OpenAI/Anthropic
 client can talk to Cursor's backend.
 
-Built by rebuilding Cursor 3.10.20's private wire protocol from the shipped
-`workbench.desktop.main.js` (39 MB) — proto schemas, checksum algorithm,
+Built by rebuilding Cursor's private wire protocol from the shipped
+`workbench.desktop.main.js` (~40 MB) — proto schemas, checksum algorithm,
 machine-id derivation, session identifiers, and header set.
+
+**Currently impersonates Cursor 3.11.19** on `main`. The 3.10.20 line is
+still maintained on `release/cursor-3.10`. See [docs/versioning.md](docs/versioning.md)
+for the release contract and how downstream consumers should pin.
 
 ## Versioning
 

@@ -394,9 +394,11 @@ def emit_namespace(ns: str, messages, enums, include_msgs, include_enums, cross_
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["core", "full"], default="core")
+    ap.add_argument("--schema", default=str(SCHEMA_PATH),
+                    help="path to schema-<cursor>.raw.json (defaults to 3.10.20)")
     args = ap.parse_args()
 
-    schema = json.load(SCHEMA_PATH.open())
+    schema = json.load(open(args.schema))
     messages = schema["messages"]
     enums = schema["enums"]
 
@@ -418,9 +420,13 @@ def main():
 
     namespaces = set(ns_to_msgs.keys()) | set(ns_to_enums.keys())
 
-    # Clear old proto files
-    for old in PROTO_DIR.glob("*.proto"):
-        old.unlink()
+    # Only remove the file we're about to regenerate. Historically this
+    # wiped every .proto in proto/, which nuked hand-authored siblings
+    # like cursor_usage.proto — see docs/kernel-3.11-upgrade.md for the
+    # incident that cost us one debug cycle.
+    target = PROTO_DIR / "cursor.proto"
+    if target.exists():
+        target.unlink()
 
     # Emit one file per namespace, no cross-file imports (both packages live in
     # separate files but the resolver treats them as one compilation unit when

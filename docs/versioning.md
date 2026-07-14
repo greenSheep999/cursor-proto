@@ -176,10 +176,14 @@ gate's `cursor_version_lock` field.
 Kept in sync with git tags. If this table drifts from `git tag -l`, the
 tags win — please update this document.
 
-| Cursor line | Latest tag        | Branch                 | Status  |
-|-------------|-------------------|------------------------|---------|
-| 3.10        | `cursor3.10/v0.1.0` (also `v0.1.0`) | `release/cursor-3.10` (planned) | maintained |
-| 3.11        | *(not yet cut)*   | `main`                 | in-progress |
+| Cursor line | Latest tag         | Branch                 | Status  | Impersonates       |
+|-------------|--------------------|------------------------|---------|--------------------|
+| 3.10        | `cursor3.10/v0.1.1` (also legacy `v0.1.0`) | `release/cursor-3.10` | maintained | Cursor 3.10.20     |
+| 3.11        | `cursor3.11/v0.2.0` | `main`                | current | Cursor 3.11.19     |
+
+`main` currently tracks the 3.11 line. When Cursor releases 3.12 and we
+cut over, `main` will move to 3.12 and 3.11 will get its own
+`release/cursor-3.11` maintenance branch.
 
 ---
 

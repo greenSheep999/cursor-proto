@@ -190,7 +190,7 @@ func oneofPresent(m *cursorpb.AgentV1_AgentServerMessage) string {
 	if m.GetKvServerMessage() != nil {
 		return "kv_server_message"
 	}
-	if len(m.GetExecServerControlMessage()) > 0 {
+	if m.GetExecServerControlMessage() != nil {
 		return "exec_server_control_message"
 	}
 	if m.GetInteractionQuery() != nil {

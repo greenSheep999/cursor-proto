@@ -13,11 +13,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// Cursor 3.10.20 release hash. Used as the `machineID` segment of the
+// Cursor release hashes. Used as the `machineID` segment of the
 // x-cursor-checksum header when the client-side telemetry hasn't been
 // initialised yet — the IDE substitutes this value into the checksum
-// (see nVg in workbench.desktop.main.js).
-const KnownReleaseHash_3_10_20 = "4071c661bcb367c518becc7b3d4d57cbd69d2291d8b302c558d79080f8fd4f75"
+// (see nVg / DZg in workbench.desktop.main.js, depending on version).
+//
+// Each entry corresponds to the first segment of the update URL:
+//   https://downloads.cursor.com/production/<releaseHash>/<platform>/...
+// so it can be re-derived with:
+//   curl -s "https://api2.cursor.sh/updates/api/update/darwin-arm64/cursor/<prev>/stable" | jq .url
+const (
+	KnownReleaseHash_3_10_20 = "4071c661bcb367c518becc7b3d4d57cbd69d2291d8b302c558d79080f8fd4f75"
+	KnownReleaseHash_3_11_19 = "bf249e6efb5b097f23d7e21d7283429f0760b74a"
+)
 
 // GetMachineID returns SHA-256(IOPlatformUUID) on macOS, following Cursor's
 // _getTrueMachineId() in main.js: `l5(!0)`. On other platforms it uses the

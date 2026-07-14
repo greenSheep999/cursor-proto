@@ -7,8 +7,10 @@
 // Cursor dashboard/usage RPCs. These messages are transported to
 // aiserver.v1.DashboardService and aiserver.v1.AiService, but are declared in a
 // separate proto file (kept OUT of gen/cursor/) because the core extraction
-// scoped the main cursor.proto to chat/agent flows. Wire format is preserved
-// (all field numbers and types match Cursor 3.10.20 exactly).
+// scoped the main cursor.proto to chat/agent flows. Wire format is preserved:
+// all field numbers and types match Cursor 3.10.20 and 3.11.19 identically
+// (verified against captures/schema-3.11.19.raw.json — no field renames or
+// deletions on the types listed below).
 
 package usagepb
 

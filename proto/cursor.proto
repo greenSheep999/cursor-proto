@@ -6,7 +6,7 @@ option go_package = "github.com/router-for-me/cursor-proto/gen/cursor;cursorpb";
 
 // Generated from Cursor 3.10.20 workbench.desktop.main.js
 // commit: 23b9fb205fe595ea2be29da7214e19762d037fc0
-// Mode: core, 823 messages, 52 enums
+// Mode: core, 816 messages, 54 enums
 
 // ============================================================
 // Namespace: agent.v1 → AgentV1
@@ -22,6 +22,12 @@ message AgentV1 {
     AGENT_MODE_TRIAGE = 5;
     AGENT_MODE_PROJECT = 6;
     AGENT_MODE_MULTITASK = 7;
+  }
+
+  enum BackgroundTaskCompletionReason {
+    BACKGROUND_TASK_COMPLETION_REASON_UNSPECIFIED = 0;
+    BACKGROUND_TASK_COMPLETION_REASON_TASK_FINISHED = 1;
+    BACKGROUND_TASK_COMPLETION_REASON_TASK_PROGRESS = 2;
   }
 
   enum BackgroundTaskKind {
@@ -43,6 +49,12 @@ message AgentV1 {
     BUGFIX_VERDICT_FALSE_POSITIVE = 2;
     BUGFIX_VERDICT_COULD_NOT_FIX = 3;
     BUGFIX_VERDICT_RESOLVED_BY_OTHER_FIX = 4;
+  }
+
+  enum ConversationSearchSource {
+    CONVERSATION_SEARCH_SOURCE_UNSPECIFIED = 0;
+    CONVERSATION_SEARCH_SOURCE_LOCAL = 1;
+    CONVERSATION_SEARCH_SOURCE_CLOUD_CACHE = 2;
   }
 
   enum CursorRuleSource {
@@ -95,6 +107,13 @@ message AgentV1 {
     PACKAGE_TYPE_CLAUDE_PLUGIN = 4;
   }
 
+  enum RecordingMode {
+    RECORDING_MODE_UNSPECIFIED = 0;
+    RECORDING_MODE_START_RECORDING = 1;
+    RECORDING_MODE_SAVE_RECORDING = 2;
+    RECORDING_MODE_DISCARD_RECORDING = 3;
+  }
+
   enum ReplaceEnvMode {
     REPLACE_ENV_MODE_UNSPECIFIED = 0;
     REPLACE_ENV_MODE_CUSTOM = 1;
@@ -102,10 +121,23 @@ message AgentV1 {
     REPLACE_ENV_MODE_DEFAULT = 3;
   }
 
+  enum RequestedFilePathRejectedReason {
+    REQUESTED_FILE_PATH_REJECTED_REASON_UNSPECIFIED = 0;
+    REQUESTED_FILE_PATH_REJECTED_REASON_SLASHES_NOT_ALLOWED = 1;
+  }
+
   enum ResponseComparisonDisplayOrder {
     RESPONSE_COMPARISON_DISPLAY_ORDER_UNSPECIFIED = 0;
     RESPONSE_COMPARISON_DISPLAY_ORDER_PARENT_FIRST = 1;
     RESPONSE_COMPARISON_DISPLAY_ORDER_ALTERNATE_FIRST = 2;
+  }
+
+  enum ResponseComparisonSkipReason {
+    RESPONSE_COMPARISON_SKIP_REASON_UNSPECIFIED = 0;
+    RESPONSE_COMPARISON_SKIP_REASON_ALTERNATE_TOOL_CALL = 1;
+    RESPONSE_COMPARISON_SKIP_REASON_INFERENCE_ERROR = 2;
+    RESPONSE_COMPARISON_SKIP_REASON_TIMEOUT = 3;
+    RESPONSE_COMPARISON_SKIP_REASON_CANCELLED = 4;
   }
 
   enum ScrollDirection {
@@ -293,7 +325,7 @@ message AgentV1 {
       AgentV1.ExecServerMessage exec_server_message = 2;
       AgentV1.ConversationStateStructure conversation_checkpoint_update = 3;
       AgentV1.KvServerMessage kv_server_message = 4;
-      bytes exec_server_control_message = 5;
+      AgentV1.ExecServerControlMessage exec_server_control_message = 5;
       AgentV1.InteractionQuery interaction_query = 7;
     }
   }
@@ -351,45 +383,9 @@ message AgentV1 {
     optional string base_url = 2;
   }
 
-  message AppliedAgentChange {
-    enum ChangeType {
-      CHANGE_TYPE_UNSPECIFIED = 0;
-      CHANGE_TYPE_CREATED = 1;
-      CHANGE_TYPE_MODIFIED = 2;
-      CHANGE_TYPE_DELETED = 3;
-    }
-
-    string path = 1;
-    AgentV1.AppliedAgentChange.ChangeType change_type = 2;
-    optional string before_content = 3;
-    optional string after_content = 4;
-    optional string error = 5;
-    optional string message_for_model = 6;
-  }
-
-  message ApplyAgentDiffArgs {
-    string agent_id = 1;
-  }
-
-  message ApplyAgentDiffError {
-    string error = 1;
-    repeated AgentV1.AppliedAgentChange applied_changes = 2;
-  }
-
-  message ApplyAgentDiffResult {
-    oneof result {
-      AgentV1.ApplyAgentDiffSuccess success = 1;
-      AgentV1.ApplyAgentDiffError error = 2;
-    }
-  }
-
-  message ApplyAgentDiffSuccess {
-    repeated AgentV1.AppliedAgentChange applied_changes = 1;
-  }
-
   message ApplyAgentDiffToolCall {
-    AgentV1.ApplyAgentDiffArgs args = 1;
-    AgentV1.ApplyAgentDiffResult result = 2;
+    bytes args = 1;
+    bytes result = 2;
   }
 
   message AskQuestionArgs {
@@ -571,7 +567,7 @@ message AgentV1 {
     optional string detail = 5;
     optional string output_path = 6;
     optional string thread_id = 7;
-    bytes reason = 8;
+    AgentV1.BackgroundTaskCompletionReason reason = 8;
     optional string subagent_id = 9;
     optional string tool_call_id = 10;
   }
@@ -740,14 +736,9 @@ message AgentV1 {
 
   message CommunicateUpdateResult {
     oneof result {
-      AgentV1.CommunicateUpdateSuccess success = 1;
+      bytes success = 1;
       AgentV1.CommunicateUpdateError error = 2;
     }
-  }
-
-  message CommunicateUpdateSuccess {
-    string current_step = 1;
-    uint32 message_index = 3;
   }
 
   message CommunicateUpdateToolCall {
@@ -773,7 +764,7 @@ message AgentV1 {
       AgentV1.KeyAction key = 8;
       AgentV1.WaitAction wait = 9;
       AgentV1.ScreenshotAction screenshot = 10;
-      AgentV1.CursorPositionAction cursor_position = 11;
+      bytes cursor_position = 11;
     }
   }
 
@@ -956,6 +947,37 @@ message AgentV1 {
     string plan = 1;
   }
 
+  message ConversationSearchArgs {
+    string query = 1;
+    string tool_call_id = 2;
+  }
+
+  message ConversationSearchError {
+    string error = 1;
+  }
+
+  message ConversationSearchHit {
+    string conversation_id = 1;
+    string title = 2;
+    AgentV1.ConversationSearchSource source = 3;
+    int64 updated_at_ms = 4;
+    optional string snippet = 5;
+  }
+
+  message ConversationSearchResult {
+    oneof result {
+      AgentV1.ConversationSearchSuccess success = 1;
+      AgentV1.ConversationSearchError error = 2;
+    }
+  }
+
+  message ConversationSearchSuccess {
+    repeated AgentV1.ConversationSearchHit hits = 1;
+    bool truncated = 2;
+    bool partial = 3;
+    bool rebuilding = 4;
+  }
+
   message ConversationStateStructure {
     repeated bytes root_prompt_messages_json = 1;
     repeated bytes todos = 3;
@@ -1051,9 +1073,6 @@ message AgentV1 {
     repeated string add_labels = 6;
     optional string repo_url = 7;
     optional bool skip_branch_prefix_check = 8;
-  }
-
-  message CursorPositionAction {
   }
 
   message CursorRule {
@@ -1197,8 +1216,8 @@ message AgentV1 {
   }
 
   message DiagnosticRange {
-    AgentV1.Position start = 1;
-    AgentV1.Position end = 2;
+    bytes start = 1;
+    bytes end = 2;
   }
 
   message DiagnosticsArgs {
@@ -1260,6 +1279,13 @@ message AgentV1 {
     string path = 1;
   }
 
+  message EditPrLabelsArgs {
+    string tool_call_id = 1;
+    string pr_url = 2;
+    repeated string add_labels = 4;
+    repeated string remove_labels = 5;
+  }
+
   message EditPrLabelsError {
     string error = 1;
   }
@@ -1278,7 +1304,7 @@ message AgentV1 {
   }
 
   message EditPrLabelsToolCall {
-    bytes args = 1;
+    AgentV1.EditPrLabelsArgs args = 1;
     AgentV1.EditPrLabelsResult result = 2;
   }
 
@@ -1370,6 +1396,17 @@ message AgentV1 {
       AgentV1.PiGrepExecResult pi_grep_result = 50;
       AgentV1.PiFindExecResult pi_find_result = 51;
       AgentV1.PiLsExecResult pi_ls_result = 52;
+      AgentV1.ConversationSearchResult conversation_search_result = 53;
+    }
+  }
+
+  message ExecServerAbort {
+    uint32 id = 1;
+  }
+
+  message ExecServerControlMessage {
+    oneof message {
+      AgentV1.ExecServerAbort abort = 1;
     }
   }
 
@@ -1385,7 +1422,7 @@ message AgentV1 {
       AgentV1.ReadArgs read_args = 7;
       AgentV1.LsArgs ls_args = 8;
       AgentV1.DiagnosticsArgs diagnostics_args = 9;
-      AgentV1.RequestContextArgs request_context_args = 10;
+      bytes request_context_args = 10;
       AgentV1.McpArgs mcp_args = 11;
       AgentV1.ShellArgs shell_stream_args = 14;
       AgentV1.BackgroundShellSpawnArgs background_shell_spawn_args = 16;
@@ -1407,7 +1444,7 @@ message AgentV1 {
       AgentV1.ShellAllowlistPrecheckArgs shell_allowlist_precheck_args = 41;
       AgentV1.McpAllowlistPrecheckArgs mcp_allowlist_precheck_args = 42;
       AgentV1.WebFetchAllowlistPrecheckArgs web_fetch_allowlist_precheck_args = 43;
-      AiserverV1.GetDiffRequest git_diff_request = 44;
+      bytes git_diff_request = 44;
       AgentV1.PiReadExecArgs pi_read_args = 45;
       AgentV1.PiBashExecArgs pi_bash_args = 46;
       AgentV1.PiEditExecArgs pi_edit_args = 47;
@@ -1415,6 +1452,7 @@ message AgentV1 {
       AgentV1.PiGrepExecArgs pi_grep_args = 49;
       AgentV1.PiFindExecArgs pi_find_args = 50;
       AgentV1.PiLsExecArgs pi_ls_args = 51;
+      AgentV1.ConversationSearchArgs conversation_search_args = 53;
     }
   }
 
@@ -1433,6 +1471,7 @@ message AgentV1 {
       AgentV1.BeforeSubmitPromptRequestQuery before_submit_prompt = 7;
       AgentV1.AfterAgentResponseRequestQuery after_agent_response = 8;
       AgentV1.AfterAgentThoughtRequestQuery after_agent_thought = 9;
+      AgentV1.StopRequestQuery stop = 11;
     }
   }
 
@@ -1447,6 +1486,7 @@ message AgentV1 {
       AgentV1.BeforeSubmitPromptRequestResponse before_submit_prompt = 7;
       AgentV1.AfterAgentResponseRequestResponse after_agent_response = 8;
       AgentV1.AfterAgentThoughtRequestResponse after_agent_thought = 9;
+      AgentV1.StopRequestResponse stop = 11;
     }
   }
 
@@ -1463,11 +1503,6 @@ message AgentV1 {
     optional string kickoff_message_id = 6;
     optional string plan_id = 7;
     optional string plan_file_path = 8;
-  }
-
-  message ExecutePlanInfo {
-    string plan_id = 1;
-    string plan_title = 2;
   }
 
   message ExtraContextEntry {
@@ -1594,6 +1629,7 @@ message AgentV1 {
     string description = 1;
     optional string file_path = 2;
     repeated string reference_image_paths = 5;
+    optional string aspect_ratio = 6;
   }
 
   message GenerateImageError {
@@ -1660,6 +1696,7 @@ message AgentV1 {
     string branch_name = 3;
     optional string remote_url = 4;
     optional bool previous_branch_is_ancestor = 5;
+    optional bool is_origin_backed = 6;
   }
 
   message GlobToolArgs {
@@ -1711,6 +1748,23 @@ message AgentV1 {
     optional int32 offset = 16;
   }
 
+  message GrepContentMatch {
+    int32 line_number = 1;
+    string content = 2;
+    bool content_truncated = 3;
+    bool is_context_line = 4;
+  }
+
+  message GrepContentResult {
+    repeated AgentV1.GrepFileMatch matches = 1;
+    int32 total_lines = 2;
+    int32 total_matched_lines = 3;
+    bool client_truncated = 4;
+    bool ripgrep_truncated = 5;
+    optional int32 head_limit_applied = 6;
+    optional int32 offset_applied = 7;
+  }
+
   message GrepCountResult {
     repeated AgentV1.GrepFileCount counts = 1;
     int32 total_files = 2;
@@ -1728,6 +1782,11 @@ message AgentV1 {
   message GrepFileCount {
     string file = 1;
     int32 count = 2;
+  }
+
+  message GrepFileMatch {
+    string file = 1;
+    repeated AgentV1.GrepContentMatch matches = 2;
   }
 
   message GrepFilesResult {
@@ -1763,7 +1822,7 @@ message AgentV1 {
     oneof result {
       AgentV1.GrepCountResult count = 1;
       AgentV1.GrepFilesResult files = 2;
-      bytes content = 3;
+      AgentV1.GrepContentResult content = 3;
     }
   }
 
@@ -1809,7 +1868,7 @@ message AgentV1 {
       AgentV1.SummaryUpdate summary = 9;
       AgentV1.SummaryStartedUpdate summary_started = 10;
       AgentV1.SummaryCompletedUpdate summary_completed = 11;
-      bytes shell_output_delta = 12;
+      AgentV1.ShellOutputDeltaUpdate shell_output_delta = 12;
       AgentV1.HeartbeatUpdate heartbeat = 13;
       AgentV1.TurnEndedUpdate turn_ended = 14;
       AgentV1.ToolCallDeltaUpdate tool_call_delta = 15;
@@ -1848,14 +1907,9 @@ message AgentV1 {
       optional string channel_name = 2;
       optional string channel_purpose = 3;
       optional string channel_topic = 4;
-    }
-
-    message MicrosoftTeamsThread {
-      string thread = 1;
-      optional string channel_name = 2;
-      optional string team_name = 3;
-      optional string channel_description = 4;
-      optional string team_description = 5;
+      optional string sender_name = 5;
+      optional string sender_id = 6;
+      optional string sender_type = 7;
     }
 
     message IdeState {
@@ -1884,6 +1938,14 @@ message AgentV1 {
       repeated AgentV1.InvocationContext.IdeState.File visible_files = 1;
       repeated AgentV1.InvocationContext.IdeState.File recently_viewed_files = 2;
       repeated AgentV1.InvocationContext.IdeState.ViewedPullRequest currently_viewed_prs = 3;
+    }
+
+    message MicrosoftTeamsThread {
+      string thread = 1;
+      optional string channel_name = 2;
+      optional string team_name = 3;
+      optional string channel_description = 4;
+      optional string team_description = 5;
     }
 
     oneof data {
@@ -1944,7 +2006,7 @@ message AgentV1 {
 
   message ListMcpResourcesToolCall {
     AgentV1.ListMcpResourcesExecArgs args = 1;
-    AgentV1.ListMcpResourcesExecResult result = 2;
+    bytes result = 2;
   }
 
   message LsArgs {
@@ -2035,6 +2097,7 @@ message AgentV1 {
     optional AgentV1.SmartModeApproval smart_mode_approval = 6;
     bool smart_mode_approval_only = 7;
     bool skip_approval = 8;
+    string server_identifier = 9;
   }
 
   message McpAuthArgs {
@@ -2093,11 +2156,6 @@ message AgentV1 {
     repeated AgentV1.McpDescriptor mcp_descriptors = 3;
   }
 
-  message McpImageContent {
-    bytes data = 1;
-    string mime_type = 2;
-  }
-
   message McpInstructions {
     string server_name = 1;
     string instructions = 2;
@@ -2141,6 +2199,7 @@ message AgentV1 {
   }
 
   message McpStateExecArgs {
+    repeated string server_identifiers = 1;
   }
 
   message McpStateExecResult {
@@ -2170,14 +2229,9 @@ message AgentV1 {
   }
 
   message McpSuccess {
-    repeated AgentV1.McpToolResultContentItem content = 1;
+    repeated bytes content = 1;
     bool is_error = 2;
     bytes structured_content = 3;
-  }
-
-  message McpTextContent {
-    string text = 1;
-    optional AgentV1.OutputLocation output_location = 2;
   }
 
   message McpToolCall {
@@ -2217,13 +2271,6 @@ message AgentV1 {
       AgentV1.McpToolError error = 2;
       AgentV1.McpRejected rejected = 3;
       AgentV1.McpPermissionDenied permission_denied = 4;
-    }
-  }
-
-  message McpToolResultContentItem {
-    oneof content {
-      AgentV1.McpTextContent text = 1;
-      AgentV1.McpImageContent image = 2;
     }
   }
 
@@ -2431,15 +2478,9 @@ message AgentV1 {
 
   message PiFindExecResult {
     oneof result {
-      AgentV1.PiFindExecSuccess success = 1;
+      bytes success = 1;
       AgentV1.PiFindExecError error = 2;
     }
-  }
-
-  message PiFindExecSuccess {
-    string output = 1;
-    optional AgentV1.PiTruncation truncation = 2;
-    optional uint32 result_limit_reached = 3;
   }
 
   message PiFindToolArgs {
@@ -2510,7 +2551,25 @@ message AgentV1 {
 
   message PiGrepToolCall {
     AgentV1.PiGrepToolArgs args = 1;
-    bytes result = 2;
+    AgentV1.PiGrepToolResult result = 2;
+  }
+
+  message PiGrepToolError {
+    string error = 1;
+  }
+
+  message PiGrepToolResult {
+    oneof result {
+      AgentV1.PiGrepToolSuccess success = 1;
+      AgentV1.PiGrepToolError error = 2;
+    }
+  }
+
+  message PiGrepToolSuccess {
+    string output = 1;
+    optional AgentV1.PiTruncation truncation = 2;
+    optional uint32 match_limit_reached = 3;
+    bool lines_truncated = 4;
   }
 
   message PiLsExecArgs {
@@ -2524,9 +2583,15 @@ message AgentV1 {
 
   message PiLsExecResult {
     oneof result {
-      bytes success = 1;
+      AgentV1.PiLsExecSuccess success = 1;
       AgentV1.PiLsExecError error = 2;
     }
+  }
+
+  message PiLsExecSuccess {
+    string output = 1;
+    optional AgentV1.PiTruncation truncation = 2;
+    optional uint32 entry_limit_reached = 3;
   }
 
   message PiLsToolArgs {
@@ -2589,14 +2654,10 @@ message AgentV1 {
     AgentV1.PiReadToolResult result = 2;
   }
 
-  message PiReadToolError {
-    string error = 1;
-  }
-
   message PiReadToolResult {
     oneof result {
       AgentV1.PiReadToolSuccess success = 1;
-      AgentV1.PiReadToolError error = 2;
+      bytes error = 2;
     }
   }
 
@@ -2677,9 +2738,16 @@ message AgentV1 {
     string path = 2;
   }
 
-  message Position {
-    uint32 line = 1;
-    uint32 column = 2;
+  message PostCommentAction {
+    optional string pr_url = 1;
+    optional string branch_name = 2;
+    string body = 3;
+    optional string repo_url = 4;
+    optional int64 in_reply_to = 5;
+    optional string path = 6;
+    optional int32 line = 7;
+    optional int32 start_line = 8;
+    optional string side = 9;
   }
 
   message PostRequestPromptUpdate {
@@ -2731,11 +2799,21 @@ message AgentV1 {
     oneof action {
       AgentV1.CreatePrAction create_pr = 2;
       AgentV1.UpdatePrAction update_pr = 3;
+      AgentV1.PostCommentAction post_comment = 4;
+      AgentV1.ResolveCommentAction resolve_comment = 5;
     }
   }
 
   message PrManagementError {
     string error = 1;
+  }
+
+  message PrManagementNeedsConfirmation {
+    string message_ = 1;
+    string discovered_pr_url = 2;
+    int32 discovered_pr_number = 3;
+    string discovered_pr_title = 4;
+    string branch_name = 5;
   }
 
   message PrManagementRegistered {
@@ -2761,7 +2839,7 @@ message AgentV1 {
       AgentV1.PrManagementError error = 2;
       AgentV1.PrManagementRejected rejected = 3;
       AgentV1.PrManagementRegistered registered = 4;
-      bytes needs_confirmation = 5;
+      AgentV1.PrManagementNeedsConfirmation needs_confirmation = 5;
     }
   }
 
@@ -2880,8 +2958,8 @@ message AgentV1 {
   }
 
   message Range {
-    AgentV1.Position start = 1;
-    AgentV1.Position end = 2;
+    bytes start = 1;
+    bytes end = 2;
   }
 
   message ReadArgs {
@@ -2890,11 +2968,6 @@ message AgentV1 {
     optional int32 offset = 4;
     optional uint32 limit = 5;
     optional string encoding_hint = 6;
-  }
-
-  message ReadError {
-    string path = 1;
-    string error = 2;
   }
 
   message ReadFileNotFound {
@@ -2970,10 +3043,16 @@ message AgentV1 {
     optional string mime_type = 4;
     map<string, string> annotations = 7;
     optional string download_path = 8;
+    optional AgentV1.OutputLocation output_location = 9;
     oneof content {
       string text = 5;
       bytes blob = 6;
     }
+  }
+
+  message ReadMcpResourceToolCall {
+    AgentV1.ReadMcpResourceExecArgs args = 1;
+    AgentV1.ReadMcpResourceExecResult result = 2;
   }
 
   message ReadPermissionDenied {
@@ -2993,7 +3072,7 @@ message AgentV1 {
   message ReadResult {
     oneof result {
       AgentV1.ReadSuccess success = 1;
-      AgentV1.ReadError error = 2;
+      bytes error = 2;
       AgentV1.ReadRejected rejected = 3;
       AgentV1.ReadFileNotFound file_not_found = 4;
       AgentV1.ReadPermissionDenied permission_denied = 5;
@@ -3160,7 +3239,7 @@ message AgentV1 {
   }
 
   message RecordScreenArgs {
-    bytes mode = 1;
+    AgentV1.RecordingMode mode = 1;
     string tool_call_id = 2;
     optional string save_as_filename = 3;
   }
@@ -3184,7 +3263,7 @@ message AgentV1 {
   message RecordScreenSaveSuccess {
     string path = 1;
     int64 recording_duration_ms = 2;
-    optional bytes requested_file_path_rejected_reason = 3;
+    optional AgentV1.RequestedFilePathRejectedReason requested_file_path_rejected_reason = 3;
   }
 
   message RecordScreenStartSuccess {
@@ -3381,14 +3460,7 @@ message AgentV1 {
     optional AgentV1.PermissionsAutoRunInstructions project_permissions_auto_run = 47;
     optional AgentV1.PermissionsAutoRunInstructions admin_permissions_auto_run = 48;
     repeated string disabled_team_rules = 49;
-  }
-
-  message RequestContextArgs {
-    optional string notes_session_id = 2;
-    optional string workspace_id = 3;
-    optional string read_only_pinned_tree_sha = 4;
-    optional string read_only_plugin_cache_root = 5;
-    optional bool use_cached = 7;
+    optional bool search_conversations_enabled = 50;
   }
 
   message RequestContextEnv {
@@ -3415,10 +3487,6 @@ message AgentV1 {
     optional string dev_delay_next_smart_mode_classifier_token = 24;
   }
 
-  message RequestContextError {
-    string error = 1;
-  }
-
   message RequestContextRejected {
     string reason = 1;
   }
@@ -3426,7 +3494,7 @@ message AgentV1 {
   message RequestContextResult {
     oneof result {
       AgentV1.RequestContextSuccess success = 1;
-      AgentV1.RequestContextError error = 2;
+      bytes error = 2;
       AgentV1.RequestContextRejected rejected = 3;
     }
   }
@@ -3454,11 +3522,18 @@ message AgentV1 {
     }
   }
 
+  message ResolveCommentAction {
+    optional string pr_url = 1;
+    optional string branch_name = 2;
+    int64 comment_id = 3;
+    optional string repo_url = 4;
+  }
+
   message ResponseComparisonCompleted {
   }
 
   message ResponseComparisonSkipped {
-    bytes reason = 1;
+    AgentV1.ResponseComparisonSkipReason reason = 1;
   }
 
   message ResponseComparisonStarted {
@@ -3518,59 +3593,9 @@ message AgentV1 {
     optional string modifier_keys = 4;
   }
 
-  message SelectedAgenticGitAction {
-    optional AgentV1.SelectedGitBranchContext branch_context = 5;
-    optional string path_to_template_file = 9;
-    optional string path_to_template_dir = 10;
-    oneof params {
-      AgentV1.SelectedAgenticGitActionCommitParams commit_params = 2;
-      AgentV1.SelectedAgenticGitActionPushParams push_params = 3;
-      AgentV1.SelectedAgenticGitActionFixMergeConflictsParams fix_merge_conflicts_params = 4;
-      AgentV1.SelectedAgenticGitActionCommitParams commit_and_push_params = 6;
-      AgentV1.SelectedAgenticGitActionPushParams create_pr_params = 7;
-      AgentV1.SelectedAgenticGitActionCommitParams create_pr_with_changes_params = 8;
-      AgentV1.SelectedAgenticGitActionBabysitPrInCloudParams babysit_pr_in_cloud_params = 11;
-      AgentV1.SelectedAgenticGitActionCommitParams create_branch_and_commit_params = 12;
-      AgentV1.SelectedAgenticGitActionCommitParams create_branch_commit_and_push_params = 13;
-      AgentV1.SelectedAgenticGitActionPullLocallyParams apply_locally_params = 14;
-      AgentV1.SelectedAgenticGitActionPullLocallyParams checkout_branch_params = 15;
-      AgentV1.SelectedAgenticGitActionUpdateBranchParams update_branch_params = 16;
-    }
-  }
-
-  message SelectedAgenticGitActionBabysitPrInCloudParams {
-    optional string base_branch = 1;
-  }
-
-  message SelectedAgenticGitActionCommitParams {
-    repeated string files_to_commit = 1;
-    repeated string files_to_exclude_from_commit = 2;
-    bool should_stage_all_changes = 3;
-    optional bool create_pr_draft = 4;
-    repeated AgentV1.SelectedAgenticGitFileWithStatus files_to_commit_with_status = 5;
-    repeated AgentV1.SelectedAgenticGitFileWithStatus files_to_exclude_from_commit_with_status = 6;
-  }
-
-  message SelectedAgenticGitActionFixMergeConflictsParams {
-    optional string base_branch = 1;
-  }
-
-  message SelectedAgenticGitActionPullLocallyParams {
-    string remote_branch = 1;
-  }
-
-  message SelectedAgenticGitActionPushParams {
-    repeated string files_to_push = 1;
-    optional bool create_pr_draft = 2;
-  }
-
-  message SelectedAgenticGitActionUpdateBranchParams {
-    optional string base_branch = 1;
-  }
-
-  message SelectedAgenticGitFileWithStatus {
-    string path = 1;
-    optional string status = 2;
+  message SearchConversationsToolCall {
+    AgentV1.ConversationSearchArgs args = 1;
+    AgentV1.ConversationSearchResult result = 2;
   }
 
   message SelectedBrowser {
@@ -3624,7 +3649,7 @@ message AgentV1 {
     repeated AgentV1.SelectedDocument selected_documents = 25;
     repeated AgentV1.AgentSkill selected_skills = 26;
     optional AgentV1.RecentAgentsContext recent_agents_context = 27;
-    optional AgentV1.SelectedAgenticGitAction selected_agentic_git_action = 34;
+    optional bytes selected_agentic_git_action = 34;
   }
 
   message SelectedCursorCommand {
@@ -3681,12 +3706,6 @@ message AgentV1 {
     AgentV1.LsDirectoryTreeNode directory_tree = 3;
   }
 
-  message SelectedGitBranchContext {
-    optional string current_branch = 1;
-    optional string base_branch = 2;
-    optional string agent_branch_prefix = 3;
-  }
-
   message SelectedGitCommit {
     string sha = 1;
     string message_ = 2;
@@ -3714,14 +3733,14 @@ message AgentV1 {
   }
 
   message SelectedImage {
-    message BlobIdWithData {
-      bytes blob_id = 1;
-      bytes data = 2;
-    }
-
     message Dimension {
       int32 width = 1;
       int32 height = 2;
+    }
+
+    message BlobIdWithData {
+      bytes blob_id = 1;
+      bytes data = 2;
     }
 
     string uuid = 2;
@@ -4018,16 +4037,16 @@ message AgentV1 {
   }
 
   message ShellCommandParsingResult {
+    message ExecutableCommandArg {
+      string type = 1;
+      string value = 2;
+    }
+
     message Redirect {
       string operator = 1;
       repeated uint32 destination_fds = 2;
       string target_node_type = 3;
       optional string target_text = 4;
-    }
-
-    message ExecutableCommandArg {
-      string type = 1;
-      string value = 2;
     }
 
     message ExecutableCommand {
@@ -4060,13 +4079,17 @@ message AgentV1 {
   }
 
   message ShellHookApprovalRequirement {
-    enum Kind {
-      KIND_UNSPECIFIED = 0;
-      KIND_FORCE_PROMPT = 1;
-    }
-
-    AgentV1.ShellHookApprovalRequirement.Kind kind = 1;
+    bytes kind = 1;
     optional string reason = 2;
+  }
+
+  message ShellOutputDeltaUpdate {
+    oneof event {
+      AgentV1.ShellStreamStdout stdout = 1;
+      AgentV1.ShellStreamStderr stderr = 2;
+      AgentV1.ShellStreamExit exit = 3;
+      AgentV1.ShellStreamStart start = 4;
+    }
   }
 
   message ShellOutputNotificationConfig {
@@ -4115,7 +4138,7 @@ message AgentV1 {
     oneof event {
       AgentV1.ShellStreamStdout stdout = 1;
       AgentV1.ShellStreamStderr stderr = 2;
-      bytes exit = 3;
+      AgentV1.ShellStreamExit exit = 3;
       AgentV1.ShellStreamStart start = 4;
       AgentV1.ShellRejected rejected = 5;
       AgentV1.ShellPermissionDenied permission_denied = 6;
@@ -4131,6 +4154,15 @@ message AgentV1 {
     optional uint32 pid = 4;
     optional int32 ms_to_wait = 5;
     optional AgentV1.ShellBackgroundReason reason = 6;
+  }
+
+  message ShellStreamExit {
+    uint32 code = 1;
+    string cwd = 2;
+    optional AgentV1.OutputLocation output_location = 3;
+    bool aborted = 4;
+    optional AgentV1.ShellAbortReason abort_reason = 5;
+    optional int32 local_execution_time_ms = 6;
   }
 
   message ShellStreamHookContext {
@@ -4257,30 +4289,6 @@ message AgentV1 {
     optional string raw_stack_trace = 2;
   }
 
-  message StartGrindExecutionArgs {
-    optional string explanation = 1;
-    string tool_call_id = 2;
-  }
-
-  message StartGrindExecutionError {
-    string error = 1;
-  }
-
-  message StartGrindExecutionResult {
-    oneof result {
-      AgentV1.StartGrindExecutionSuccess success = 1;
-      AgentV1.StartGrindExecutionError error = 2;
-    }
-  }
-
-  message StartGrindExecutionSuccess {
-  }
-
-  message StartGrindExecutionToolCall {
-    AgentV1.StartGrindExecutionArgs args = 1;
-    AgentV1.StartGrindExecutionResult result = 2;
-  }
-
   message StartGrindPlanningArgs {
     optional string explanation = 1;
     string tool_call_id = 2;
@@ -4323,6 +4331,24 @@ message AgentV1 {
   message StepTiming {
     uint64 duration_ms = 1;
     uint64 timestamp_ms = 2;
+  }
+
+  message StopRequestQuery {
+    string status = 1;
+    int32 loop_count = 2;
+    optional string conversation_id = 3;
+    optional string generation_id = 4;
+    optional string model = 5;
+    optional string model_id = 6;
+    repeated AgentV1.RequestedModel.ModelParameterValue model_params = 7;
+    optional int64 input_tokens = 8;
+    optional int64 output_tokens = 9;
+    optional int64 cache_read_tokens = 10;
+    optional int64 cache_write_tokens = 11;
+  }
+
+  message StopRequestResponse {
+    optional string followup_message = 1;
   }
 
   message SubagentArgs {
@@ -4407,6 +4433,7 @@ message AgentV1 {
     optional string model_id = 5;
     AgentV1.SubagentExecutionEnvironment environment = 6;
     optional AgentV1.CloudSubagentReference cloud_subagent = 7;
+    optional string first_class_bc_id = 8;
   }
 
   message SubagentResult {
@@ -4426,7 +4453,7 @@ message AgentV1 {
     optional string transcript_path = 7;
     optional string output_path = 8;
     optional uint64 completed_timestamp_ms = 9;
-    optional bytes completion_reason = 10;
+    optional AgentV1.BackgroundTaskCompletionReason completion_reason = 10;
   }
 
   message SubagentStartRequestQuery {
@@ -4703,7 +4730,7 @@ message AgentV1 {
       AgentV1.WebSearchToolCall web_search_tool_call = 18;
       AgentV1.TaskToolCall task_tool_call = 19;
       AgentV1.ListMcpResourcesToolCall list_mcp_resources_tool_call = 20;
-      bytes read_mcp_resource_tool_call = 21;
+      AgentV1.ReadMcpResourceToolCall read_mcp_resource_tool_call = 21;
       AgentV1.ApplyAgentDiffToolCall apply_agent_diff_tool_call = 22;
       AgentV1.AskQuestionToolCall ask_question_tool_call = 23;
       AgentV1.FetchToolCall fetch_tool_call = 24;
@@ -4715,7 +4742,7 @@ message AgentV1 {
       AgentV1.ReflectToolCall reflect_tool_call = 32;
       AgentV1.SetupVmEnvironmentToolCall setup_vm_environment_tool_call = 33;
       AgentV1.TruncatedToolCall truncated_tool_call = 34;
-      AgentV1.StartGrindExecutionToolCall start_grind_execution_tool_call = 35;
+      bytes start_grind_execution_tool_call = 35;
       AgentV1.StartGrindPlanningToolCall start_grind_planning_tool_call = 36;
       AgentV1.WebFetchToolCall web_fetch_tool_call = 37;
       AgentV1.ReportBugfixResultsToolCall report_bugfix_results_tool_call = 38;
@@ -4744,6 +4771,7 @@ message AgentV1 {
       AgentV1.PiFindToolCall pi_find_tool_call = 66;
       AgentV1.PiLsToolCall pi_ls_tool_call = 67;
       AgentV1.ConnectScmToolCall connect_scm_tool_call = 68;
+      AgentV1.SearchConversationsToolCall search_conversations_tool_call = 69;
     }
   }
 
@@ -4904,7 +4932,7 @@ message AgentV1 {
     bytes conversation_state_blob_id = 10;
     optional string subagent_system_reminder = 11;
     optional AgentV1.TriggeringUserInfo triggering_user_info = 13;
-    optional AgentV1.ExecutePlanInfo execute_plan_info = 14;
+    optional bytes execute_plan_info = 14;
     optional AgentV1.UserMessage.SimulatedMessageMetadata simulated_message_metadata = 15;
     optional string prompt_reference_id = 16;
     optional string thread_id = 17;
@@ -4987,12 +5015,6 @@ message AgentV1 {
     string error = 1;
   }
 
-  message WebSearchReference {
-    string title = 1;
-    string url = 2;
-    string chunk = 3;
-  }
-
   message WebSearchRejected {
     string reason = 1;
   }
@@ -5010,7 +5032,7 @@ message AgentV1 {
   }
 
   message WebSearchSuccess {
-    repeated AgentV1.WebSearchReference references = 1;
+    repeated bytes references = 1;
   }
 
   message WebSearchToolCall {
@@ -5158,6 +5180,7 @@ message AiserverV1 {
     IN_APP_AD_TRIGGER_FIND_ISSUES = 2;
     IN_APP_AD_TRIGGER_GIT_PUSH = 3;
     IN_APP_AD_TRIGGER_COMMIT = 4;
+    IN_APP_AD_TRIGGER_IOS_DOWNLOAD_MENU = 5;
   }
 
   enum InferenceProviderWarningTrigger {
@@ -5270,94 +5293,6 @@ message AiserverV1 {
       DEGRADATION_STATUS_DISABLED = 2;
     }
 
-    enum ModelVendorId {
-      MODEL_VENDOR_ID_UNSPECIFIED = 0;
-      MODEL_VENDOR_ID_ANTHROPIC = 1;
-      MODEL_VENDOR_ID_OPENAI = 2;
-      MODEL_VENDOR_ID_GOOGLE = 3;
-      MODEL_VENDOR_ID_XAI = 4;
-      MODEL_VENDOR_ID_MOONSHOT = 5;
-      MODEL_VENDOR_ID_CURSOR = 6;
-      MODEL_VENDOR_ID_NVIDIA = 7;
-      MODEL_VENDOR_ID_ZAI = 8;
-    }
-
-    message ConfirmationDialogue {
-      string title = 1;
-      string body = 2;
-      string key = 3;
-      bool blocks_submission = 4;
-    }
-
-    message TooltipData {
-      string primary_text = 1;
-      string secondary_text = 2;
-      bool secondary_warning_text = 3;
-      string icon = 4;
-      string tertiary_text = 5;
-      string tertiary_text_url = 6;
-      optional string markdown_content = 7;
-    }
-
-    message ModelVendor {
-      AiserverV1.AvailableModelsResponse.ModelVendorId id = 1;
-      string display_name = 2;
-    }
-
-    message ModelVariantConfig {
-      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
-      string display_name = 2;
-      bool is_max_mode = 3;
-      optional bool is_default_max_config = 4;
-      optional bool is_default_non_max_config = 5;
-      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
-      optional string tagline = 7;
-      optional string display_name_outside_picker = 8;
-      optional string variant_string_representation = 9;
-      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
-      optional string legacy_slug = 11;
-    }
-
-    message ModelPickerDisplayConfiguration {
-      message NamedModelsViewConfig {
-        message NamedViewToRoutedModelViewNoButton {
-        }
-
-        message NamedViewToRoutedModelViewButton {
-          string markdown = 1;
-        }
-
-        message NamedViewToRoutedModelViewToggle {
-          string markdown = 1;
-        }
-
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle named_view_to_routed_model_view_toggle = 2;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton named_view_to_routed_model_view_no_button = 3;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton named_view_to_routed_model_view_button = 4;
-      }
-
-      message RoutedModelViewConfig {
-        message RoutedModelViewToNamedViewToggle {
-          string title_markdown = 1;
-          optional string subtitle = 2;
-          optional bool set_to_last_named_model = 3;
-        }
-
-        message RoutedModelViewToNamedViewButton {
-          string markdown = 1;
-        }
-
-        optional string title = 1;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle routed_model_view_to_named_view_toggle = 2;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton routed_model_view_to_named_view_button = 3;
-        optional bool hide_search_bar = 4;
-        optional bool hide_routed_model_view = 5;
-      }
-
-      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig routed_model_view_config = 1;
-      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig named_models_view_config = 2;
-    }
-
     message AvailableModel {
       string name = 1;
       bool default_on = 2;
@@ -5405,12 +5340,103 @@ message AiserverV1 {
       optional bool supports_smart_mode_classifier = 45;
       optional bool requires_data_retention = 46;
       optional string reason_for_zdr_consent_block = 47;
+      repeated AiserverV1.AvailableModelsResponse.ModelPickerBadge model_picker_badges = 48;
+    }
+
+    message ModelPickerBadge {
+      enum Variant {
+        VARIANT_UNSPECIFIED = 0;
+        VARIANT_ACCENT = 1;
+        VARIANT_NEUTRAL = 2;
+        VARIANT_SUCCESS = 3;
+        VARIANT_WARN = 4;
+        VARIANT_DANGER = 5;
+      }
+
+      string label = 1;
+      AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant variant = 2;
+    }
+
+    message TooltipData {
+      string primary_text = 1;
+      string secondary_text = 2;
+      bool secondary_warning_text = 3;
+      string icon = 4;
+      string tertiary_text = 5;
+      string tertiary_text_url = 6;
+      optional string markdown_content = 7;
+    }
+
+    message ModelPickerDisplayConfiguration {
+      message NamedModelsViewConfig {
+        message NamedViewToRoutedModelViewButton {
+          string markdown = 1;
+        }
+
+        message NamedViewToRoutedModelViewToggle {
+          string markdown = 1;
+        }
+
+        message NamedViewToRoutedModelViewNoButton {
+        }
+
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle named_view_to_routed_model_view_toggle = 2;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton named_view_to_routed_model_view_no_button = 3;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton named_view_to_routed_model_view_button = 4;
+      }
+
+      message RoutedModelViewConfig {
+        message RoutedModelViewToNamedViewButton {
+          string markdown = 1;
+        }
+
+        message RoutedModelViewToNamedViewToggle {
+          string title_markdown = 1;
+          optional string subtitle = 2;
+          optional bool set_to_last_named_model = 3;
+        }
+
+        optional string title = 1;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle routed_model_view_to_named_view_toggle = 2;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton routed_model_view_to_named_view_button = 3;
+        optional bool hide_search_bar = 4;
+        optional bool hide_routed_model_view = 5;
+      }
+
+      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig routed_model_view_config = 1;
+      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig named_models_view_config = 2;
     }
 
     message FeatureModelConfig {
       string default_model = 1;
       repeated string fallback_models = 2;
       repeated string best_of_n_default_models = 3;
+    }
+
+    message ConfirmationDialogue {
+      string title = 1;
+      string body = 2;
+      string key = 3;
+      bool blocks_submission = 4;
+    }
+
+    message ModelVendor {
+      bytes id = 1;
+      string display_name = 2;
+    }
+
+    message ModelVariantConfig {
+      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
+      string display_name = 2;
+      bool is_max_mode = 3;
+      optional bool is_default_max_config = 4;
+      optional bool is_default_non_max_config = 5;
+      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
+      optional string tagline = 7;
+      optional string display_name_outside_picker = 8;
+      optional string variant_string_representation = 9;
+      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
+      optional string legacy_slug = 11;
     }
 
     repeated string model_names = 1;
@@ -5427,6 +5453,8 @@ message AiserverV1 {
     optional int32 upgrade_unchanged_models_after_n_hours = 13;
     AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration display_configuration = 15;
     map<string, AiserverV1.AvailableModelsResponse.FeatureModelConfig> subagent_model_configs = 16;
+    bool non_max_model_defaults_experiment_enabled = 17;
+    bool non_max_model_defaults_experiment_candidate = 18;
   }
 
   message BackgroundComposerConfig {
@@ -5456,13 +5484,10 @@ message AiserverV1 {
   }
 
   message BugConfigResponse {
-    message LinterStrategyV2 {
+    message LinterStrategyV1 {
       bool enabled = 1;
-      double wait_between_triggers_ms = 2;
-      double debounce_triggers_ms = 3;
-      int32 keep_lines_around_chunk = 4;
-      int32 prevent_triggering_for_files_with_this_many_lines = 5;
-      bool prevent_triggering_when_lints = 6;
+      bool try_trigger_on_save = 2;
+      double wait_between_triggers_ms = 3;
     }
 
     message BugBotV1 {
@@ -5487,10 +5512,13 @@ message AiserverV1 {
       optional int32 expensive_absolute_max_tokens = 19;
     }
 
-    message LinterStrategyV1 {
+    message LinterStrategyV2 {
       bool enabled = 1;
-      bool try_trigger_on_save = 2;
-      double wait_between_triggers_ms = 3;
+      double wait_between_triggers_ms = 2;
+      double debounce_triggers_ms = 3;
+      int32 keep_lines_around_chunk = 4;
+      int32 prevent_triggering_for_files_with_this_many_lines = 5;
+      bool prevent_triggering_when_lints = 6;
     }
 
     AiserverV1.BugConfigResponse.LinterStrategyV1 linter_strategy_v1 = 1;
@@ -5572,6 +5600,10 @@ message AiserverV1 {
     string reset_token = 2;
   }
 
+  message ConfigureSpendLimitAction {
+    string confirm_label = 1;
+  }
+
   message CpuProfileConfig {
     int32 interval = 1;
   }
@@ -5625,7 +5657,7 @@ message AiserverV1 {
     oneof action {
       AiserverV1.UpgradeAction upgrade = 2;
       AiserverV1.SwitchModelAction switch_model = 3;
-      bytes configure_spend_limit = 4;
+      AiserverV1.ConfigureSpendLimitAction configure_spend_limit = 4;
       AiserverV1.UrlAction url = 5;
       AiserverV1.UpgradeChoice upgrade_choice = 6;
       AiserverV1.DashboardAction dashboard_action = 7;
@@ -5693,6 +5725,7 @@ message AiserverV1 {
       ERROR_PRICING_WARNING = 62;
       ERROR_SLOW_POOL = 63;
       ERROR_UNSUPPORTED_REGION = 64;
+      ERROR_ACCOUNT_CLOSED = 65;
     }
 
     AiserverV1.ErrorDetails.Error error = 1;
@@ -5737,31 +5770,6 @@ message AiserverV1 {
     string thinking_model = 2;
     bool max_mode = 3;
     string next_default_set_date = 4;
-  }
-
-  message GetDiffRequest {
-    enum OutputFormat {
-      OUTPUT_FORMAT_UNSPECIFIED = 0;
-      OUTPUT_FORMAT_NAME_STATUS = 1;
-      OUTPUT_FORMAT_NAME_STATUS_AND_NUMSTAT = 2;
-      OUTPUT_FORMAT_FILE_DIFFS = 3;
-      OUTPUT_FORMAT_DIFFS_WITH_BEFORE_AND_AFTER = 4;
-    }
-
-    string cwd = 1;
-    string ref = 2;
-    string base_ref = 3;
-    bool merge_base = 4;
-    repeated string target_paths = 5;
-    optional int32 unified_context_lines = 6;
-    int32 max_untracked_files = 7;
-    optional AiserverV1.GetDiffRequest.OutputFormat output_format = 8;
-    int32 submodule_recurse_depth = 9;
-    bool include_space_changes = 10;
-    bool committed_only = 11;
-    bool compute_patch_id = 12;
-    optional bool return_head_sha = 13;
-    optional int32 max_response_bytes = 14;
   }
 
   message GetDiffResponse {
@@ -5953,6 +5961,18 @@ message AiserverV1 {
   }
 
   message ModelParameterDefinition {
+    message EnumParameterDefinition {
+      message EnumParameterValue {
+        string value = 1;
+        optional string display_name = 2;
+        optional bool increases_model_cost = 3;
+        optional bool blocked_by_admin_allowlist = 4;
+        optional string markdown_tooltip = 5;
+      }
+
+      repeated AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue values = 1;
+    }
+
     message ModelParameterType {
       optional AiserverV1.ModelParameterDefinition.BooleanParameterDefinition boolean_parameter = 1;
       optional AiserverV1.ModelParameterDefinition.EnumParameterDefinition enum_parameter = 2;
@@ -5968,18 +5988,6 @@ message AiserverV1 {
       }
 
       repeated AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue values = 1;
-    }
-
-    message EnumParameterDefinition {
-      message EnumParameterValue {
-        string value = 1;
-        optional string display_name = 2;
-        optional bool increases_model_cost = 3;
-        optional bool blocked_by_admin_allowlist = 4;
-        optional string markdown_tooltip = 5;
-      }
-
-      repeated AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue values = 1;
     }
 
     string id = 1;

@@ -6,12 +6,15 @@ import (
 	"github.com/router-for-me/cursor-proto/auth"
 )
 
-// Header set replicating the IDE 3.10.20 capture from 2026-07-09.
-// See docs/phase-2-report.md for the full list.
+// Header set replicating the IDE 3.11.19 capture from 2026-07-13.
+// See docs/phase-2-report.md for the 3.10.20 baseline; the checksum
+// algorithm and header field list are unchanged in 3.11 (only the
+// version/commit/releaseHash values differ, plus a handful of new
+// protobuf fields the wire format keeps backward-compatible).
 const (
-	CursorClientVersion = "3.10.20"
-	CursorClientCommit  = "23b9fb205fe595ea2be29da7214e19762d037fc0"
-	CursorReleaseHash   = auth.KnownReleaseHash_3_10_20
+	CursorClientVersion = "3.11.19"
+	CursorClientCommit  = "bf249e6efb5b097f23d7e21d7283429f0760b740"
+	CursorReleaseHash   = auth.KnownReleaseHash_3_11_19
 	UserAgent           = "connect-es/1.6.1"
 )
 

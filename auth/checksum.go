@@ -8,7 +8,10 @@ import (
 
 // GenerateChecksum computes the x-cursor-checksum HTTP header value using the
 // exact algorithm extracted from Cursor 3.10.20 workbench.desktop.main.js
-// (function nVg + tVg). See docs/checksum-algorithm.md for the derivation.
+// (function nVg + tVg). The algorithm is unchanged in 3.11.19 (function
+// DZg + IZg — same body, only minifier names differ), so the same code
+// serves both Cursor lines. See docs/checksum-algorithm.md for the
+// derivation.
 //
 // Format: <base64(obfuscated 6-byte timestamp)><machineId>[/<macMachineId>]
 //
@@ -19,8 +22,10 @@ import (
 //
 //   - snapshot: the moment when the "session" started (equivalent of IDE launch).
 //     Choose a fresh time.Now() and reuse it.
-//   - machineID: Cursor releaseHash (64-char hex). For 3.10.20 this is:
-//     4071c661bcb367c518becc7b3d4d57cbd69d2291d8b302c558d79080f8fd4f75
+//   - machineID: Cursor releaseHash (64-char hex). Version-dependent:
+//     3.10.20: 4071c661bcb367c518becc7b3d4d57cbd69d2291d8b302c558d79080f8fd4f75
+//     3.11.19: bf249e6efb5b097f23d7e21d7283429f0760b74a
+//     (see KnownReleaseHash_* in auth/machineid.go)
 //   - macMachineID: SHA-256(IOPlatformUUID) on macOS, empty string for the
 //     shorter no-mac form.
 func GenerateChecksum(snapshot time.Time, machineID, macMachineID string) string {
