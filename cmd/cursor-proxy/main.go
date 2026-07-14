@@ -234,6 +234,9 @@ func main() {
 	} else {
 		log.Printf("[proxy] sim-cache disabled (real Cursor cache_read numbers pass through)")
 	}
+	// Let /v1/capabilities report the actual runtime state of the
+	// simcache toggle rather than the compile-time default.
+	setSimCacheEnabled(*simulateCache)
 
 	log.Printf("[proxy] cursor account loaded: email=%s", acc.Email)
 	log.Printf("[proxy] upstream HTTP: %s", httpVer)
@@ -250,6 +253,12 @@ func main() {
 	// the mux so the endpoint is always reachable — cursor2api's sidecar
 	// supervisor probes this before wiring any API key.
 	mux.HandleFunc("GET /v1/proxy-info", proxyInfoHandler)
+	// /v1/capabilities + /v1/introspect/* — read-only observation
+	// endpoints. Same rationale as /v1/proxy-info: no secrets, and
+	// cursor2api probes them before wiring the API key.
+	mux.HandleFunc("GET /v1/capabilities", capabilitiesHandler)
+	mux.HandleFunc("GET /v1/introspect/recent-tools", recentToolsHandler)
+	mux.HandleFunc("GET /v1/introspect/recent-mcp-servers", recentMCPServersHandler)
 	mux.HandleFunc("/v1/models", modelsHandler(c))
 	// GET /v1/models/{id} — single-model detail. Registered with an
 	// explicit GET pattern so ServeMux distinguishes it from the list.
@@ -302,6 +311,12 @@ func openaiChatHandler(c *executor.Client, cacheStore *simcache.Store) http.Hand
 			http.Error(w, err.Error(), 400)
 			return
 		}
+		// Record declared tools in the ring buffer BEFORE any
+		// validation — we want the observation to include requests
+		// that end in 400, since "tried to use tool X but got
+		// rejected" is exactly the signal downstream wants for
+		// diagnostics.
+		recordToolsFromRequest(extractOpenAIToolNames(req.Tools))
 
 		systemPrompt := ""
 		convTurns := make([]openaiMessage, 0, len(req.Messages))
@@ -569,6 +584,10 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 			http.Error(w, err.Error(), 400)
 			return
 		}
+		// Feed the introspection ring. See openaiChatHandler for
+		// why we record before validation.
+		recordToolsFromRequest(extractAnthropicToolNames(req.Tools))
+
 		systemPrompt := flattenAnthropicSystem(req.System)
 		lastUserIdx := -1
 		for i := len(req.Messages) - 1; i >= 0; i-- {

@@ -67,10 +67,16 @@ func RequireAPIKeys(keys []string, next http.Handler) http.Handler {
 		keyBytes[i] = []byte(k)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Metadata endpoints are always reachable — cursor2api's sidecar
-		// supervisor probes /v1/proxy-info before it has the API key
-		// wired up, and there's no secret in the response.
-		if r.URL.Path == "/v1/proxy-info" {
+		// Metadata + observation endpoints are always reachable —
+		// cursor2api's sidecar supervisor probes them before it has
+		// the API key wired up, and none of them expose a secret.
+		//   /v1/proxy-info                     — version / commit / http_version
+		//   /v1/capabilities                   — feature matrix
+		//   /v1/introspect/recent-tools        — aggregated tool usage
+		//   /v1/introspect/recent-mcp-servers  — aggregated MCP server usage
+		if r.URL.Path == "/v1/proxy-info" ||
+			r.URL.Path == "/v1/capabilities" ||
+			strings.HasPrefix(r.URL.Path, "/v1/introspect/") {
 			next.ServeHTTP(w, r)
 			return
 		}
