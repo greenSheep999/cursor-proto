@@ -33,6 +33,13 @@ jobs:
             goos: darwin
             goarch: arm64
             apt: ""
+          - name: darwin-amd64
+            # Intel Mac target so cursor2api's x86_64 DMG can bundle the
+            # sidecar. macos-13 is still Intel-hosted; macos-14+ are arm64.
+            runner: macos-13
+            goos: darwin
+            goarch: amd64
+            apt: ""
 
     steps:
       - name: Checkout
