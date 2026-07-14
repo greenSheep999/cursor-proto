@@ -299,6 +299,18 @@ func main() {
 	mux.HandleFunc("GET /v1/capabilities", capabilitiesHandler)
 	mux.HandleFunc("GET /v1/introspect/recent-tools", recentToolsHandler)
 	mux.HandleFunc("GET /v1/introspect/recent-mcp-servers", recentMCPServersHandler)
+
+	// /v1/agents/* — agent mode (see docs/sdk-integration.md).
+	// These DO go through the -api-keys gate (unlike proxy-info
+	// and introspect). When agent mode is disabled (no supervisor
+	// configured), each handler returns 503 with a clear body.
+	mux.HandleFunc("/v1/agents", agentsRootHandler)
+	mux.HandleFunc("/v1/agents/{id}", agentsItemHandler)
+	mux.HandleFunc("POST /v1/agents/{id}/runs", agentsSendHandler)
+	mux.HandleFunc("POST /v1/agents/{id}/runs/stream", agentsSendStreamHandler)
+	mux.HandleFunc("GET /v1/agents/{id}/runs/{run_id}/stream", agentsStreamHandler)
+	mux.HandleFunc("POST /v1/agents/{id}/runs/{run_id}/cancel", agentsCancelHandler)
+
 	mux.HandleFunc("/v1/models", modelsHandler(c))
 	// GET /v1/models/{id} — single-model detail. Registered with an
 	// explicit GET pattern so ServeMux distinguishes it from the list.
