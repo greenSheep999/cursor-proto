@@ -7,13 +7,16 @@ name: docker-image
 #     (`latest` tracks whichever Cursor line main is currently on)
 #   - push to release/cursor-<X.Y>       → tags: cursor<X.Y>-latest, cursor<X.Y>-<sha>
 #   - push cursor<X.Y>/v*.*.* tag        → tags: cursor<X.Y>-<semver>, cursor<X.Y>-latest
+#     (when X.Y == LATEST_CURSOR_LINE, also refresh: latest)
 #   - push legacy v*.*.* tag             → treated as cursor3.10; tags: cursor3.10-<semver>, cursor3.10-latest, <semver>
 #   - workflow_dispatch                  → tag: manual-<sha>
 #
-# `latest` (unqualified) is intentionally kept as an alias for the current
-# main line — matches the release.yml behavior and gives casual users a
-# stable pull target. Production consumers should pin to `cursor<X.Y>-latest`
-# or `cursor<X.Y>-<semver>`, never bare `latest`.
+# `latest` (unqualified) is an alias for whichever Cursor line is
+# currently primary. Both `main` pushes and tag pushes on the primary
+# line refresh it; older lines keep their `cursor<X.Y>-latest` alias
+# but never overwrite `latest`. To promote a new primary line, bump
+# `LATEST_CURSOR_LINE` below. Production consumers should pin to
+# `cursor<X.Y>-latest` or `cursor<X.Y>-<semver>`, never bare `latest`.
 
 on:
   push:
@@ -28,6 +31,9 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/cursor-proxy
+  # Primary Cursor line — the one bare `latest` follows on tag pushes.
+  # Bump this in the same commit that promotes a new primary line.
+  LATEST_CURSOR_LINE: cursor3.11
 
 permissions:
   contents: read
@@ -135,6 +141,10 @@ jobs:
             if [[ "${GITHUB_REF}" == refs/tags/v*.*.* ]]; then
               TAGS="${TAGS},${IMG}:${SEMVER}-${ARCH}"
             fi
+            # Tag pushes on the primary Cursor line also refresh bare `latest`.
+            if [[ "${CURSOR_LINE}" == "${LATEST_CURSOR_LINE}" ]]; then
+              TAGS="${TAGS},${IMG}:latest-${ARCH}"
+            fi
           elif [[ "${GITHUB_REF}" == refs/heads/release/cursor-* ]]; then
             TAGS="${TAGS},${IMG}:${CURSOR_LINE}-latest-${ARCH}"
           elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
@@ -212,8 +222,56 @@ jobs:
             if [[ "${GITHUB_REF}" == refs/tags/v*.*.* ]]; then
               stitch "${SEMVER}"
             fi
+            # Tag pushes on the primary Cursor line also refresh bare `latest`.
+            if [[ "${CURSOR_LINE}" == "${LATEST_CURSOR_LINE}" ]]; then
+              stitch "latest"
+            fi
           elif [[ "${GITHUB_REF}" == refs/heads/release/cursor-* ]]; then
             stitch "${CURSOR_LINE}-latest"
           elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
             stitch "latest"
           fi
+
+  notify-oss:
+    # Fires after a successful release build so the downstream
+    # cursor-proxy-oss repo can sync its README/compose/tag to the
+    # new upstream version. Requires an OSS_SYNC_TOKEN secret — a
+    # fine-grained PAT with Contents:read/write on cursor-proxy-oss.
+    needs: [meta, manifest]
+    if: startsWith(github.ref, 'refs/tags/cursor') || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch upstream-release event to cursor-proxy-oss
+        env:
+          GH_TOKEN: ${{ secrets.OSS_SYNC_TOKEN }}
+          UPSTREAM_TAG: ${{ github.ref_name }}
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+          SEMVER: ${{ needs.meta.outputs.semver }}
+          IS_PRIMARY_LINE: ${{ needs.meta.outputs.cursor_line == env.LATEST_CURSOR_LINE && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::OSS_SYNC_TOKEN not set — skipping downstream sync"
+            exit 0
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg tag "${UPSTREAM_TAG}" \
+            --arg line "${CURSOR_LINE}" \
+            --arg semver "${SEMVER}" \
+            --arg primary "${IS_PRIMARY_LINE}" \
+            '{event_type: "upstream-release",
+              client_payload: {
+                upstream_tag: $tag,
+                cursor_line:  $line,
+                semver:       $semver,
+                is_primary:   $primary
+              }}')
+
+          echo "Dispatching upstream-release for ${UPSTREAM_TAG} (primary=${IS_PRIMARY_LINE})"
+          curl -sSfL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/greensheep999/cursor-proxy-oss/dispatches \
+            -d "${PAYLOAD}"
