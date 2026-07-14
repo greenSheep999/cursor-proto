@@ -58,6 +58,17 @@ func usagePrometheusHandler(c *executor.Client) http.HandlerFunc {
 		writeMetric(w, "cursor_usage_included_spend_cents", "Included spend in the current billing period (cents)", snap.IncludedSpend)
 		writeMetric(w, "cursor_usage_remaining_cents", "Remaining allowance in the current billing period (cents)", snap.Remaining)
 		writeMetric(w, "cursor_usage_limit_cents", "Plan limit for the current billing period (cents)", snap.Limit)
+		// Categorized spend — mirrors the three progress bars Cursor's own
+		// dashboard renders (Total / Auto + Composer / API). Percent values
+		// are Cursor's precomputed doubles from PlanUsage, so downstream
+		// gauges match the IDE byte-for-byte instead of recomputing.
+		writeMetric(w, "cursor_usage_auto_spend_cents", "Auto + Composer spend in the current billing period (cents)", snap.AutoSpend)
+		writeMetric(w, "cursor_usage_auto_limit_cents", "Auto + Composer limit in the current billing period (cents)", snap.AutoLimit)
+		writeMetric(w, "cursor_usage_api_spend_cents", "API (Claude/GPT/Gemini) spend in the current billing period (cents)", snap.APISpend)
+		writeMetric(w, "cursor_usage_api_limit_cents", "API (Claude/GPT/Gemini) limit in the current billing period (cents)", snap.APILimit)
+		writeFloatMetric(w, "cursor_usage_auto_percent_used", "Auto + Composer bucket, fraction of limit consumed (0..1+)", snap.AutoPercentUsed)
+		writeFloatMetric(w, "cursor_usage_api_percent_used", "API bucket, fraction of limit consumed (0..1+)", snap.APIPercentUsed)
+		writeFloatMetric(w, "cursor_usage_total_percent_used", "Total spend, fraction of plan limit consumed (0..1+)", snap.TotalPercentUsed)
 		writeMetric(w, "cursor_usage_hard_limit_cents", "Hard $ cap (cents)", snap.HardLimit)
 		writeMetric(w, "cursor_usage_spend_24h_cents", "Spend in the last 24 hours (cents)", snap.Spend24h)
 		writeMetric(w, "cursor_usage_spend_7d_cents", "Spend in the last 7 days (cents)", snap.Spend7d)
@@ -83,6 +94,14 @@ func writeMetric(w http.ResponseWriter, name, help string, value int64) {
 	fmt.Fprintf(w, "# HELP %s %s\n", name, help)
 	fmt.Fprintf(w, "# TYPE %s gauge\n", name)
 	fmt.Fprintf(w, "%s %d\n", name, value)
+}
+
+// writeFloatMetric emits a Prometheus gauge with a float value — used for
+// the percent-used fields Cursor's backend hands us as doubles.
+func writeFloatMetric(w http.ResponseWriter, name, help string, value float64) {
+	fmt.Fprintf(w, "# HELP %s %s\n", name, help)
+	fmt.Fprintf(w, "# TYPE %s gauge\n", name)
+	fmt.Fprintf(w, "%s %g\n", name, value)
 }
 
 func boolInt(b bool) int64 {

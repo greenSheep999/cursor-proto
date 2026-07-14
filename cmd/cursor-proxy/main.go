@@ -1009,8 +1009,18 @@ func loadAccountFromIDE() *auth.Account {
 	return acc
 }
 
+// readAccountFromIDE snapshots the IDE's `state.vscdb` into cursor-proxy's
+// user cache directory and reads the account token from the snapshot. We
+// never open the IDE's live file — that used to show up in Sparkle's
+// `lsof` scan on every point-release update and blocked Cursor from
+// swapping the app bundle. See docs/upstream-issues/state-vscdb-copy-on-
+// read.md for the full failure mode analysis.
 func readAccountFromIDE(dbPath string) (*auth.Account, error) {
-	db, err := sql.Open("sqlite3", "file:"+dbPath+"?mode=ro")
+	snapshot, err := auth.SnapshotIDEDB(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot IDE db: %w", err)
+	}
+	db, err := sql.Open("sqlite3", "file:"+snapshot+"?mode=ro")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}

@@ -39,6 +39,22 @@ type Snapshot struct {
 	Remaining     int64     `json:"remaining_cents"`
 	Limit         int64     `json:"limit_cents"`
 
+	// Categorized spend — Cursor's own dashboard renders these as two
+	// progress bars alongside the Total bar. AutoSpend covers the
+	// "Auto + Composer" bucket (Cursor merges those upstream into a
+	// single scalar auto_spend field, matching the UI label); APISpend
+	// covers third-party API-quota usage (Claude/GPT/Gemini families).
+	// PercentUsed fields are Cursor's own precomputed doubles from the
+	// PlanUsage proto — use them verbatim so downstream matches the IDE
+	// dashboard byte-for-byte instead of recomputing from cents.
+	AutoSpend        int64   `json:"auto_spend_cents"`
+	AutoLimit        int64   `json:"auto_limit_cents"`
+	AutoPercentUsed  float64 `json:"auto_percent_used"`
+	APISpend         int64   `json:"api_spend_cents"`
+	APILimit         int64   `json:"api_limit_cents"`
+	APIPercentUsed   float64 `json:"api_percent_used"`
+	TotalPercentUsed float64 `json:"total_percent_used"`
+
 	// Windowed spend (cents) — from GetAggregatedUsageEvents with explicit windows.
 	Spend24h int64 `json:"spend_24h_cents"`
 	Spend7d  int64 `json:"spend_7d_cents"`
@@ -149,6 +165,18 @@ func (c *Client) Fetch(ctx context.Context) (*Snapshot, error) {
 					snap.IncludedSpend = int64(pu.GetIncludedSpend())
 					snap.Remaining = int64(pu.GetRemaining())
 					snap.Limit = int64(pu.GetLimit())
+					// Categorized fields are proto3 `optional`; Get*
+					// returns the zero value when absent, which is
+					// legitimate ("$0 spent so far this period"). Use
+					// Snapshot.Fetched.CurrentPeriodUsage to tell "not
+					// fetched" from "fetched, actually zero".
+					snap.AutoSpend = int64(pu.GetAutoSpend())
+					snap.AutoLimit = int64(pu.GetAutoLimit())
+					snap.AutoPercentUsed = pu.GetAutoPercentUsed()
+					snap.APISpend = int64(pu.GetApiSpend())
+					snap.APILimit = int64(pu.GetApiLimit())
+					snap.APIPercentUsed = pu.GetApiPercentUsed()
+					snap.TotalPercentUsed = pu.GetTotalPercentUsed()
 				}
 				if snap.PeriodStart.IsZero() && resp.GetBillingCycleStart() > 0 {
 					snap.PeriodStart = time.UnixMilli(resp.GetBillingCycleStart()).UTC()
