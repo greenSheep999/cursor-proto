@@ -91,7 +91,11 @@ func TestFetch_HappyPath(t *testing.T) {
 			EndDateEpochMillis:   periodEnd,
 		},
 		"aiserver.v1.DashboardService/GetAggregatedUsageEvents": &usagepb.GetAggregatedUsageEventsResponse{
-			TotalCostCents: 500,
+			TotalCostCents:        500,
+			TotalInputTokens:      10240,
+			TotalOutputTokens:     8192,
+			TotalCacheReadTokens:  4096,
+			TotalCacheWriteTokens: 2048,
 		},
 		"aiserver.v1.DashboardService/GetHardLimit": &usagepb.GetHardLimitResponse{
 			HardLimit:                  20,
@@ -164,6 +168,17 @@ func TestFetch_HappyPath(t *testing.T) {
 	}
 	if snap.Spend24h != 500 || snap.Spend7d != 500 || snap.Spend30d != 500 {
 		t.Errorf("aggregated spends unexpected: 24h=%d 7d=%d 30d=%d", snap.Spend24h, snap.Spend7d, snap.Spend30d)
+	}
+	// Same GetAggregatedUsageEvents fixture drives all three windows,
+	// so each of the four token counters should mirror across the
+	// three TokenUsage buckets. If any of them diverge, aggregateJob
+	// dropped a field somewhere.
+	for name, tu := range map[string]TokenUsage{
+		"24h": snap.Tokens24h, "7d": snap.Tokens7d, "30d": snap.Tokens30d,
+	} {
+		if tu.Input != 10240 || tu.Output != 8192 || tu.CacheRead != 4096 || tu.CacheWrite != 2048 {
+			t.Errorf("tokens %s: got %+v want {10240,8192,4096,2048}", name, tu)
+		}
 	}
 	if snap.PeriodStart.IsZero() || snap.PeriodEnd.IsZero() {
 		t.Errorf("period bounds not set: start=%v end=%v", snap.PeriodStart, snap.PeriodEnd)

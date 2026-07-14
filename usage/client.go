@@ -25,6 +25,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// TokenUsage is one window's worth of prompt / response / cache
+// token counts. Mirrors the four scalar counters on
+// GetAggregatedUsageEventsResponse (total_input_tokens,
+// total_output_tokens, total_cache_read_tokens,
+// total_cache_write_tokens). All fields are int64 so a downstream
+// summing tokens across long horizons doesn't overflow.
+type TokenUsage struct {
+	Input      int64 `json:"input"`
+	Output     int64 `json:"output"`
+	CacheRead  int64 `json:"cache_read"`
+	CacheWrite int64 `json:"cache_write"`
+}
+
 // Snapshot is the aggregated usage view we expose to callers.
 //
 // All money values are in cents (int64). Zero values are legitimate when the
@@ -59,6 +72,18 @@ type Snapshot struct {
 	Spend24h int64 `json:"spend_24h_cents"`
 	Spend7d  int64 `json:"spend_7d_cents"`
 	Spend30d int64 `json:"spend_30d_cents"`
+
+	// Token counts, one bucket per window. Populated from the same
+	// GetAggregatedUsageEvents RPC that fills Spend*, so no extra
+	// upstream round-trips. Zero is legitimate ("no traffic in this
+	// window"); use Fetched.Aggregated24h/7d/30d to distinguish
+	// "not fetched" from "fetched, actually zero". cache_read tokens
+	// are effectively free on Cursor's plans; cache_write is billable
+	// but at reduced rate — surfacing both lets downstream compute
+	// effective cost per raw prompt token.
+	Tokens24h TokenUsage `json:"tokens_24h"`
+	Tokens7d  TokenUsage `json:"tokens_7d"`
+	Tokens30d TokenUsage `json:"tokens_30d"`
 
 	// Slow pool state — from GetUsageLimitStatusAndActiveGrants.
 	InSlowPool bool   `json:"in_slow_pool"`
@@ -210,15 +235,15 @@ func (c *Client) Fetch(ctx context.Context) (*Snapshot, error) {
 		},
 		{
 			name: "aggregated_24h",
-			run:  c.aggregateJob(ctx, ms24h, msNow, &snap.Spend24h, &snap.Fetched.Aggregated24h, &mu),
+			run:  c.aggregateJob(ctx, ms24h, msNow, &snap.Spend24h, &snap.Tokens24h, &snap.Fetched.Aggregated24h, &mu),
 		},
 		{
 			name: "aggregated_7d",
-			run:  c.aggregateJob(ctx, ms7d, msNow, &snap.Spend7d, &snap.Fetched.Aggregated7d, &mu),
+			run:  c.aggregateJob(ctx, ms7d, msNow, &snap.Spend7d, &snap.Tokens7d, &snap.Fetched.Aggregated7d, &mu),
 		},
 		{
 			name: "aggregated_30d",
-			run:  c.aggregateJob(ctx, ms30d, msNow, &snap.Spend30d, &snap.Fetched.Aggregated30d, &mu),
+			run:  c.aggregateJob(ctx, ms30d, msNow, &snap.Spend30d, &snap.Tokens30d, &snap.Fetched.Aggregated30d, &mu),
 		},
 		{
 			name: "usage_limit_status",
@@ -315,9 +340,11 @@ func (c *Client) Fetch(ctx context.Context) (*Snapshot, error) {
 	return snap, nil
 }
 
-// aggregateJob returns a closure that runs GetAggregatedUsageEvents for a
-// specific [start,end] window and updates the target field on success.
-func (c *Client) aggregateJob(ctx context.Context, startMs, endMs int64, target *int64, filled *bool, mu *sync.Mutex) func() error {
+// aggregateJob returns a closure that runs GetAggregatedUsageEvents for
+// a specific [start,end] window and updates the target spend + tokens
+// fields on success. All four token counters come from the same RPC
+// response — no extra round-trips.
+func (c *Client) aggregateJob(ctx context.Context, startMs, endMs int64, spend *int64, tokens *TokenUsage, filled *bool, mu *sync.Mutex) func() error {
 	return func() error {
 		start := startMs
 		end := endMs
@@ -331,7 +358,11 @@ func (c *Client) aggregateJob(ctx context.Context, startMs, endMs int64, target 
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		*target = int64(resp.GetTotalCostCents())
+		*spend = int64(resp.GetTotalCostCents())
+		tokens.Input = resp.GetTotalInputTokens()
+		tokens.Output = resp.GetTotalOutputTokens()
+		tokens.CacheRead = resp.GetTotalCacheReadTokens()
+		tokens.CacheWrite = resp.GetTotalCacheWriteTokens()
 		*filled = true
 		return nil
 	}

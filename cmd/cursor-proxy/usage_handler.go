@@ -73,6 +73,22 @@ func usagePrometheusHandler(c *executor.Client) http.HandlerFunc {
 		writeMetric(w, "cursor_usage_spend_24h_cents", "Spend in the last 24 hours (cents)", snap.Spend24h)
 		writeMetric(w, "cursor_usage_spend_7d_cents", "Spend in the last 7 days (cents)", snap.Spend7d)
 		writeMetric(w, "cursor_usage_spend_30d_cents", "Spend in the last 30 days (cents)", snap.Spend30d)
+		// Token breakdown per window — same 4 counters (input, output,
+		// cache_read, cache_write) × 3 windows (24h, 7d, 30d). Sourced
+		// from GetAggregatedUsageEventsResponse — no extra upstream
+		// calls; the same RPC that fills spend also carries these.
+		writeMetric(w, "cursor_usage_tokens_input_24h", "Prompt input tokens in the last 24 hours", snap.Tokens24h.Input)
+		writeMetric(w, "cursor_usage_tokens_output_24h", "Model output tokens in the last 24 hours", snap.Tokens24h.Output)
+		writeMetric(w, "cursor_usage_tokens_cache_read_24h", "Cache-read tokens in the last 24 hours (effectively free)", snap.Tokens24h.CacheRead)
+		writeMetric(w, "cursor_usage_tokens_cache_write_24h", "Cache-write tokens in the last 24 hours (billable at reduced rate)", snap.Tokens24h.CacheWrite)
+		writeMetric(w, "cursor_usage_tokens_input_7d", "Prompt input tokens in the last 7 days", snap.Tokens7d.Input)
+		writeMetric(w, "cursor_usage_tokens_output_7d", "Model output tokens in the last 7 days", snap.Tokens7d.Output)
+		writeMetric(w, "cursor_usage_tokens_cache_read_7d", "Cache-read tokens in the last 7 days", snap.Tokens7d.CacheRead)
+		writeMetric(w, "cursor_usage_tokens_cache_write_7d", "Cache-write tokens in the last 7 days", snap.Tokens7d.CacheWrite)
+		writeMetric(w, "cursor_usage_tokens_input_30d", "Prompt input tokens in the last 30 days", snap.Tokens30d.Input)
+		writeMetric(w, "cursor_usage_tokens_output_30d", "Model output tokens in the last 30 days", snap.Tokens30d.Output)
+		writeMetric(w, "cursor_usage_tokens_cache_read_30d", "Cache-read tokens in the last 30 days", snap.Tokens30d.CacheRead)
+		writeMetric(w, "cursor_usage_tokens_cache_write_30d", "Cache-write tokens in the last 30 days", snap.Tokens30d.CacheWrite)
 		writeMetric(w, "cursor_usage_in_slow_pool", "1 if the account is currently in the slow pool", boolInt(snap.InSlowPool))
 		writeMetric(w, "cursor_usage_no_usage_based_allowed", "1 if usage-based billing is disallowed for this account", boolInt(snap.NoUsageBasedAllowed))
 		writeMetric(w, "cursor_usage_premium_requests_enabled", "1 if usage-based premium requests are enabled", boolInt(snap.UsageBasedPremiumRequestsEnabled))
