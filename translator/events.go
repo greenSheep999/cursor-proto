@@ -81,7 +81,7 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 		if mcp := exec.GetMcpArgs(); mcp != nil {
 			return &Event{
 				Kind:          EventToolCallStarted,
-				ToolCallID:    mcp.GetToolCallId(),
+				ToolCallID:    sanitizeToolCallID(mcp.GetToolCallId()),
 				ToolName:      executor.RestoreMcpToolName(pickFirstNonEmpty(mcp.GetToolName(), mcp.GetName())),
 				ToolArgsDelta: encodeMcpArgs(mcp.GetArgs()),
 			}
@@ -99,15 +99,20 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	}
 	if s := iu.GetToolCallStarted(); s != nil {
 		tc := s.GetToolCall()
-		// MCP tools arrive twice from the upstream stream: once as a
-		// bare InteractionUpdate.tool_call_started (with no ToolCall
-		// oneof populated — the tc.GetTool() is nil), and again
-		// slightly later as an ExecServerMessage.mcp_args carrying the
-		// actual arg map. If we emit the bare one first, downstream
-		// writers register the tool_use content_block with no `input`
-		// and the follow-up MCP frame gets dropped by their duplicate
-		// guard. Skip the bare one and let the MCP branch drive it.
+		// MCP tools arrive TWICE from the upstream stream: once as a
+		// InteractionUpdate.tool_call_started (with tc.mcp_tool_call
+		// carrying the arg map) and again slightly later as an
+		// ExecServerMessage.mcp_args with the same map. Emitting both
+		// gave the downstream writers two content_block_start frames
+		// (streaming) or two tool_use items (non-streaming). We
+		// canonicalize on the ExecServerMessage.mcp_args branch —
+		// which fires unconditionally for MCP — so skip the IU version
+		// for MCP tools. Native tools (shell/edit/etc.) only fire the
+		// IU branch, so they still flow through here.
 		if tc == nil || tc.GetTool() == nil {
+			return nil
+		}
+		if tc.GetMcpToolCall() != nil {
 			return nil
 		}
 		callID := s.GetCallId()
@@ -116,7 +121,7 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 		}
 		return &Event{
 			Kind:          EventToolCallStarted,
-			ToolCallID:    callID,
+			ToolCallID:    sanitizeToolCallID(callID),
 			ToolName:      extractToolName(tc),
 			ToolArgsDelta: extractToolArgsFromStart(tc),
 		}
@@ -124,7 +129,7 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	if d := iu.GetToolCallDelta(); d != nil {
 		return &Event{
 			Kind:          EventToolCallDelta,
-			ToolCallID:    d.GetCallId(),
+			ToolCallID:    sanitizeToolCallID(d.GetCallId()),
 			ToolArgsDelta: extractToolArgsDelta(d.GetToolCallDelta()),
 		}
 	}
@@ -136,7 +141,7 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 		}
 		return &Event{
 			Kind:       EventToolCallCompleted,
-			ToolCallID: callID,
+			ToolCallID: sanitizeToolCallID(callID),
 			ToolName:   extractToolName(tc),
 		}
 	}
@@ -170,6 +175,19 @@ func pickFirstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// sanitizeToolCallID normalizes Cursor's raw tool_call_id (which sometimes
+// arrives as "<index>\n<fc_...>") into a form legal for Anthropic /
+// OpenAI tool_use.id. Both APIs reject control characters — a bare
+// newline in the ID caused clients that echo the ID back in a
+// tool_result to fail validation. We keep the whole payload so the ID
+// stays roundtrip-unique, just swap the newline for '-'.
+func sanitizeToolCallID(id string) string {
+	if id == "" {
+		return id
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(id, "\r", "-"), "\n", "-")
 }
 
 // encodeMcpArgs converts McpArgs.args (map<string, bytes>) into a JSON object

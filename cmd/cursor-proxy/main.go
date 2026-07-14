@@ -920,25 +920,74 @@ func flattenAnthropicSystem(s any) string {
 	return ""
 }
 
+// flattenAnthropicContent projects an Anthropic content block list into a
+// single text string that Cursor's chat protocol can consume as one turn.
+//
+// Anthropic content blocks come in several shapes; we preserve them all so
+// the model sees a coherent conversation on turn 2+:
+//
+//   - text            → the text itself
+//   - tool_use        → "[tool_use name=X input={...}]" so the model sees
+//                       it already made this call and doesn't repeat it
+//   - tool_result     → "[tool_result for tool_use_id=Y: <content>]" so
+//                       the model sees the result of its previous call
+//
+// This is a fallback for the fact that Cursor's HistoryTurn is text-only;
+// a proper fix (native tool_use / tool_result in the Cursor wire) would
+// require expanding executor to carry structured tool history.
 func flattenAnthropicContent(c any) string {
 	switch v := c.(type) {
 	case string:
 		return v
 	case []any:
-		out := ""
+		parts := make([]string, 0, len(v))
 		for _, block := range v {
 			b, _ := block.(map[string]any)
 			if b == nil {
 				continue
 			}
-			if t, _ := b["text"].(string); t != "" {
-				if out != "" {
-					out += "\n"
+			bt, _ := b["type"].(string)
+			switch bt {
+			case "text", "":
+				if t, _ := b["text"].(string); t != "" {
+					parts = append(parts, t)
 				}
-				out += t
+			case "tool_use":
+				name, _ := b["name"].(string)
+				id, _ := b["id"].(string)
+				inputBytes, _ := json.Marshal(b["input"])
+				parts = append(parts, fmt.Sprintf("[tool_use id=%s name=%s input=%s]",
+					id, name, string(inputBytes)))
+			case "tool_result":
+				id, _ := b["tool_use_id"].(string)
+				// tool_result.content is either a plain string or a list
+				// of blocks (usually text). Flatten either shape.
+				var contentStr string
+				switch rc := b["content"].(type) {
+				case string:
+					contentStr = rc
+				case []any:
+					var sb strings.Builder
+					for _, rb := range rc {
+						rbm, _ := rb.(map[string]any)
+						if t, _ := rbm["text"].(string); t != "" {
+							if sb.Len() > 0 {
+								sb.WriteString("\n")
+							}
+							sb.WriteString(t)
+						}
+					}
+					contentStr = sb.String()
+				}
+				isErr, _ := b["is_error"].(bool)
+				tag := "tool_result"
+				if isErr {
+					tag = "tool_result_error"
+				}
+				parts = append(parts, fmt.Sprintf("[%s tool_use_id=%s: %s]", tag, id, contentStr))
 			}
 		}
-		return out
+		return strings.Join(parts, "\n")
 	}
 	return ""
 }
