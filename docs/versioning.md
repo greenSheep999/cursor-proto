@@ -243,8 +243,14 @@ tags win — please update this document.
 
 | Cursor line | Latest tag         | Branch                 | Status  | Impersonates       |
 |-------------|--------------------|------------------------|---------|--------------------|
-| 3.10        | `cursor3.10/v0.1.1` (also legacy `v0.1.0`) | `release/cursor-3.10` | maintained | Cursor 3.10.20     |
-| 3.11        | `cursor3.11/v0.2.0` | `main`                | current | Cursor 3.11.19     |
+| 3.10        | `cursor3.10/v0.1.6` (also legacy `v0.1.0`) | `release/cursor-3.10` | maintained (security patches only) | Cursor 3.10.20     |
+| 3.11        | `cursor3.11/v0.3.0` | `main`                | current | Cursor 3.11.19     |
+
+Note: `cursor3.11/v0.3.0` is the first release with **agent mode**
+(the /v1/agents/* endpoint tree backed by @cursor/sdk). Wire mode
+consumers who don't need agents can keep using `cursor3.11/v0.2.7`
+and skip the ~80 MB Node.js runtime — see docs/sdk-integration.md
+for the trade-off. Agent mode is NOT back-ported to the 3.10 line.
 
 `main` currently tracks the 3.11 line. When Cursor releases 3.12 and we
 cut over, `main` will move to 3.12 and 3.11 will get its own

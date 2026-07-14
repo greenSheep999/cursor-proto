@@ -124,9 +124,121 @@ jobs:
           path: dist/cursor-proxy-${{ needs.meta.outputs.cursor_line }}-${{ matrix.name }}
           if-no-files-found: error
 
+  # Build the Node runner bundle exactly once — it's pure JS, so the
+  # output is platform-independent. All four per-platform bundles below
+  # download the same node-runner-bundle artifact and pair it with their
+  # per-platform Go binary into a single tarball.
+  node-runner:
+    name: build node-runner bundle
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: node-runner/package-lock.json
+
+      - name: Install & compile
+        working-directory: node-runner
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+          # Trim dev deps so the bundle stays small (~10-15 MB
+          # instead of ~50 MB with tsx / typescript / @types).
+          npm prune --production --no-audit --no-fund
+
+      - name: Assemble bundle directory
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/cursor-node-runner
+          cp -R node-runner/dist         bundle/cursor-node-runner/dist
+          cp -R node-runner/node_modules bundle/cursor-node-runner/node_modules
+          cp    node-runner/package.json bundle/cursor-node-runner/package.json
+          cp    node-runner/README.md    bundle/cursor-node-runner/README.md
+
+      - name: Upload node-runner bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-node-runner-bundle
+          path: bundle/
+          if-no-files-found: error
+
+  # Per-platform tarball: Go binary + node-runner bundle in one archive.
+  # This is the "everything you need for agent mode" artifact. The raw
+  # per-platform Go binary above (uploaded by the `build` job) stays
+  # so cursor2api's existing single-file download keeps working.
+  tarball:
+    name: tarball ${{ matrix.name }}
+    needs: [meta, build, node-runner]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-amd64,  ext: "" }
+          - { name: linux-arm64,  ext: "" }
+          - { name: darwin-arm64, ext: "" }
+          - { name: darwin-amd64, ext: "" }
+    steps:
+      - name: Download Go binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cursor-proxy-${{ needs.meta.outputs.cursor_line }}-${{ matrix.name }}
+          path: staging/
+
+      - name: Download node runner bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: cursor-node-runner-bundle
+          path: staging/
+
+      - name: Compose tarball
+        env:
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+        run: |
+          set -euo pipefail
+          # Layout inside the tarball:
+          #   cursor-proxy-<line>-<platform>/
+          #     cursor-proxy            (executable, renamed for portability)
+          #     cursor-node-runner/     (bundled Node runner)
+          #     README                  (how to run)
+          NAME="cursor-proxy-${CURSOR_LINE}-${{ matrix.name }}"
+          mkdir -p "out/${NAME}"
+          # Rename the platform-suffixed Go binary to a plain
+          # `cursor-proxy` inside the tarball — one less thing for
+          # users to remember.
+          cp "staging/cursor-proxy-${CURSOR_LINE}-${{ matrix.name }}" "out/${NAME}/cursor-proxy"
+          chmod +x "out/${NAME}/cursor-proxy"
+          cp -R staging/cursor-node-runner "out/${NAME}/cursor-node-runner"
+          cat > "out/${NAME}/README" <<EOF
+          cursor-proxy ${CURSOR_LINE} ${{ needs.meta.outputs.semver }} (${{ matrix.name }})
+
+          Wire mode (default):
+            ./cursor-proxy -addr 127.0.0.1:8317
+
+          Agent mode (optional; requires Cursor dashboard API key):
+            CURSOR_API_KEY=crsr_your_key ./cursor-proxy \\
+              -addr 127.0.0.1:8317 \\
+              -node-runner ./cursor-node-runner/dist/index.js
+
+          See https://github.com/greenSheep999/cursor-proto for docs.
+          EOF
+          tar -czf "${NAME}.tar.gz" -C out "${NAME}"
+          ls -lh "${NAME}.tar.gz"
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-proxy-${{ needs.meta.outputs.cursor_line }}-${{ matrix.name }}-tarball
+          path: cursor-proxy-${{ needs.meta.outputs.cursor_line }}-${{ matrix.name }}.tar.gz
+          if-no-files-found: error
+
   release:
     name: publish release
-    needs: [meta, build]
+    needs: [meta, build, tarball]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -146,9 +258,15 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # Attach only this line's artifacts. If two release workflows race
-          # (e.g. cursor3.10 patch + cursor3.11 minor pushed close together),
-          # the tag scoping keeps them from stomping each other's uploads.
+          # Attach:
+          #   - the raw per-platform Go binaries (cursor-proxy-<line>-<platform>)
+          #     for cursor2api and other consumers that already download
+          #     single files by pattern
+          #   - the .tar.gz bundles that include the node-runner for
+          #     users who want agent mode without assembling the pieces
+          #     themselves
+          # The `cursor-proxy-<line>-*` glob catches BOTH shapes because
+          # tarball filenames also start with that prefix.
           files: dist/cursor-proxy-${{ needs.meta.outputs.cursor_line }}-*
           name: ${{ needs.meta.outputs.release_name }}
           generate_release_notes: true

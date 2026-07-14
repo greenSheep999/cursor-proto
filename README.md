@@ -36,6 +36,28 @@ contract — tag scheme, artifact names, Docker image tags, the
 line-vs-impersonated distinction, and how downstream consumers (e.g.
 `cursor2api`) should pin and verify.
 
+## Two modes: wire + agent
+
+Since `cursor3.11/v0.3.0`, cursor-proxy runs two independent HTTP
+surfaces on the same port:
+
+- **Wire mode** (`/v1/messages`, `/v1/chat/completions`, `/v1/responses`,
+  `/v1beta/models/*`) — the OpenAI/Anthropic/Gemini-compatible surface
+  we've always shipped. Authenticates upstream with the IDE's
+  `accessToken` (auto-loaded from `state.vscdb`).
+- **Agent mode** (`/v1/agents/*`) — new. Backed by the official
+  `@cursor/sdk` in a Node child process. Authenticates upstream with
+  a dashboard-issued `CURSOR_API_KEY` (`crsr_...`). Gives you Cursor's
+  full agent runtime — codebase indexing, MCP servers, skills, hooks,
+  subagents, cloud VMs.
+
+Both modes share the `-api-keys` gate and coexist on the same port.
+Agent mode is **optional** — leave `CURSOR_API_KEY` unset and only
+wire mode runs (no Node process, no extra memory).
+
+See [docs/agents.md](docs/agents.md) for the operator guide and
+[docs/sdk-integration.md](docs/sdk-integration.md) for the architecture.
+
 ## Architecture
 
 ### High-level: how a request flows
