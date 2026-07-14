@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
+	"github.com/router-for-me/cursor-proto/executor/transport"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -45,18 +46,62 @@ type Client struct {
 	AccountReloader func() *auth.Account
 	API2            string // override for api2 host
 	API3            string // override for api3 host
-	HTTP            *http.Client
+
+	// HTTPVersion pins the upstream protocol version (auto | http1.1 |
+	// http1.0). Set at NewClient time via WithHTTPVersion. The
+	// Transport this drives is baked into HTTP and is also used by
+	// NewStreamClient() for SSE call sites (which need timeout=0).
+	HTTPVersion transport.Version
+	HTTP        *http.Client
 }
 
-// NewClient wires up defaults.
-func NewClient(acc *auth.Account) *Client {
+// Option configures a Client at construction time. Use these instead of
+// mutating fields post-construct so the derived HTTP client stays
+// consistent with the settings.
+type Option func(*Client)
+
+// WithHTTPVersion pins the upstream HTTP protocol version. Default is
+// transport.Auto (Go negotiates h2 via ALPN). Downgrade this when a
+// corporate proxy / VPN mangles h2 SSE streams.
+func WithHTTPVersion(v transport.Version) Option {
+	return func(c *Client) { c.HTTPVersion = v }
+}
+
+// NewClient wires up defaults and applies opts. The HTTP client is
+// built from the resulting HTTPVersion, so callers pass options
+// FIRST — post-construct mutation of HTTPVersion does not rebuild
+// the client (by design; a mid-run wire-protocol change would leave
+// existing SSE streams in an inconsistent state).
+func NewClient(acc *auth.Account, opts ...Option) *Client {
 	acc.FillSessionDefaults(time.Now())
-	return &Client{
-		Account: acc,
-		API2:    DefaultAPI2,
-		API3:    DefaultAPI3,
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+	c := &Client{
+		Account:     acc,
+		API2:        DefaultAPI2,
+		API3:        DefaultAPI3,
+		HTTPVersion: transport.Auto,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	c.HTTP = transport.Client(c.HTTPVersion, 30*time.Second)
+	return c
+}
+
+// NewStreamClient returns an *http.Client with the caller's chosen
+// HTTPVersion and no timeout (SSE streams live for the duration of a
+// generation, which may be minutes). Every SSE call site should build
+// its client through this helper so `-http-version` reaches the wire.
+func (c *Client) NewStreamClient() *http.Client {
+	return transport.Client(c.HTTPVersion, 0)
+}
+
+// NewUnaryClient returns an *http.Client with the caller's chosen
+// HTTPVersion and a bounded timeout for one-shot RPCs. Kept separate
+// from HTTP so callers with a different timeout requirement (e.g.
+// count_tokens, which is heavier) can construct their own without
+// stomping the shared client.
+func (c *Client) NewUnaryClient(timeout time.Duration) *http.Client {
+	return transport.Client(c.HTTPVersion, timeout)
 }
 
 // CurrentAccount returns the account after giving the AccountReloader a

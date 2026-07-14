@@ -38,6 +38,7 @@ import (
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
 	"github.com/router-for-me/cursor-proto/executor/simcache"
+	"github.com/router-for-me/cursor-proto/executor/transport"
 	"github.com/router-for-me/cursor-proto/translator"
 )
 
@@ -122,6 +123,17 @@ func main() {
 	simulateCache := flag.Bool("simulate-cache", true, "enable local prompt-cache simulator; env CURSOR_PROXY_SIMULATE_CACHE=false disables it")
 	cacheTTL := flag.String("cache-ttl", "10m", "simulator entry TTL (duration string)")
 	cacheSize := flag.Int("cache-size", 1000, "simulator max entries")
+	httpVersion := flag.String("http-version", "auto",
+		"upstream HTTP protocol version: auto | http1.1 | http1.0. "+
+			"'auto' negotiates h2 via ALPN and works on healthy networks. "+
+			"Downgrade only when a corporate proxy, TLS-inspecting VPN, "+
+			"or older SSL appliance in front of you mangles h2 SSE "+
+			"streams (symptom: 'unexpected EOF' partway through a "+
+			"generation) AND that middlebox translates h2 back to h1 "+
+			"for you. Direct connections to Cursor's backend REQUIRE "+
+			"h2 — forcing http1.1 without a middlebox in between will "+
+			"produce a 502 with a malformed HTTP response. Falls back "+
+			"to $CURSOR_PROXY_HTTP_VERSION when unset.")
 	showVersion := flag.Bool("version", false, "print JSON with Cursor line, impersonated version, commit, release hash, and proto tag, then exit")
 	flag.Parse()
 
@@ -153,6 +165,23 @@ func main() {
 		_ = os.Setenv("HTTP_PROXY", p)
 		log.Printf("[proxy] upstream proxy: %s", p)
 	}
+
+	// Resolve HTTP version: -http-version > $CURSOR_PROXY_HTTP_VERSION.
+	// The flag's own default is "auto", which is treated as "look at
+	// the env before committing" so operators can override via env
+	// without having to also pass the flag. Any parse error fails
+	// loudly at startup — silently falling back to auto would hide
+	// a typo that leaves the operator's middlebox workaround inactive.
+	if strings.TrimSpace(strings.ToLower(*httpVersion)) == "auto" {
+		if v := strings.TrimSpace(os.Getenv("CURSOR_PROXY_HTTP_VERSION")); v != "" {
+			*httpVersion = v
+		}
+	}
+	httpVer, err := transport.Parse(*httpVersion)
+	if err != nil {
+		log.Fatalf("bad -http-version: %v", err)
+	}
+	SetCurrentHTTPVersion(httpVer)
 
 	// Env override for the on/off toggle. Any value that parses as boolean is
 	// respected; an unparseable value falls back to the flag default so a
@@ -189,7 +218,7 @@ func main() {
 		ideReloader = makeIDEAccountReloader(dbPath, startMTime)
 	}
 
-	c := executor.NewClient(acc)
+	c := executor.NewClient(acc, executor.WithHTTPVersion(httpVer))
 	c.API3 = c.API2 // chat also lives on api2
 	if ideReloader != nil {
 		c.AccountReloader = ideReloader
@@ -207,6 +236,7 @@ func main() {
 	}
 
 	log.Printf("[proxy] cursor account loaded: email=%s", acc.Email)
+	log.Printf("[proxy] upstream HTTP: %s", httpVer)
 	log.Printf("[proxy] listening on http://%s", *addr)
 	if len(apiKeys) > 0 {
 		log.Printf("[proxy] api-key auth enabled: %d key(s) configured", len(apiKeys))

@@ -188,7 +188,9 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 	ApplyCommonHeaders(sseReq, c.CurrentAccount(), requestID)
 
 	// Use a client without a body timeout — the stream can be long.
-	sseClient := &http.Client{Timeout: 0}
+	// c.NewStreamClient() honors -http-version so operators can force
+	// HTTP/1.1 when a middlebox mangles h2 SSE frames.
+	sseClient := c.NewStreamClient()
 	sseResp, err := sseClient.Do(sseReq)
 	if err != nil {
 		return nil, fmt.Errorf("RunSSE dial: %w", err)
@@ -389,7 +391,7 @@ func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, pa
 	req.Header.Set("content-type", "application/proto")
 	ApplyCommonHeaders(req, c.CurrentAccount(), auth.GenerateRequestID())
 
-	cli := &http.Client{Timeout: 30 * time.Second}
+	cli := c.NewUnaryClient(30 * time.Second)
 	resp, err := cli.Do(req)
 	if err != nil {
 		return err
