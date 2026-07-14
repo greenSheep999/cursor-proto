@@ -65,7 +65,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
 	ApplyCommonHeaders(sseReq, c.CurrentAccount(), requestID)
 
-	sseClient := &http.Client{Timeout: 0}
+	sseClient := c.NewStreamClient()
 	sseResp, err := sseClient.Do(sseReq)
 	if err != nil {
 		return nil, fmt.Errorf("RunSSE dial: %w", err)

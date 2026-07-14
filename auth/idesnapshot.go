@@ -65,11 +65,15 @@ func SnapshotIDEDB(src string) (string, error) {
 	}
 
 	if dstInfo, err := os.Stat(dst); err == nil {
-		// Fast path: source mtime hasn't advanced past what we already
-		// have. The IDE writes state.vscdb on every keystroke-triggered
-		// setting change, so the vast majority of reloader ticks hit
-		// this branch.
-		if !srcInfo.ModTime().After(dstInfo.ModTime()) {
+		// Fast path: source mtime already matches the snapshot's
+		// stamped mtime (we set snapshot mtime = source mtime after
+		// each successful copy, see os.Chtimes below). Equality — not
+		// "source after dst" — is the right test: an IDE that
+		// overwrites state.vscdb with the SAME mtime as a prior write
+		// (rare, but possible after account switches or clock skew)
+		// would otherwise get silently ignored. Equal-mtime hits the
+		// fast path; any difference at all forces a re-copy.
+		if srcInfo.ModTime().Equal(dstInfo.ModTime()) {
 			return dst, nil
 		}
 	}
