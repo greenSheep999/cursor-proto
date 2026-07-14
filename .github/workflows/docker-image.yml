@@ -143,6 +143,20 @@ jobs:
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
+      - name: Compute PROTO_VERSION build-arg
+        id: proto_ver
+        # Stamped into the binary and reported by /v1/proxy-info. Tags
+        # get the full ref name (cursor3.11/v0.2.1); branch builds get
+        # a branch-<sha> marker so the endpoint still surfaces something
+        # meaningful for "latest" images.
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build & push (${{ matrix.arch }})
         uses: docker/build-push-action@v6
         with:
@@ -151,6 +165,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            PROTO_VERSION=${{ steps.proto_ver.outputs.value }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,scope=${{ matrix.arch }},mode=max
 

@@ -15,11 +15,17 @@ RUN go mod download
 # Copy the rest of the source
 COPY . .
 
+# PROTO_VERSION is stamped into the binary and reported by /v1/proxy-info
+# and `cursor-proxy -version`. CI passes the git tag (e.g. cursor3.11/v0.2.1);
+# `docker build` without --build-arg keeps the "dev" default.
+ARG PROTO_VERSION=dev
+
 # Build only the cursor-proxy binary
 # CGO_ENABLED=1 because mattn/go-sqlite3 needs libc
 ENV CGO_ENABLED=1 \
     GOOS=linux
-RUN go build -trimpath -ldflags="-s -w" \
+RUN go build -trimpath \
+    -ldflags="-s -w -X main.ProtoVersion=${PROTO_VERSION}" \
     -o /out/cursor-proxy \
     ./cmd/cursor-proxy
 

@@ -24,10 +24,65 @@ new proxy flags, new handler paths — and that's a normal `semver` axis.
 
 So every published artifact has **two version dimensions**:
 
-- **Cursor version**: which Cursor IDE build we impersonate (e.g. `cursor3.10`, `cursor3.11`)
-- **Proto version**: our own `semver` inside that Cursor version (e.g. `v0.1.1`)
+- **Cursor line**: which major.minor Cursor family we impersonate (e.g. `cursor3.10`, `cursor3.11`)
+- **Proto version**: our own `semver` inside that Cursor line (e.g. `v0.1.1`)
 
 Downstream needs both to decide what to ship.
+
+### Line vs. impersonated version — don't confuse them
+
+There are actually **three** version strings in play, and they answer
+different questions:
+
+| Question | String | Where it lives | Example |
+|---|---|---|---|
+| Which Cursor family does this binary target? | **Cursor line** (`major.minor`) | Tag prefix, artifact filename, cursor2api's `cursor_version_lock` field | `3.11` |
+| Which exact Cursor build does it impersonate on the wire? | **Impersonated version** (`major.minor.patch`) | `x-cursor-client-version` header, `CursorClientVersion` constant | `3.11.19` |
+| Which `cursor-proto` release is this binary? | **Proto version** (`v<semver>`) | Git tag suffix, `main.ProtoVersion` ldflag | `v0.2.0` |
+
+**Why the tag stops at major.minor**: cursor2api's licence payload
+stores `cursor_version_lock` as `"3.10"` (line), not `"3.10.20"`
+(impersonated). Making the tag prefix `cursor3.10/*` lets cursor2api
+match tag ↔ CDK lock with a bare string-prefix compare — no
+version-parsing needed. And one binary usually covers an entire
+`major.minor.*` family, because Cursor's protocol layer stays
+stable across patch releases (only UI/bug-fix churn).
+
+**When the impersonated patch bumps** (e.g. we re-capture at 3.10.25
+and update the constants), we cut a new **proto** version on the same
+line — `cursor3.10/v0.1.2` — and cursor2api's `cursor_version_lock`
+field is untouched. Downstream just bumps `CURSOR_PROTO_TAG_3_10` in
+its own release workflow. See `docs/kernel-3.11-upgrade.md` for a
+worked example.
+
+### How to read the values at runtime
+
+Every published binary exposes all three strings, plus the release
+hash, via:
+
+```bash
+# CLI — prints once and exits
+cursor-proxy -version
+
+# HTTP — same JSON, always reachable (bypasses -api-keys auth)
+curl -s http://127.0.0.1:8317/v1/proxy-info
+```
+
+Response shape (stable, additive):
+
+```json
+{
+  "cursor_line":           "3.11",
+  "impersonated_version":  "3.11.19",
+  "impersonated_commit":   "bf249e6efb5b097f23d7e21d7283429f0760b740",
+  "release_hash":          "bf249e6efb5b097f23d7e21d7283429f0760b74a",
+  "proto_version":         "cursor3.11/v0.2.1"
+}
+```
+
+`proto_version` reads `"dev"` for local `go build` / `go run`; release
+CI stamps the git tag via `-ldflags="-X main.ProtoVersion=<tag>"`. Use
+it to verify a running sidecar actually is the tag you pinned.
 
 ---
 
@@ -168,6 +223,16 @@ gate's `cursor_version_lock` field.
 - `cursor_version_lock: null` — spawn the latest Cursor line bundled
   in this desktop app build (typically the highest `cursor<X.Y>` we
   ship)
+
+**Runtime verification.** After spawning the sidecar, hit
+`GET /v1/proxy-info` (unauthenticated) and cross-check the response's
+`cursor_line` against the licence's `cursor_version_lock`, and
+`proto_version` against the tag the desktop bundle was built against.
+Fail loud on mismatch — it means the binary on disk doesn't match
+what CI pinned, which is either a bad update, a bundle mismatch, or
+someone dropped a manual binary in place. UI can show
+`impersonated_version` (`"3.11.19"`) verbatim when you want a
+user-facing "Locked to Cursor X" string.
 
 ---
 

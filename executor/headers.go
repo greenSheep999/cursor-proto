@@ -18,6 +18,29 @@ const (
 	UserAgent           = "connect-es/1.6.1"
 )
 
+// CursorLine returns the major.minor line this binary belongs to,
+// derived from CursorClientVersion (e.g. "3.11" for "3.11.19"). This
+// is what cursor2api's `cursor_version_lock` field stores, and what
+// the release-tag prefix `cursor<X.Y>/v<semver>` encodes. See
+// docs/versioning.md for the two-axis versioning contract.
+func CursorLine() string {
+	v := CursorClientVersion
+	// Return everything up to the second '.' — "3.11.19" → "3.11".
+	// Falls back to the raw string on malformed input so a bad constant
+	// surfaces loudly through /v1/proxy-info instead of silently.
+	first := -1
+	for i, r := range v {
+		if r == '.' {
+			if first == -1 {
+				first = i
+			} else {
+				return v[:i]
+			}
+		}
+	}
+	return v
+}
+
 // ApplyCommonHeaders sets every x-cursor-* / connect-* header the IDE sends
 // on every request. It expects an already-configured Account (with
 // ChecksumSession, SessionID, ClientKey, etc. filled — call FillSessionDefaults
