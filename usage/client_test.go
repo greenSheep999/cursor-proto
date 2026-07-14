@@ -71,10 +71,17 @@ func TestFetch_HappyPath(t *testing.T) {
 			BillingCycleStart: periodStart,
 			BillingCycleEnd:   periodEnd,
 			PlanUsage: &usagepb.GetCurrentPeriodUsageResponse_PlanUsage{
-				TotalSpend:    1234,
-				IncludedSpend: 1000,
-				Remaining:     776,
-				Limit:         2010,
+				TotalSpend:       1234,
+				IncludedSpend:    1000,
+				Remaining:        776,
+				Limit:            2010,
+				AutoSpend:        proto.Int32(120),
+				AutoLimit:        proto.Int32(6000),
+				AutoPercentUsed:  proto.Float64(0.02),
+				ApiSpend:         proto.Int32(1114),
+				ApiLimit:         proto.Int32(1114),
+				ApiPercentUsed:   proto.Float64(1.0),
+				TotalPercentUsed: proto.Float64(0.27),
 			},
 			Enabled:        true,
 			DisplayMessage: "ok",
@@ -126,6 +133,28 @@ func TestFetch_HappyPath(t *testing.T) {
 	}
 	if snap.Limit != 2010 {
 		t.Errorf("limit: got %d want 2010", snap.Limit)
+	}
+	// Categorized spend — the three-bucket view Cursor's dashboard renders.
+	if snap.AutoSpend != 120 {
+		t.Errorf("auto_spend: got %d want 120", snap.AutoSpend)
+	}
+	if snap.AutoLimit != 6000 {
+		t.Errorf("auto_limit: got %d want 6000", snap.AutoLimit)
+	}
+	if snap.APISpend != 1114 {
+		t.Errorf("api_spend: got %d want 1114", snap.APISpend)
+	}
+	if snap.APILimit != 1114 {
+		t.Errorf("api_limit: got %d want 1114", snap.APILimit)
+	}
+	if snap.AutoPercentUsed != 0.02 {
+		t.Errorf("auto_percent_used: got %v want 0.02", snap.AutoPercentUsed)
+	}
+	if snap.APIPercentUsed != 1.0 {
+		t.Errorf("api_percent_used: got %v want 1.0", snap.APIPercentUsed)
+	}
+	if snap.TotalPercentUsed != 0.27 {
+		t.Errorf("total_percent_used: got %v want 0.27", snap.TotalPercentUsed)
 	}
 	if snap.HardLimit != 2000 { // 20 dollars → 2000 cents
 		t.Errorf("hard_limit: got %d want 2000", snap.HardLimit)
