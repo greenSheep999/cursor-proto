@@ -8,6 +8,18 @@ Built by rebuilding Cursor 3.10.20's private wire protocol from the shipped
 `workbench.desktop.main.js` (39 MB) — proto schemas, checksum algorithm,
 machine-id derivation, session identifiers, and header set.
 
+## Versioning
+
+Every release targets one specific Cursor IDE version. Tags encode both
+axes: `cursor<major>.<minor>/v<semver>` (e.g. `cursor3.10/v0.1.1`,
+`cursor3.11/v0.2.0`). Older Cursor lines stay on long-lived
+`release/cursor-<X.Y>` branches so they can receive patches after `main`
+has moved on.
+
+See [docs/versioning.md](docs/versioning.md) for the full release
+contract — tag scheme, artifact names, Docker image tags, and how
+downstream consumers (e.g. `cursor2api`) should pin.
+
 ## Architecture
 
 ### High-level: how a request flows

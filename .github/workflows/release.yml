@@ -1,16 +1,56 @@
 name: release
 
+# Tag scheme: cursor<major>.<minor>/v<semver>, e.g.
+#   cursor3.10/v0.1.1
+#   cursor3.11/v0.2.0
+#
+# See docs/versioning.md for the full contract. The legacy flat tag
+# `v*.*.*` is grandfathered for the initial v0.1.0 release; new
+# Cursor lines must use the prefixed form.
+
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "cursor*/v*.*.*"
+      - "v*.*.*"  # grandfathered; treated as cursor3.10
 
 permissions:
   contents: write
 
 jobs:
+  meta:
+    name: parse tag
+    runs-on: ubuntu-latest
+    outputs:
+      cursor_line: ${{ steps.parse.outputs.cursor_line }}
+      semver: ${{ steps.parse.outputs.semver }}
+      release_name: ${{ steps.parse.outputs.release_name }}
+    steps:
+      - id: parse
+        # Tag comes in as one of:
+        #   cursor3.10/v0.1.1  →  cursor_line=cursor3.10, semver=v0.1.1
+        #   cursor3.11/v0.2.0  →  cursor_line=cursor3.11, semver=v0.2.0
+        #   v0.1.0             →  cursor_line=cursor3.10, semver=v0.1.0 (legacy)
+        run: |
+          set -euo pipefail
+          REF="${GITHUB_REF_NAME}"
+          if [[ "${REF}" == cursor*/v*.*.* ]]; then
+            LINE="${REF%%/*}"
+            SEMVER="${REF#*/}"
+          elif [[ "${REF}" == v*.*.* ]]; then
+            LINE="cursor3.10"
+            SEMVER="${REF}"
+          else
+            echo "unrecognized tag: ${REF}" >&2
+            exit 1
+          fi
+          echo "cursor_line=${LINE}" >> "$GITHUB_OUTPUT"
+          echo "semver=${SEMVER}" >> "$GITHUB_OUTPUT"
+          echo "release_name=cursor-proxy ${LINE} ${SEMVER}" >> "$GITHUB_OUTPUT"
+
   build:
-    name: build ${{ matrix.name }}
+    name: build ${{ needs.meta.outputs.cursor_line }} ${{ matrix.name }}
+    needs: meta
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -60,22 +100,27 @@ jobs:
           CGO_ENABLED: "1"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
         run: |
           mkdir -p dist
+          # Artifact naming: cursor-proxy-<cursor-line>-<goos>-<goarch>.
+          # The <cursor-line> segment is intentionally kept in the filename
+          # so cursor2api can download 3.10 and 3.11 side by side into the
+          # same directory without collision. See docs/versioning.md.
           go build -trimpath -ldflags="-s -w" \
-            -o dist/cursor-proxy-${{ matrix.name }} \
+            -o "dist/cursor-proxy-${CURSOR_LINE}-${{ matrix.name }}" \
             ./cmd/cursor-proxy
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cursor-proxy-${{ matrix.name }}
-          path: dist/cursor-proxy-${{ matrix.name }}
+          name: cursor-proxy-${{ needs.meta.outputs.cursor_line }}-${{ matrix.name }}
+          path: dist/cursor-proxy-${{ needs.meta.outputs.cursor_line }}-${{ matrix.name }}
           if-no-files-found: error
 
   release:
     name: publish release
-    needs: build
+    needs: [meta, build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -95,7 +140,11 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/cursor-proxy-*
+          # Attach only this line's artifacts. If two release workflows race
+          # (e.g. cursor3.10 patch + cursor3.11 minor pushed close together),
+          # the tag scoping keeps them from stomping each other's uploads.
+          files: dist/cursor-proxy-${{ needs.meta.outputs.cursor_line }}-*
+          name: ${{ needs.meta.outputs.release_name }}
           generate_release_notes: true
           draft: false
           prerelease: false

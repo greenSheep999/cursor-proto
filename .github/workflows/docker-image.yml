@@ -2,19 +2,27 @@ name: docker-image
 
 # Build multi-arch cursor-proxy images and push to GHCR.
 #
-# Triggers:
-#   - push to main → tags: main-<sha>, latest
-#   - push v*.*.* tag → tags: v*.*.*, latest, plus a semver alias
-#   - workflow_dispatch → tag: manual-<sha>
+# Tag scheme (see docs/versioning.md for the full contract):
+#   - push to main                       → tags: latest, main-<sha>
+#     (`latest` tracks whichever Cursor line main is currently on)
+#   - push to release/cursor-<X.Y>       → tags: cursor<X.Y>-latest, cursor<X.Y>-<sha>
+#   - push cursor<X.Y>/v*.*.* tag        → tags: cursor<X.Y>-<semver>, cursor<X.Y>-latest
+#   - push legacy v*.*.* tag             → treated as cursor3.10; tags: cursor3.10-<semver>, cursor3.10-latest, <semver>
+#   - workflow_dispatch                  → tag: manual-<sha>
 #
-# amd64 runs on ubuntu-latest, arm64 on the free public-repo ubuntu-24.04-arm
-# runner. A final manifest job stitches the two per-arch tags into a
-# multi-platform :latest / :<semver> tag.
+# `latest` (unqualified) is intentionally kept as an alias for the current
+# main line — matches the release.yml behavior and gives casual users a
+# stable pull target. Production consumers should pin to `cursor<X.Y>-latest`
+# or `cursor<X.Y>-<semver>`, never bare `latest`.
 
 on:
   push:
-    branches: [main]
-    tags: ["v*.*.*"]
+    branches:
+      - main
+      - "release/cursor-*"
+    tags:
+      - "cursor*/v*.*.*"
+      - "v*.*.*"
   workflow_dispatch:
 
 env:
@@ -26,7 +34,55 @@ permissions:
   packages: write
 
 jobs:
+  meta:
+    name: parse ref
+    runs-on: ubuntu-latest
+    outputs:
+      cursor_line: ${{ steps.parse.outputs.cursor_line }}
+      semver: ${{ steps.parse.outputs.semver }}
+      is_latest_line: ${{ steps.parse.outputs.is_latest_line }}
+    steps:
+      - id: parse
+        # Sets:
+        #   cursor_line     — cursor<X.Y> (never empty; falls back to cursor3.10 for legacy)
+        #   semver          — v<x.y.z> when this is a tag push, else empty
+        #   is_latest_line  — "true" iff this ref is on `main` (the current Cursor line);
+        #                     used to decide whether to also tag as bare `latest`.
+        run: |
+          set -euo pipefail
+          REF="${GITHUB_REF}"
+          NAME="${GITHUB_REF_NAME}"
+          LINE=""
+          SEMVER=""
+          IS_LATEST_LINE="false"
+
+          if [[ "${REF}" == refs/tags/cursor*/v*.*.* ]]; then
+            LINE="${NAME%%/*}"
+            SEMVER="${NAME#*/}"
+          elif [[ "${REF}" == refs/tags/v*.*.* ]]; then
+            LINE="cursor3.10"
+            SEMVER="${NAME}"
+          elif [[ "${REF}" == refs/heads/release/cursor-* ]]; then
+            # refs/heads/release/cursor-3.10 → cursor3.10
+            SUFFIX="${NAME#release/cursor-}"
+            LINE="cursor${SUFFIX}"
+          elif [[ "${REF}" == refs/heads/main ]]; then
+            # main tracks the current Cursor line. We don't try to parse
+            # which one it is from the ref alone; the `latest` alias is
+            # what casual users pull, and pinned consumers use the
+            # cursor<X.Y>-* tags produced from the release branches.
+            LINE="main"
+            IS_LATEST_LINE="true"
+          else
+            LINE="manual"
+          fi
+
+          echo "cursor_line=${LINE}" >> "$GITHUB_OUTPUT"
+          echo "semver=${SEMVER}" >> "$GITHUB_OUTPUT"
+          echo "is_latest_line=${IS_LATEST_LINE}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: meta
     strategy:
       fail-fast: false
       matrix:
@@ -57,18 +113,34 @@ jobs:
 
       - name: Compute tags (per-arch)
         id: tags
+        env:
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+          SEMVER: ${{ needs.meta.outputs.semver }}
+          IS_LATEST_LINE: ${{ needs.meta.outputs.is_latest_line }}
         run: |
+          set -euo pipefail
           IMG="${{ env.REGISTRY }}/${{ steps.img.outputs.name }}"
           SHA=${GITHUB_SHA::7}
           ARCH=${{ matrix.arch }}
+
+          # Always at least one per-arch tag so the manifest job has
+          # something to stitch. Non-release refs get sha-only tags.
           TAGS="${IMG}:sha-${SHA}-${ARCH}"
-          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+
+          if [[ "${GITHUB_REF}" == refs/tags/cursor*/v*.*.* || "${GITHUB_REF}" == refs/tags/v*.*.* ]]; then
+            TAGS="${TAGS},${IMG}:${CURSOR_LINE}-${SEMVER}-${ARCH}"
+            TAGS="${TAGS},${IMG}:${CURSOR_LINE}-latest-${ARCH}"
+            # Preserve the flat semver alias only for the legacy v*.*.* path
+            # so nothing that pinned `:v0.1.0` under the old scheme breaks.
+            if [[ "${GITHUB_REF}" == refs/tags/v*.*.* ]]; then
+              TAGS="${TAGS},${IMG}:${SEMVER}-${ARCH}"
+            fi
+          elif [[ "${GITHUB_REF}" == refs/heads/release/cursor-* ]]; then
+            TAGS="${TAGS},${IMG}:${CURSOR_LINE}-latest-${ARCH}"
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
             TAGS="${TAGS},${IMG}:latest-${ARCH}"
           fi
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            TAGS="${TAGS},${IMG}:${VERSION}-${ARCH},${IMG}:latest-${ARCH}"
-          fi
+
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Build & push (${{ matrix.arch }})
@@ -83,7 +155,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.arch }},mode=max
 
   manifest:
-    needs: build
+    needs: [meta, build]
     runs-on: ubuntu-latest
     steps:
       - name: Lowercase image name
@@ -98,29 +170,34 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assemble multi-arch manifests
+        env:
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+          SEMVER: ${{ needs.meta.outputs.semver }}
+          IS_LATEST_LINE: ${{ needs.meta.outputs.is_latest_line }}
         run: |
+          set -euo pipefail
           IMG="${{ env.REGISTRY }}/${{ steps.img.outputs.name }}"
           SHA=${GITHUB_SHA::7}
 
+          stitch() {
+            local TAG="$1"
+            docker buildx imagetools create \
+              --tag "${IMG}:${TAG}" \
+              "${IMG}:sha-${SHA}-amd64" \
+              "${IMG}:sha-${SHA}-arm64"
+          }
+
           # sha-<sha> multi-arch (always)
-          docker buildx imagetools create \
-            --tag "${IMG}:sha-${SHA}" \
-            "${IMG}:sha-${SHA}-amd64" \
-            "${IMG}:sha-${SHA}-arm64"
+          stitch "sha-${SHA}"
 
-          # latest on main + tags
-          if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == refs/tags/v* ]]; then
-            docker buildx imagetools create \
-              --tag "${IMG}:latest" \
-              "${IMG}:latest-amd64" \
-              "${IMG}:latest-arm64"
-          fi
-
-          # semver alias on tag builds
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            docker buildx imagetools create \
-              --tag "${IMG}:${VERSION}" \
-              "${IMG}:${VERSION}-amd64" \
-              "${IMG}:${VERSION}-arm64"
+          if [[ "${GITHUB_REF}" == refs/tags/cursor*/v*.*.* || "${GITHUB_REF}" == refs/tags/v*.*.* ]]; then
+            stitch "${CURSOR_LINE}-${SEMVER}"
+            stitch "${CURSOR_LINE}-latest"
+            if [[ "${GITHUB_REF}" == refs/tags/v*.*.* ]]; then
+              stitch "${SEMVER}"
+            fi
+          elif [[ "${GITHUB_REF}" == refs/heads/release/cursor-* ]]; then
+            stitch "${CURSOR_LINE}-latest"
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            stitch "latest"
           fi
