@@ -368,6 +368,84 @@ func (c *Client) aggregateJob(ctx context.Context, startMs, endMs int64, spend *
 	}
 }
 
+// -------- per-request event log --------
+//
+// GetFilteredUsageEvents on aiserver.v1.DashboardService returns the
+// paginated event log that backs cursor2api's /usage table. Distinct
+// from the aggregation RPC (GetAggregatedUsageEvents) that fills
+// Snapshot.Spend* / Tokens*: this one gives you one row per assistant
+// response, ordered newest first. See docs/upstream-issues/
+// usage-events-list.md in cursor2api for the downstream spec.
+
+// EventListOptions bounds a ListEvents query. All fields are optional.
+// Zero values fall back to Cursor's defaults (all users, all models,
+// page 1, a server-chosen page_size).
+type EventListOptions struct {
+	// Time window: unix millis. Zero means "let Cursor pick" (usually
+	// current billing period). Cursor rejects windows > 30 days.
+	StartMs int64
+	EndMs   int64
+
+	// Model filter — exact match on the model_id string Cursor stores
+	// (e.g. "claude-sonnet-4-5-20250929"). Empty means all models.
+	Model string
+
+	// Pagination. Page is 1-based. PageSize defaults to 50 server-side;
+	// the RPC accepts up to a few hundred but very large pages get
+	// truncated silently.
+	Page     int32
+	PageSize int32
+}
+
+// EventPage is one page of results. Events carries the UI-ready
+// projection (UsageEventDisplay) — it's what cursor2api's table
+// renders. TotalCount is authoritative for pagination controls
+// (has_next = Page * PageSize < TotalCount).
+type EventPage struct {
+	Events     []*usagepb.UsageEventDisplay
+	TotalCount int32
+}
+
+// ListEvents fetches one page of the per-request event log.
+//
+// Returns EventPage with the UsageEventDisplay projection populated
+// (the raw UsageEvent[] carrying oneof details is not surfaced — a
+// 17-way discriminated union whose leaves shift release-to-release,
+// and every field cursor2api's UI wants is already on the Display
+// side. Add a raw-events accessor here if a caller ever needs it.)
+func (c *Client) ListEvents(ctx context.Context, opts EventListOptions) (*EventPage, error) {
+	req := &usagepb.GetFilteredUsageEventsRequest{}
+	if opts.StartMs > 0 {
+		s := opts.StartMs
+		req.StartDate = &s
+	}
+	if opts.EndMs > 0 {
+		e := opts.EndMs
+		req.EndDate = &e
+	}
+	if opts.Model != "" {
+		m := opts.Model
+		req.ModelId = &m
+	}
+	if opts.Page > 0 {
+		p := opts.Page
+		req.Page = &p
+	}
+	if opts.PageSize > 0 {
+		ps := opts.PageSize
+		req.PageSize = &ps
+	}
+
+	resp := &usagepb.GetFilteredUsageEventsResponse{}
+	if err := c.call(ctx, "aiserver.v1.DashboardService", "GetFilteredUsageEvents", req, resp); err != nil {
+		return nil, err
+	}
+	return &EventPage{
+		Events:     resp.GetUsageEventsDisplay(),
+		TotalCount: resp.GetTotalUsageEventsCount(),
+	}, nil
+}
+
 // call is a thin wrapper around executor.Client.UnaryCall that classifies
 // permission_denied errors so callers can distinguish them from transport
 // failures. The error is left unchanged; only the message is used for the

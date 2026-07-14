@@ -9,8 +9,9 @@
 // separate proto file (kept OUT of gen/cursor/) because the core extraction
 // scoped the main cursor.proto to chat/agent flows. Wire format is preserved:
 // all field numbers and types match Cursor 3.10.20 and 3.11.19 identically
-// (verified against captures/schema-3.11.19.raw.json — no field renames or
-// deletions on the types listed below).
+// (verified against captures/schema-3.11.19.raw.json). Regenerate with:
+//   protoc --proto_path=proto --go_out=usage/pb \
+//     --go_opt=paths=source_relative proto/cursor_usage.proto
 
 package usagepb
 
@@ -28,6 +29,81 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// UsageEventKind categorizes each row for the UI. Values match
+// Cursor's own dashboard buckets one-for-one.
+type UsageEventKind int32
+
+const (
+	UsageEventKind_USAGE_EVENT_KIND_UNSPECIFIED          UsageEventKind = 0
+	UsageEventKind_USAGE_EVENT_KIND_USAGE_BASED          UsageEventKind = 1
+	UsageEventKind_USAGE_EVENT_KIND_USER_API_KEY         UsageEventKind = 2
+	UsageEventKind_USAGE_EVENT_KIND_INCLUDED_IN_PRO      UsageEventKind = 3
+	UsageEventKind_USAGE_EVENT_KIND_INCLUDED_IN_BUSINESS UsageEventKind = 4
+	UsageEventKind_USAGE_EVENT_KIND_ERRORED_NOT_CHARGED  UsageEventKind = 5
+	UsageEventKind_USAGE_EVENT_KIND_ABORTED_NOT_CHARGED  UsageEventKind = 6
+	UsageEventKind_USAGE_EVENT_KIND_CUSTOM_SUBSCRIPTION  UsageEventKind = 7
+	UsageEventKind_USAGE_EVENT_KIND_INCLUDED_IN_PRO_PLUS UsageEventKind = 8
+	UsageEventKind_USAGE_EVENT_KIND_INCLUDED_IN_ULTRA    UsageEventKind = 9
+	UsageEventKind_USAGE_EVENT_KIND_FREE_CREDIT          UsageEventKind = 10
+)
+
+// Enum value maps for UsageEventKind.
+var (
+	UsageEventKind_name = map[int32]string{
+		0:  "USAGE_EVENT_KIND_UNSPECIFIED",
+		1:  "USAGE_EVENT_KIND_USAGE_BASED",
+		2:  "USAGE_EVENT_KIND_USER_API_KEY",
+		3:  "USAGE_EVENT_KIND_INCLUDED_IN_PRO",
+		4:  "USAGE_EVENT_KIND_INCLUDED_IN_BUSINESS",
+		5:  "USAGE_EVENT_KIND_ERRORED_NOT_CHARGED",
+		6:  "USAGE_EVENT_KIND_ABORTED_NOT_CHARGED",
+		7:  "USAGE_EVENT_KIND_CUSTOM_SUBSCRIPTION",
+		8:  "USAGE_EVENT_KIND_INCLUDED_IN_PRO_PLUS",
+		9:  "USAGE_EVENT_KIND_INCLUDED_IN_ULTRA",
+		10: "USAGE_EVENT_KIND_FREE_CREDIT",
+	}
+	UsageEventKind_value = map[string]int32{
+		"USAGE_EVENT_KIND_UNSPECIFIED":          0,
+		"USAGE_EVENT_KIND_USAGE_BASED":          1,
+		"USAGE_EVENT_KIND_USER_API_KEY":         2,
+		"USAGE_EVENT_KIND_INCLUDED_IN_PRO":      3,
+		"USAGE_EVENT_KIND_INCLUDED_IN_BUSINESS": 4,
+		"USAGE_EVENT_KIND_ERRORED_NOT_CHARGED":  5,
+		"USAGE_EVENT_KIND_ABORTED_NOT_CHARGED":  6,
+		"USAGE_EVENT_KIND_CUSTOM_SUBSCRIPTION":  7,
+		"USAGE_EVENT_KIND_INCLUDED_IN_PRO_PLUS": 8,
+		"USAGE_EVENT_KIND_INCLUDED_IN_ULTRA":    9,
+		"USAGE_EVENT_KIND_FREE_CREDIT":          10,
+	}
+)
+
+func (x UsageEventKind) Enum() *UsageEventKind {
+	p := new(UsageEventKind)
+	*p = x
+	return p
+}
+
+func (x UsageEventKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (UsageEventKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_cursor_usage_proto_enumTypes[0].Descriptor()
+}
+
+func (UsageEventKind) Type() protoreflect.EnumType {
+	return &file_cursor_usage_proto_enumTypes[0]
+}
+
+func (x UsageEventKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use UsageEventKind.Descriptor instead.
+func (UsageEventKind) EnumDescriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{0}
+}
 
 type GetCurrentPeriodUsageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1390,6 +1466,628 @@ func (x *GetUsageLimitPolicyStatusResponse) GetCurrentOnDemandLimitCents() int64
 	return 0
 }
 
+type GetFilteredUsageEventsRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	TeamId                int32                  `protobuf:"varint,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	StartDate             *int64                 `protobuf:"varint,2,opt,name=start_date,json=startDate,proto3,oneof" json:"start_date,omitempty"`
+	EndDate               *int64                 `protobuf:"varint,3,opt,name=end_date,json=endDate,proto3,oneof" json:"end_date,omitempty"`
+	UserId                *int32                 `protobuf:"varint,4,opt,name=user_id,json=userId,proto3,oneof" json:"user_id,omitempty"`
+	ModelId               *string                `protobuf:"bytes,5,opt,name=model_id,json=modelId,proto3,oneof" json:"model_id,omitempty"`
+	Page                  *int32                 `protobuf:"varint,6,opt,name=page,proto3,oneof" json:"page,omitempty"`
+	PageSize              *int32                 `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3,oneof" json:"page_size,omitempty"`
+	ServiceAccountId      *string                `protobuf:"bytes,8,opt,name=service_account_id,json=serviceAccountId,proto3,oneof" json:"service_account_id,omitempty"`
+	CloudAgentId          *string                `protobuf:"bytes,9,opt,name=cloud_agent_id,json=cloudAgentId,proto3,oneof" json:"cloud_agent_id,omitempty"`
+	AutomationId          *string                `protobuf:"bytes,10,opt,name=automation_id,json=automationId,proto3,oneof" json:"automation_id,omitempty"`
+	AutomationManagedType *string                `protobuf:"bytes,11,opt,name=automation_managed_type,json=automationManagedType,proto3,oneof" json:"automation_managed_type,omitempty"`
+	ClientType            *string                `protobuf:"bytes,12,opt,name=client_type,json=clientType,proto3,oneof" json:"client_type,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *GetFilteredUsageEventsRequest) Reset() {
+	*x = GetFilteredUsageEventsRequest{}
+	mi := &file_cursor_usage_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFilteredUsageEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFilteredUsageEventsRequest) ProtoMessage() {}
+
+func (x *GetFilteredUsageEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFilteredUsageEventsRequest.ProtoReflect.Descriptor instead.
+func (*GetFilteredUsageEventsRequest) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetFilteredUsageEventsRequest) GetTeamId() int32 {
+	if x != nil {
+		return x.TeamId
+	}
+	return 0
+}
+
+func (x *GetFilteredUsageEventsRequest) GetStartDate() int64 {
+	if x != nil && x.StartDate != nil {
+		return *x.StartDate
+	}
+	return 0
+}
+
+func (x *GetFilteredUsageEventsRequest) GetEndDate() int64 {
+	if x != nil && x.EndDate != nil {
+		return *x.EndDate
+	}
+	return 0
+}
+
+func (x *GetFilteredUsageEventsRequest) GetUserId() int32 {
+	if x != nil && x.UserId != nil {
+		return *x.UserId
+	}
+	return 0
+}
+
+func (x *GetFilteredUsageEventsRequest) GetModelId() string {
+	if x != nil && x.ModelId != nil {
+		return *x.ModelId
+	}
+	return ""
+}
+
+func (x *GetFilteredUsageEventsRequest) GetPage() int32 {
+	if x != nil && x.Page != nil {
+		return *x.Page
+	}
+	return 0
+}
+
+func (x *GetFilteredUsageEventsRequest) GetPageSize() int32 {
+	if x != nil && x.PageSize != nil {
+		return *x.PageSize
+	}
+	return 0
+}
+
+func (x *GetFilteredUsageEventsRequest) GetServiceAccountId() string {
+	if x != nil && x.ServiceAccountId != nil {
+		return *x.ServiceAccountId
+	}
+	return ""
+}
+
+func (x *GetFilteredUsageEventsRequest) GetCloudAgentId() string {
+	if x != nil && x.CloudAgentId != nil {
+		return *x.CloudAgentId
+	}
+	return ""
+}
+
+func (x *GetFilteredUsageEventsRequest) GetAutomationId() string {
+	if x != nil && x.AutomationId != nil {
+		return *x.AutomationId
+	}
+	return ""
+}
+
+func (x *GetFilteredUsageEventsRequest) GetAutomationManagedType() string {
+	if x != nil && x.AutomationManagedType != nil {
+		return *x.AutomationManagedType
+	}
+	return ""
+}
+
+func (x *GetFilteredUsageEventsRequest) GetClientType() string {
+	if x != nil && x.ClientType != nil {
+		return *x.ClientType
+	}
+	return ""
+}
+
+type GetFilteredUsageEventsResponse struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	UsageEvents           []*UsageEvent          `protobuf:"bytes,1,rep,name=usage_events,json=usageEvents,proto3" json:"usage_events,omitempty"`
+	TotalUsageEventsCount int32                  `protobuf:"varint,2,opt,name=total_usage_events_count,json=totalUsageEventsCount,proto3" json:"total_usage_events_count,omitempty"`
+	UsageEventsDisplay    []*UsageEventDisplay   `protobuf:"bytes,3,rep,name=usage_events_display,json=usageEventsDisplay,proto3" json:"usage_events_display,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *GetFilteredUsageEventsResponse) Reset() {
+	*x = GetFilteredUsageEventsResponse{}
+	mi := &file_cursor_usage_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFilteredUsageEventsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFilteredUsageEventsResponse) ProtoMessage() {}
+
+func (x *GetFilteredUsageEventsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFilteredUsageEventsResponse.ProtoReflect.Descriptor instead.
+func (*GetFilteredUsageEventsResponse) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetFilteredUsageEventsResponse) GetUsageEvents() []*UsageEvent {
+	if x != nil {
+		return x.UsageEvents
+	}
+	return nil
+}
+
+func (x *GetFilteredUsageEventsResponse) GetTotalUsageEventsCount() int32 {
+	if x != nil {
+		return x.TotalUsageEventsCount
+	}
+	return 0
+}
+
+func (x *GetFilteredUsageEventsResponse) GetUsageEventsDisplay() []*UsageEventDisplay {
+	if x != nil {
+		return x.UsageEventsDisplay
+	}
+	return nil
+}
+
+// UsageEvent is the raw per-request record. `details` is a 17-way
+// oneof (chat / composer / cmd_k / fast_apply / …) that our HTTP
+// surface currently doesn't need — the UsageEventDisplay projection
+// carries everything the /v1/usage/events table renders.
+type UsageEvent struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// details = 2 skipped — 17-way discriminated union, ~200 nested
+	// messages we don't project into the HTTP surface. Add back when
+	// a downstream needs per-tool breakdown.
+	SubscriptionProductId *string  `protobuf:"bytes,3,opt,name=subscription_product_id,json=subscriptionProductId,proto3,oneof" json:"subscription_product_id,omitempty"`
+	UsagePriceId          *string  `protobuf:"bytes,4,opt,name=usage_price_id,json=usagePriceId,proto3,oneof" json:"usage_price_id,omitempty"`
+	IsSlow                bool     `protobuf:"varint,5,opt,name=is_slow,json=isSlow,proto3" json:"is_slow,omitempty"`
+	Status                string   `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	OwningUser            *string  `protobuf:"bytes,7,opt,name=owning_user,json=owningUser,proto3,oneof" json:"owning_user,omitempty"`
+	OwningTeam            *string  `protobuf:"bytes,8,opt,name=owning_team,json=owningTeam,proto3,oneof" json:"owning_team,omitempty"`
+	PriceCents            *float32 `protobuf:"fixed32,9,opt,name=price_cents,json=priceCents,proto3,oneof" json:"price_cents,omitempty"`
+	TeamMembershipType    *string  `protobuf:"bytes,10,opt,name=team_membership_type,json=teamMembershipType,proto3,oneof" json:"team_membership_type,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *UsageEvent) Reset() {
+	*x = UsageEvent{}
+	mi := &file_cursor_usage_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageEvent) ProtoMessage() {}
+
+func (x *UsageEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageEvent.ProtoReflect.Descriptor instead.
+func (*UsageEvent) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *UsageEvent) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetSubscriptionProductId() string {
+	if x != nil && x.SubscriptionProductId != nil {
+		return *x.SubscriptionProductId
+	}
+	return ""
+}
+
+func (x *UsageEvent) GetUsagePriceId() string {
+	if x != nil && x.UsagePriceId != nil {
+		return *x.UsagePriceId
+	}
+	return ""
+}
+
+func (x *UsageEvent) GetIsSlow() bool {
+	if x != nil {
+		return x.IsSlow
+	}
+	return false
+}
+
+func (x *UsageEvent) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *UsageEvent) GetOwningUser() string {
+	if x != nil && x.OwningUser != nil {
+		return *x.OwningUser
+	}
+	return ""
+}
+
+func (x *UsageEvent) GetOwningTeam() string {
+	if x != nil && x.OwningTeam != nil {
+		return *x.OwningTeam
+	}
+	return ""
+}
+
+func (x *UsageEvent) GetPriceCents() float32 {
+	if x != nil && x.PriceCents != nil {
+		return *x.PriceCents
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetTeamMembershipType() string {
+	if x != nil && x.TeamMembershipType != nil {
+		return *x.TeamMembershipType
+	}
+	return ""
+}
+
+// UsageEventDisplay is the UI-ready projection Cursor's own dashboard
+// consumes. Fields we care about on cursor2api's /usage table:
+// timestamp / model / kind (enum) / token_usage / requests_costs.
+type UsageEventDisplay struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp              int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Model                  string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	Kind                   UsageEventKind         `protobuf:"varint,3,opt,name=kind,proto3,enum=cursor_usage.UsageEventKind" json:"kind,omitempty"`
+	CustomSubscriptionName *string                `protobuf:"bytes,4,opt,name=custom_subscription_name,json=customSubscriptionName,proto3,oneof" json:"custom_subscription_name,omitempty"`
+	MaxMode                bool                   `protobuf:"varint,5,opt,name=max_mode,json=maxMode,proto3" json:"max_mode,omitempty"`
+	RequestsCosts          float32                `protobuf:"fixed32,6,opt,name=requests_costs,json=requestsCosts,proto3" json:"requests_costs,omitempty"`
+	UsageBasedCosts        *string                `protobuf:"bytes,7,opt,name=usage_based_costs,json=usageBasedCosts,proto3,oneof" json:"usage_based_costs,omitempty"`
+	IsTokenBasedCall       *bool                  `protobuf:"varint,8,opt,name=is_token_based_call,json=isTokenBasedCall,proto3,oneof" json:"is_token_based_call,omitempty"`
+	TokenUsage             *TokenUsage            `protobuf:"bytes,9,opt,name=token_usage,json=tokenUsage,proto3,oneof" json:"token_usage,omitempty"`
+	OwningUser             *string                `protobuf:"bytes,10,opt,name=owning_user,json=owningUser,proto3,oneof" json:"owning_user,omitempty"`
+	OwningTeam             *string                `protobuf:"bytes,11,opt,name=owning_team,json=owningTeam,proto3,oneof" json:"owning_team,omitempty"`
+	UserEmail              *string                `protobuf:"bytes,12,opt,name=user_email,json=userEmail,proto3,oneof" json:"user_email,omitempty"`
+	CursorTokenFee         *float32               `protobuf:"fixed32,13,opt,name=cursor_token_fee,json=cursorTokenFee,proto3,oneof" json:"cursor_token_fee,omitempty"`
+	IsChargeable           *bool                  `protobuf:"varint,14,opt,name=is_chargeable,json=isChargeable,proto3,oneof" json:"is_chargeable,omitempty"`
+	ServiceAccountName     *string                `protobuf:"bytes,15,opt,name=service_account_name,json=serviceAccountName,proto3,oneof" json:"service_account_name,omitempty"`
+	ServiceAccountId       *string                `protobuf:"bytes,16,opt,name=service_account_id,json=serviceAccountId,proto3,oneof" json:"service_account_id,omitempty"`
+	IsHeadless             *bool                  `protobuf:"varint,17,opt,name=is_headless,json=isHeadless,proto3,oneof" json:"is_headless,omitempty"`
+	ChargedCents           *float32               `protobuf:"fixed32,18,opt,name=charged_cents,json=chargedCents,proto3,oneof" json:"charged_cents,omitempty"`
+	CloudAgentId           *string                `protobuf:"bytes,19,opt,name=cloud_agent_id,json=cloudAgentId,proto3,oneof" json:"cloud_agent_id,omitempty"`
+	AutomationId           *string                `protobuf:"bytes,20,opt,name=automation_id,json=automationId,proto3,oneof" json:"automation_id,omitempty"`
+	AutomationManagedType  *string                `protobuf:"bytes,21,opt,name=automation_managed_type,json=automationManagedType,proto3,oneof" json:"automation_managed_type,omitempty"`
+	ClientType             *string                `protobuf:"bytes,22,opt,name=client_type,json=clientType,proto3,oneof" json:"client_type,omitempty"`
+	ConversationId         *string                `protobuf:"bytes,23,opt,name=conversation_id,json=conversationId,proto3,oneof" json:"conversation_id,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *UsageEventDisplay) Reset() {
+	*x = UsageEventDisplay{}
+	mi := &file_cursor_usage_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageEventDisplay) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageEventDisplay) ProtoMessage() {}
+
+func (x *UsageEventDisplay) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageEventDisplay.ProtoReflect.Descriptor instead.
+func (*UsageEventDisplay) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UsageEventDisplay) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *UsageEventDisplay) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetKind() UsageEventKind {
+	if x != nil {
+		return x.Kind
+	}
+	return UsageEventKind_USAGE_EVENT_KIND_UNSPECIFIED
+}
+
+func (x *UsageEventDisplay) GetCustomSubscriptionName() string {
+	if x != nil && x.CustomSubscriptionName != nil {
+		return *x.CustomSubscriptionName
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetMaxMode() bool {
+	if x != nil {
+		return x.MaxMode
+	}
+	return false
+}
+
+func (x *UsageEventDisplay) GetRequestsCosts() float32 {
+	if x != nil {
+		return x.RequestsCosts
+	}
+	return 0
+}
+
+func (x *UsageEventDisplay) GetUsageBasedCosts() string {
+	if x != nil && x.UsageBasedCosts != nil {
+		return *x.UsageBasedCosts
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetIsTokenBasedCall() bool {
+	if x != nil && x.IsTokenBasedCall != nil {
+		return *x.IsTokenBasedCall
+	}
+	return false
+}
+
+func (x *UsageEventDisplay) GetTokenUsage() *TokenUsage {
+	if x != nil {
+		return x.TokenUsage
+	}
+	return nil
+}
+
+func (x *UsageEventDisplay) GetOwningUser() string {
+	if x != nil && x.OwningUser != nil {
+		return *x.OwningUser
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetOwningTeam() string {
+	if x != nil && x.OwningTeam != nil {
+		return *x.OwningTeam
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetUserEmail() string {
+	if x != nil && x.UserEmail != nil {
+		return *x.UserEmail
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetCursorTokenFee() float32 {
+	if x != nil && x.CursorTokenFee != nil {
+		return *x.CursorTokenFee
+	}
+	return 0
+}
+
+func (x *UsageEventDisplay) GetIsChargeable() bool {
+	if x != nil && x.IsChargeable != nil {
+		return *x.IsChargeable
+	}
+	return false
+}
+
+func (x *UsageEventDisplay) GetServiceAccountName() string {
+	if x != nil && x.ServiceAccountName != nil {
+		return *x.ServiceAccountName
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetServiceAccountId() string {
+	if x != nil && x.ServiceAccountId != nil {
+		return *x.ServiceAccountId
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetIsHeadless() bool {
+	if x != nil && x.IsHeadless != nil {
+		return *x.IsHeadless
+	}
+	return false
+}
+
+func (x *UsageEventDisplay) GetChargedCents() float32 {
+	if x != nil && x.ChargedCents != nil {
+		return *x.ChargedCents
+	}
+	return 0
+}
+
+func (x *UsageEventDisplay) GetCloudAgentId() string {
+	if x != nil && x.CloudAgentId != nil {
+		return *x.CloudAgentId
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetAutomationId() string {
+	if x != nil && x.AutomationId != nil {
+		return *x.AutomationId
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetAutomationManagedType() string {
+	if x != nil && x.AutomationManagedType != nil {
+		return *x.AutomationManagedType
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetClientType() string {
+	if x != nil && x.ClientType != nil {
+		return *x.ClientType
+	}
+	return ""
+}
+
+func (x *UsageEventDisplay) GetConversationId() string {
+	if x != nil && x.ConversationId != nil {
+		return *x.ConversationId
+	}
+	return ""
+}
+
+type TokenUsage struct {
+	state                          protoimpl.MessageState `protogen:"open.v1"`
+	InputTokens                    int32                  `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens                   int32                  `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	CacheWriteTokens               int32                  `protobuf:"varint,3,opt,name=cache_write_tokens,json=cacheWriteTokens,proto3" json:"cache_write_tokens,omitempty"`
+	CacheReadTokens                int32                  `protobuf:"varint,4,opt,name=cache_read_tokens,json=cacheReadTokens,proto3" json:"cache_read_tokens,omitempty"`
+	TotalCents                     float32                `protobuf:"fixed32,5,opt,name=total_cents,json=totalCents,proto3" json:"total_cents,omitempty"`
+	DiscountPercentOff             *int32                 `protobuf:"varint,6,opt,name=discount_percent_off,json=discountPercentOff,proto3,oneof" json:"discount_percent_off,omitempty"`
+	EnterpriseUsageDiscountPercent *float32               `protobuf:"fixed32,7,opt,name=enterprise_usage_discount_percent,json=enterpriseUsageDiscountPercent,proto3,oneof" json:"enterprise_usage_discount_percent,omitempty"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
+}
+
+func (x *TokenUsage) Reset() {
+	*x = TokenUsage{}
+	mi := &file_cursor_usage_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TokenUsage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TokenUsage) ProtoMessage() {}
+
+func (x *TokenUsage) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TokenUsage.ProtoReflect.Descriptor instead.
+func (*TokenUsage) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *TokenUsage) GetInputTokens() int32 {
+	if x != nil {
+		return x.InputTokens
+	}
+	return 0
+}
+
+func (x *TokenUsage) GetOutputTokens() int32 {
+	if x != nil {
+		return x.OutputTokens
+	}
+	return 0
+}
+
+func (x *TokenUsage) GetCacheWriteTokens() int32 {
+	if x != nil {
+		return x.CacheWriteTokens
+	}
+	return 0
+}
+
+func (x *TokenUsage) GetCacheReadTokens() int32 {
+	if x != nil {
+		return x.CacheReadTokens
+	}
+	return 0
+}
+
+func (x *TokenUsage) GetTotalCents() float32 {
+	if x != nil {
+		return x.TotalCents
+	}
+	return 0
+}
+
+func (x *TokenUsage) GetDiscountPercentOff() int32 {
+	if x != nil && x.DiscountPercentOff != nil {
+		return *x.DiscountPercentOff
+	}
+	return 0
+}
+
+func (x *TokenUsage) GetEnterpriseUsageDiscountPercent() float32 {
+	if x != nil && x.EnterpriseUsageDiscountPercent != nil {
+		return *x.EnterpriseUsageDiscountPercent
+	}
+	return 0
+}
+
 type GetCurrentPeriodUsageResponse_PlanUsage struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	TotalSpend       int32                  `protobuf:"varint,1,opt,name=total_spend,json=totalSpend,proto3" json:"total_spend,omitempty"`
@@ -1412,7 +2110,7 @@ type GetCurrentPeriodUsageResponse_PlanUsage struct {
 
 func (x *GetCurrentPeriodUsageResponse_PlanUsage) Reset() {
 	*x = GetCurrentPeriodUsageResponse_PlanUsage{}
-	mi := &file_cursor_usage_proto_msgTypes[17]
+	mi := &file_cursor_usage_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1424,7 +2122,7 @@ func (x *GetCurrentPeriodUsageResponse_PlanUsage) String() string {
 func (*GetCurrentPeriodUsageResponse_PlanUsage) ProtoMessage() {}
 
 func (x *GetCurrentPeriodUsageResponse_PlanUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[17]
+	mi := &file_cursor_usage_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1557,7 +2255,7 @@ type GetCurrentPeriodUsageResponse_SpendLimitUsage struct {
 
 func (x *GetCurrentPeriodUsageResponse_SpendLimitUsage) Reset() {
 	*x = GetCurrentPeriodUsageResponse_SpendLimitUsage{}
-	mi := &file_cursor_usage_proto_msgTypes[18]
+	mi := &file_cursor_usage_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1569,7 +2267,7 @@ func (x *GetCurrentPeriodUsageResponse_SpendLimitUsage) String() string {
 func (*GetCurrentPeriodUsageResponse_SpendLimitUsage) ProtoMessage() {}
 
 func (x *GetCurrentPeriodUsageResponse_SpendLimitUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[18]
+	mi := &file_cursor_usage_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1672,7 +2370,7 @@ type GetCurrentPeriodUsageResponse_FreeBestOfNPromotion struct {
 
 func (x *GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) Reset() {
 	*x = GetCurrentPeriodUsageResponse_FreeBestOfNPromotion{}
-	mi := &file_cursor_usage_proto_msgTypes[19]
+	mi := &file_cursor_usage_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1684,7 +2382,7 @@ func (x *GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) String() string {
 func (*GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) ProtoMessage() {}
 
 func (x *GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[19]
+	mi := &file_cursor_usage_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1730,7 +2428,7 @@ type GetAggregatedUsageEventsResponse_ModelUsageAggregation struct {
 
 func (x *GetAggregatedUsageEventsResponse_ModelUsageAggregation) Reset() {
 	*x = GetAggregatedUsageEventsResponse_ModelUsageAggregation{}
-	mi := &file_cursor_usage_proto_msgTypes[20]
+	mi := &file_cursor_usage_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1742,7 +2440,7 @@ func (x *GetAggregatedUsageEventsResponse_ModelUsageAggregation) String() string
 func (*GetAggregatedUsageEventsResponse_ModelUsageAggregation) ProtoMessage() {}
 
 func (x *GetAggregatedUsageEventsResponse_ModelUsageAggregation) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[20]
+	mi := &file_cursor_usage_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1845,7 +2543,7 @@ type GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus struct {
 
 func (x *GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) Reset() {
 	*x = GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus{}
-	mi := &file_cursor_usage_proto_msgTypes[21]
+	mi := &file_cursor_usage_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1857,7 +2555,7 @@ func (x *GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) Stri
 func (*GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) ProtoMessage() {}
 
 func (x *GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[21]
+	mi := &file_cursor_usage_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2331,7 +3029,138 @@ const file_cursor_usage_proto_rawDesc = "" +
 	"\"_recommended_on_demand_limit_centsB\x16\n" +
 	"\x14_on_demand_min_centsB\x16\n" +
 	"\x14_on_demand_max_centsB \n" +
-	"\x1e_current_on_demand_limit_centsB8Z6github.com/router-for-me/cursor-proto/usage/pb;usagepbb\x06proto3"
+	"\x1e_current_on_demand_limit_cents\"\x94\x05\n" +
+	"\x1dGetFilteredUsageEventsRequest\x12\x17\n" +
+	"\ateam_id\x18\x01 \x01(\x05R\x06teamId\x12\"\n" +
+	"\n" +
+	"start_date\x18\x02 \x01(\x03H\x00R\tstartDate\x88\x01\x01\x12\x1e\n" +
+	"\bend_date\x18\x03 \x01(\x03H\x01R\aendDate\x88\x01\x01\x12\x1c\n" +
+	"\auser_id\x18\x04 \x01(\x05H\x02R\x06userId\x88\x01\x01\x12\x1e\n" +
+	"\bmodel_id\x18\x05 \x01(\tH\x03R\amodelId\x88\x01\x01\x12\x17\n" +
+	"\x04page\x18\x06 \x01(\x05H\x04R\x04page\x88\x01\x01\x12 \n" +
+	"\tpage_size\x18\a \x01(\x05H\x05R\bpageSize\x88\x01\x01\x121\n" +
+	"\x12service_account_id\x18\b \x01(\tH\x06R\x10serviceAccountId\x88\x01\x01\x12)\n" +
+	"\x0ecloud_agent_id\x18\t \x01(\tH\aR\fcloudAgentId\x88\x01\x01\x12(\n" +
+	"\rautomation_id\x18\n" +
+	" \x01(\tH\bR\fautomationId\x88\x01\x01\x12;\n" +
+	"\x17automation_managed_type\x18\v \x01(\tH\tR\x15automationManagedType\x88\x01\x01\x12$\n" +
+	"\vclient_type\x18\f \x01(\tH\n" +
+	"R\n" +
+	"clientType\x88\x01\x01B\r\n" +
+	"\v_start_dateB\v\n" +
+	"\t_end_dateB\n" +
+	"\n" +
+	"\b_user_idB\v\n" +
+	"\t_model_idB\a\n" +
+	"\x05_pageB\f\n" +
+	"\n" +
+	"_page_sizeB\x15\n" +
+	"\x13_service_account_idB\x11\n" +
+	"\x0f_cloud_agent_idB\x10\n" +
+	"\x0e_automation_idB\x1a\n" +
+	"\x18_automation_managed_typeB\x0e\n" +
+	"\f_client_type\"\xe9\x01\n" +
+	"\x1eGetFilteredUsageEventsResponse\x12;\n" +
+	"\fusage_events\x18\x01 \x03(\v2\x18.cursor_usage.UsageEventR\vusageEvents\x127\n" +
+	"\x18total_usage_events_count\x18\x02 \x01(\x05R\x15totalUsageEventsCount\x12Q\n" +
+	"\x14usage_events_display\x18\x03 \x03(\v2\x1f.cursor_usage.UsageEventDisplayR\x12usageEventsDisplay\"\xe4\x03\n" +
+	"\n" +
+	"UsageEvent\x12\x1c\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12;\n" +
+	"\x17subscription_product_id\x18\x03 \x01(\tH\x00R\x15subscriptionProductId\x88\x01\x01\x12)\n" +
+	"\x0eusage_price_id\x18\x04 \x01(\tH\x01R\fusagePriceId\x88\x01\x01\x12\x17\n" +
+	"\ais_slow\x18\x05 \x01(\bR\x06isSlow\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\x12$\n" +
+	"\vowning_user\x18\a \x01(\tH\x02R\n" +
+	"owningUser\x88\x01\x01\x12$\n" +
+	"\vowning_team\x18\b \x01(\tH\x03R\n" +
+	"owningTeam\x88\x01\x01\x12$\n" +
+	"\vprice_cents\x18\t \x01(\x02H\x04R\n" +
+	"priceCents\x88\x01\x01\x125\n" +
+	"\x14team_membership_type\x18\n" +
+	" \x01(\tH\x05R\x12teamMembershipType\x88\x01\x01B\x1a\n" +
+	"\x18_subscription_product_idB\x11\n" +
+	"\x0f_usage_price_idB\x0e\n" +
+	"\f_owning_userB\x0e\n" +
+	"\f_owning_teamB\x0e\n" +
+	"\f_price_centsB\x17\n" +
+	"\x15_team_membership_type\"\xf0\n" +
+	"\n" +
+	"\x11UsageEventDisplay\x12\x1c\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x120\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x1c.cursor_usage.UsageEventKindR\x04kind\x12=\n" +
+	"\x18custom_subscription_name\x18\x04 \x01(\tH\x00R\x16customSubscriptionName\x88\x01\x01\x12\x19\n" +
+	"\bmax_mode\x18\x05 \x01(\bR\amaxMode\x12%\n" +
+	"\x0erequests_costs\x18\x06 \x01(\x02R\rrequestsCosts\x12/\n" +
+	"\x11usage_based_costs\x18\a \x01(\tH\x01R\x0fusageBasedCosts\x88\x01\x01\x122\n" +
+	"\x13is_token_based_call\x18\b \x01(\bH\x02R\x10isTokenBasedCall\x88\x01\x01\x12>\n" +
+	"\vtoken_usage\x18\t \x01(\v2\x18.cursor_usage.TokenUsageH\x03R\n" +
+	"tokenUsage\x88\x01\x01\x12$\n" +
+	"\vowning_user\x18\n" +
+	" \x01(\tH\x04R\n" +
+	"owningUser\x88\x01\x01\x12$\n" +
+	"\vowning_team\x18\v \x01(\tH\x05R\n" +
+	"owningTeam\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"user_email\x18\f \x01(\tH\x06R\tuserEmail\x88\x01\x01\x12-\n" +
+	"\x10cursor_token_fee\x18\r \x01(\x02H\aR\x0ecursorTokenFee\x88\x01\x01\x12(\n" +
+	"\ris_chargeable\x18\x0e \x01(\bH\bR\fisChargeable\x88\x01\x01\x125\n" +
+	"\x14service_account_name\x18\x0f \x01(\tH\tR\x12serviceAccountName\x88\x01\x01\x121\n" +
+	"\x12service_account_id\x18\x10 \x01(\tH\n" +
+	"R\x10serviceAccountId\x88\x01\x01\x12$\n" +
+	"\vis_headless\x18\x11 \x01(\bH\vR\n" +
+	"isHeadless\x88\x01\x01\x12(\n" +
+	"\rcharged_cents\x18\x12 \x01(\x02H\fR\fchargedCents\x88\x01\x01\x12)\n" +
+	"\x0ecloud_agent_id\x18\x13 \x01(\tH\rR\fcloudAgentId\x88\x01\x01\x12(\n" +
+	"\rautomation_id\x18\x14 \x01(\tH\x0eR\fautomationId\x88\x01\x01\x12;\n" +
+	"\x17automation_managed_type\x18\x15 \x01(\tH\x0fR\x15automationManagedType\x88\x01\x01\x12$\n" +
+	"\vclient_type\x18\x16 \x01(\tH\x10R\n" +
+	"clientType\x88\x01\x01\x12,\n" +
+	"\x0fconversation_id\x18\x17 \x01(\tH\x11R\x0econversationId\x88\x01\x01B\x1b\n" +
+	"\x19_custom_subscription_nameB\x14\n" +
+	"\x12_usage_based_costsB\x16\n" +
+	"\x14_is_token_based_callB\x0e\n" +
+	"\f_token_usageB\x0e\n" +
+	"\f_owning_userB\x0e\n" +
+	"\f_owning_teamB\r\n" +
+	"\v_user_emailB\x13\n" +
+	"\x11_cursor_token_feeB\x10\n" +
+	"\x0e_is_chargeableB\x17\n" +
+	"\x15_service_account_nameB\x15\n" +
+	"\x13_service_account_idB\x0e\n" +
+	"\f_is_headlessB\x10\n" +
+	"\x0e_charged_centsB\x11\n" +
+	"\x0f_cloud_agent_idB\x10\n" +
+	"\x0e_automation_idB\x1a\n" +
+	"\x18_automation_managed_typeB\x0e\n" +
+	"\f_client_typeB\x12\n" +
+	"\x10_conversation_id\"\x95\x03\n" +
+	"\n" +
+	"TokenUsage\x12!\n" +
+	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
+	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12,\n" +
+	"\x12cache_write_tokens\x18\x03 \x01(\x05R\x10cacheWriteTokens\x12*\n" +
+	"\x11cache_read_tokens\x18\x04 \x01(\x05R\x0fcacheReadTokens\x12\x1f\n" +
+	"\vtotal_cents\x18\x05 \x01(\x02R\n" +
+	"totalCents\x125\n" +
+	"\x14discount_percent_off\x18\x06 \x01(\x05H\x00R\x12discountPercentOff\x88\x01\x01\x12N\n" +
+	"!enterprise_usage_discount_percent\x18\a \x01(\x02H\x01R\x1eenterpriseUsageDiscountPercent\x88\x01\x01B\x17\n" +
+	"\x15_discount_percent_offB$\n" +
+	"\"_enterprise_usage_discount_percent*\xbb\x03\n" +
+	"\x0eUsageEventKind\x12 \n" +
+	"\x1cUSAGE_EVENT_KIND_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cUSAGE_EVENT_KIND_USAGE_BASED\x10\x01\x12!\n" +
+	"\x1dUSAGE_EVENT_KIND_USER_API_KEY\x10\x02\x12$\n" +
+	" USAGE_EVENT_KIND_INCLUDED_IN_PRO\x10\x03\x12)\n" +
+	"%USAGE_EVENT_KIND_INCLUDED_IN_BUSINESS\x10\x04\x12(\n" +
+	"$USAGE_EVENT_KIND_ERRORED_NOT_CHARGED\x10\x05\x12(\n" +
+	"$USAGE_EVENT_KIND_ABORTED_NOT_CHARGED\x10\x06\x12(\n" +
+	"$USAGE_EVENT_KIND_CUSTOM_SUBSCRIPTION\x10\a\x12)\n" +
+	"%USAGE_EVENT_KIND_INCLUDED_IN_PRO_PLUS\x10\b\x12&\n" +
+	"\"USAGE_EVENT_KIND_INCLUDED_IN_ULTRA\x10\t\x12 \n" +
+	"\x1cUSAGE_EVENT_KIND_FREE_CREDIT\x10\n" +
+	"B8Z6github.com/router-for-me/cursor-proto/usage/pb;usagepbb\x06proto3"
 
 var (
 	file_cursor_usage_proto_rawDescOnce sync.Once
@@ -2345,47 +3174,58 @@ func file_cursor_usage_proto_rawDescGZIP() []byte {
 	return file_cursor_usage_proto_rawDescData
 }
 
-var file_cursor_usage_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_cursor_usage_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_cursor_usage_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_cursor_usage_proto_goTypes = []any{
-	(*GetCurrentPeriodUsageRequest)(nil),                                      // 0: cursor_usage.GetCurrentPeriodUsageRequest
-	(*GetCurrentPeriodUsageResponse)(nil),                                     // 1: cursor_usage.GetCurrentPeriodUsageResponse
-	(*GetCurrentBillingCycleRequest)(nil),                                     // 2: cursor_usage.GetCurrentBillingCycleRequest
-	(*GetCurrentBillingCycleResponse)(nil),                                    // 3: cursor_usage.GetCurrentBillingCycleResponse
-	(*GetAggregatedUsageEventsRequest)(nil),                                   // 4: cursor_usage.GetAggregatedUsageEventsRequest
-	(*GetAggregatedUsageEventsResponse)(nil),                                  // 5: cursor_usage.GetAggregatedUsageEventsResponse
-	(*GetUsageBasedPremiumRequestsRequest)(nil),                               // 6: cursor_usage.GetUsageBasedPremiumRequestsRequest
-	(*GetUsageBasedPremiumRequestsResponse)(nil),                              // 7: cursor_usage.GetUsageBasedPremiumRequestsResponse
-	(*GetHardLimitRequest)(nil),                                               // 8: cursor_usage.GetHardLimitRequest
-	(*GetHardLimitResponse)(nil),                                              // 9: cursor_usage.GetHardLimitResponse
-	(*ActiveCreditGrant)(nil),                                                 // 10: cursor_usage.ActiveCreditGrant
-	(*GetUsageLimitStatusAndActiveGrantsRequest)(nil),                         // 11: cursor_usage.GetUsageLimitStatusAndActiveGrantsRequest
-	(*GetUsageLimitStatusAndActiveGrantsResponse)(nil),                        // 12: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse
-	(*GetMeRequest)(nil),                                                      // 13: cursor_usage.GetMeRequest
-	(*GetMeResponse)(nil),                                                     // 14: cursor_usage.GetMeResponse
-	(*GetUsageLimitPolicyStatusRequest)(nil),                                  // 15: cursor_usage.GetUsageLimitPolicyStatusRequest
-	(*GetUsageLimitPolicyStatusResponse)(nil),                                 // 16: cursor_usage.GetUsageLimitPolicyStatusResponse
-	(*GetCurrentPeriodUsageResponse_PlanUsage)(nil),                           // 17: cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
-	(*GetCurrentPeriodUsageResponse_SpendLimitUsage)(nil),                     // 18: cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
-	(*GetCurrentPeriodUsageResponse_FreeBestOfNPromotion)(nil),                // 19: cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
-	(*GetAggregatedUsageEventsResponse_ModelUsageAggregation)(nil),            // 20: cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
-	(*GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus)(nil), // 21: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
-	nil, // 22: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
-	nil, // 23: cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
+	(UsageEventKind)(0),                                                       // 0: cursor_usage.UsageEventKind
+	(*GetCurrentPeriodUsageRequest)(nil),                                      // 1: cursor_usage.GetCurrentPeriodUsageRequest
+	(*GetCurrentPeriodUsageResponse)(nil),                                     // 2: cursor_usage.GetCurrentPeriodUsageResponse
+	(*GetCurrentBillingCycleRequest)(nil),                                     // 3: cursor_usage.GetCurrentBillingCycleRequest
+	(*GetCurrentBillingCycleResponse)(nil),                                    // 4: cursor_usage.GetCurrentBillingCycleResponse
+	(*GetAggregatedUsageEventsRequest)(nil),                                   // 5: cursor_usage.GetAggregatedUsageEventsRequest
+	(*GetAggregatedUsageEventsResponse)(nil),                                  // 6: cursor_usage.GetAggregatedUsageEventsResponse
+	(*GetUsageBasedPremiumRequestsRequest)(nil),                               // 7: cursor_usage.GetUsageBasedPremiumRequestsRequest
+	(*GetUsageBasedPremiumRequestsResponse)(nil),                              // 8: cursor_usage.GetUsageBasedPremiumRequestsResponse
+	(*GetHardLimitRequest)(nil),                                               // 9: cursor_usage.GetHardLimitRequest
+	(*GetHardLimitResponse)(nil),                                              // 10: cursor_usage.GetHardLimitResponse
+	(*ActiveCreditGrant)(nil),                                                 // 11: cursor_usage.ActiveCreditGrant
+	(*GetUsageLimitStatusAndActiveGrantsRequest)(nil),                         // 12: cursor_usage.GetUsageLimitStatusAndActiveGrantsRequest
+	(*GetUsageLimitStatusAndActiveGrantsResponse)(nil),                        // 13: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse
+	(*GetMeRequest)(nil),                                                      // 14: cursor_usage.GetMeRequest
+	(*GetMeResponse)(nil),                                                     // 15: cursor_usage.GetMeResponse
+	(*GetUsageLimitPolicyStatusRequest)(nil),                                  // 16: cursor_usage.GetUsageLimitPolicyStatusRequest
+	(*GetUsageLimitPolicyStatusResponse)(nil),                                 // 17: cursor_usage.GetUsageLimitPolicyStatusResponse
+	(*GetFilteredUsageEventsRequest)(nil),                                     // 18: cursor_usage.GetFilteredUsageEventsRequest
+	(*GetFilteredUsageEventsResponse)(nil),                                    // 19: cursor_usage.GetFilteredUsageEventsResponse
+	(*UsageEvent)(nil),                                                        // 20: cursor_usage.UsageEvent
+	(*UsageEventDisplay)(nil),                                                 // 21: cursor_usage.UsageEventDisplay
+	(*TokenUsage)(nil),                                                        // 22: cursor_usage.TokenUsage
+	(*GetCurrentPeriodUsageResponse_PlanUsage)(nil),                           // 23: cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
+	(*GetCurrentPeriodUsageResponse_SpendLimitUsage)(nil),                     // 24: cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
+	(*GetCurrentPeriodUsageResponse_FreeBestOfNPromotion)(nil),                // 25: cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
+	(*GetAggregatedUsageEventsResponse_ModelUsageAggregation)(nil),            // 26: cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
+	(*GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus)(nil), // 27: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
+	nil, // 28: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
+	nil, // 29: cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
 }
 var file_cursor_usage_proto_depIdxs = []int32{
-	17, // 0: cursor_usage.GetCurrentPeriodUsageResponse.plan_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
-	18, // 1: cursor_usage.GetCurrentPeriodUsageResponse.spend_limit_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
-	19, // 2: cursor_usage.GetCurrentPeriodUsageResponse.free_best_of_n_promotion:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
-	20, // 3: cursor_usage.GetAggregatedUsageEventsResponse.aggregations:type_name -> cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
-	21, // 4: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.usage_limit_policy_status:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
-	10, // 5: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.active_grants:type_name -> cursor_usage.ActiveCreditGrant
-	23, // 6: cursor_usage.GetUsageLimitPolicyStatusResponse.features:type_name -> cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
-	22, // 7: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.features:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	23, // 0: cursor_usage.GetCurrentPeriodUsageResponse.plan_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
+	24, // 1: cursor_usage.GetCurrentPeriodUsageResponse.spend_limit_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
+	25, // 2: cursor_usage.GetCurrentPeriodUsageResponse.free_best_of_n_promotion:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
+	26, // 3: cursor_usage.GetAggregatedUsageEventsResponse.aggregations:type_name -> cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
+	27, // 4: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.usage_limit_policy_status:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
+	11, // 5: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.active_grants:type_name -> cursor_usage.ActiveCreditGrant
+	29, // 6: cursor_usage.GetUsageLimitPolicyStatusResponse.features:type_name -> cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
+	20, // 7: cursor_usage.GetFilteredUsageEventsResponse.usage_events:type_name -> cursor_usage.UsageEvent
+	21, // 8: cursor_usage.GetFilteredUsageEventsResponse.usage_events_display:type_name -> cursor_usage.UsageEventDisplay
+	0,  // 9: cursor_usage.UsageEventDisplay.kind:type_name -> cursor_usage.UsageEventKind
+	22, // 10: cursor_usage.UsageEventDisplay.token_usage:type_name -> cursor_usage.TokenUsage
+	28, // 11: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.features:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_cursor_usage_proto_init() }
@@ -2405,21 +3245,26 @@ func file_cursor_usage_proto_init() {
 	file_cursor_usage_proto_msgTypes[14].OneofWrappers = []any{}
 	file_cursor_usage_proto_msgTypes[16].OneofWrappers = []any{}
 	file_cursor_usage_proto_msgTypes[17].OneofWrappers = []any{}
-	file_cursor_usage_proto_msgTypes[18].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[19].OneofWrappers = []any{}
 	file_cursor_usage_proto_msgTypes[20].OneofWrappers = []any{}
 	file_cursor_usage_proto_msgTypes[21].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[22].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[23].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[25].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cursor_usage_proto_rawDesc), len(file_cursor_usage_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   24,
+			NumEnums:      1,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_cursor_usage_proto_goTypes,
 		DependencyIndexes: file_cursor_usage_proto_depIdxs,
+		EnumInfos:         file_cursor_usage_proto_enumTypes,
 		MessageInfos:      file_cursor_usage_proto_msgTypes,
 	}.Build()
 	File_cursor_usage_proto = out.File

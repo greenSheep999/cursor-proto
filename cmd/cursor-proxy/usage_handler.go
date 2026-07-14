@@ -6,6 +6,7 @@ package main
 //
 //	GET  /v1/usage             JSON snapshot (see usage.Snapshot)
 //	GET  /v1/usage/prometheus  Prometheus-style metrics
+//	GET  /v1/usage/events      Per-request event log (paginated)
 //
 // The handlers reuse the proxy's already-authenticated executor.Client, so
 // no additional auth material is needed.
@@ -15,10 +16,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/router-for-me/cursor-proto/executor"
 	"github.com/router-for-me/cursor-proto/usage"
+	usagepb "github.com/router-for-me/cursor-proto/usage/pb"
 )
 
 // usageHandler returns a JSON usage.Snapshot for the proxy's account.
@@ -125,4 +129,201 @@ func boolInt(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// -------- /v1/usage/events --------
+//
+// Per-request event log. Cursor's dashboard shows this as the
+// "Requests" table below the aggregate cards; cursor2api's /usage
+// page mirrors it. Paginated because a busy account produces
+// >1k events/day.
+//
+// Query parameters:
+//
+//	?since=<duration>   Go duration ("24h", "7d", "30d"). Default 24h.
+//	?limit=<int>        Page size. Default 100, max 500.
+//	?page=<int>         1-based page number. Default 1.
+//	?model=<string>     Exact model_id filter. Empty means all.
+
+const (
+	defaultEventsSinceWindow = 24 * time.Hour
+	maxEventsSinceWindow     = 30 * 24 * time.Hour
+	defaultEventsPageSize    = 100
+	maxEventsPageSize        = 500
+)
+
+// usageEventItem is the HTTP-facing projection of one UsageEventDisplay.
+// snake_case matches the rest of /v1/usage/*; the raw pb.go type is
+// camelCase (Go convention) so we spell fields out explicitly.
+type usageEventItem struct {
+	Timestamp        string     `json:"timestamp"`               // ISO 8601
+	TimestampMs      int64      `json:"timestamp_ms"`            // raw for sorting
+	Model            string     `json:"model"`
+	Kind             string     `json:"kind"`                    // enum name minus prefix
+	MaxMode          bool       `json:"max_mode,omitempty"`
+	RequestsCosts    float64    `json:"requests_costs,omitempty"`
+	UsageBasedCosts  string     `json:"usage_based_costs,omitempty"`
+	IsTokenBased     bool       `json:"is_token_based,omitempty"`
+	Tokens           *tokenBrk  `json:"tokens,omitempty"`
+	ChargedCents     float64    `json:"charged_cents,omitempty"`
+	IsChargeable     bool       `json:"is_chargeable,omitempty"`
+	ConversationID   string     `json:"conversation_id,omitempty"`
+	CloudAgentID     string     `json:"cloud_agent_id,omitempty"`
+	AutomationID     string     `json:"automation_id,omitempty"`
+	ClientType       string     `json:"client_type,omitempty"`
+	IsHeadless       bool       `json:"is_headless,omitempty"`
+	UserEmail        string     `json:"user_email,omitempty"`
+	ServiceAccount   string     `json:"service_account_name,omitempty"`
+}
+
+type tokenBrk struct {
+	Input      int32   `json:"input"`
+	Output     int32   `json:"output"`
+	CacheRead  int32   `json:"cache_read"`
+	CacheWrite int32   `json:"cache_write"`
+	TotalCents float64 `json:"total_cents"`
+}
+
+// usageEventsResponse is the JSON body of GET /v1/usage/events.
+type usageEventsResponse struct {
+	Events       []usageEventItem `json:"events"`
+	Page         int32            `json:"page"`
+	PageSize     int32            `json:"page_size"`
+	TotalCount   int32            `json:"total_count"`
+	HasNext      bool             `json:"has_next"`
+	SinceSeconds float64          `json:"since_seconds"`
+}
+
+// kindName strips the USAGE_EVENT_KIND_ prefix so downstream can render
+// "USAGE_BASED" / "INCLUDED_IN_PRO" / etc. directly. Full enum name
+// stays reachable via the raw proto if a caller ever needs it.
+func kindName(k usagepb.UsageEventKind) string {
+	name := k.String()
+	return strings.TrimPrefix(name, "USAGE_EVENT_KIND_")
+}
+
+func projectEvent(ev *usagepb.UsageEventDisplay) usageEventItem {
+	ts := ev.GetTimestamp()
+	item := usageEventItem{
+		Timestamp:       time.UnixMilli(ts).UTC().Format(time.RFC3339Nano),
+		TimestampMs:     ts,
+		Model:           ev.GetModel(),
+		Kind:            kindName(ev.GetKind()),
+		MaxMode:         ev.GetMaxMode(),
+		RequestsCosts:   float64(ev.GetRequestsCosts()),
+		UsageBasedCosts: ev.GetUsageBasedCosts(),
+		IsTokenBased:    ev.GetIsTokenBasedCall(),
+		IsChargeable:    ev.GetIsChargeable(),
+		ChargedCents:    float64(ev.GetChargedCents()),
+		ConversationID:  ev.GetConversationId(),
+		CloudAgentID:    ev.GetCloudAgentId(),
+		AutomationID:    ev.GetAutomationId(),
+		ClientType:      ev.GetClientType(),
+		IsHeadless:      ev.GetIsHeadless(),
+		UserEmail:       ev.GetUserEmail(),
+		ServiceAccount:  ev.GetServiceAccountName(),
+	}
+	if tu := ev.GetTokenUsage(); tu != nil {
+		item.Tokens = &tokenBrk{
+			Input:      tu.GetInputTokens(),
+			Output:     tu.GetOutputTokens(),
+			CacheRead:  tu.GetCacheReadTokens(),
+			CacheWrite: tu.GetCacheWriteTokens(),
+			TotalCents: float64(tu.GetTotalCents()),
+		}
+	}
+	return item
+}
+
+// parseEventsSince accepts a Go duration string or raw seconds and
+// clamps to [1s, maxEventsSinceWindow]. Garbage / empty → default.
+func parseEventsSince(raw string) time.Duration {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultEventsSinceWindow
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		if n, ierr := strconv.Atoi(raw); ierr == nil && n > 0 {
+			d = time.Duration(n) * time.Second
+		} else {
+			return defaultEventsSinceWindow
+		}
+	}
+	if d <= 0 {
+		return defaultEventsSinceWindow
+	}
+	if d > maxEventsSinceWindow {
+		d = maxEventsSinceWindow
+	}
+	return d
+}
+
+func parseEventsInt(raw string, def, cap int) int32 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return int32(def)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return int32(def)
+	}
+	if n > cap {
+		n = cap
+	}
+	return int32(n)
+}
+
+func usageEventsHandler(c *executor.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		since := parseEventsSince(q.Get("since"))
+		page := parseEventsInt(q.Get("page"), 1, 10000)
+		pageSize := parseEventsInt(q.Get("limit"), defaultEventsPageSize, maxEventsPageSize)
+		model := strings.TrimSpace(q.Get("model"))
+
+		now := time.Now()
+		start := now.Add(-since)
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+
+		client := usage.New(c)
+		result, err := client.ListEvents(ctx, usage.EventListOptions{
+			StartMs:  start.UnixMilli(),
+			EndMs:    now.UnixMilli(),
+			Model:    model,
+			Page:     page,
+			PageSize: pageSize,
+		})
+		if err != nil {
+			// Permission-denied usually means the account can't call
+			// this RPC on its plan; surface as 502 with the message so
+			// downstream can render a helpful error card. Other errors
+			// are transport failures.
+			status := http.StatusBadGateway
+			if usage.IsPermissionDenied(err) {
+				status = http.StatusForbidden
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+
+		items := make([]usageEventItem, 0, len(result.Events))
+		for _, ev := range result.Events {
+			items = append(items, projectEvent(ev))
+		}
+		resp := usageEventsResponse{
+			Events:       items,
+			Page:         page,
+			PageSize:     pageSize,
+			TotalCount:   result.TotalCount,
+			HasNext:      int64(page)*int64(pageSize) < int64(result.TotalCount),
+			SinceSeconds: since.Seconds(),
+		}
+		w.Header().Set("content-type", "application/json")
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(resp)
+	}
 }

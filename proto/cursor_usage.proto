@@ -3,8 +3,11 @@ syntax = "proto3";
 // Cursor dashboard/usage RPCs. These messages are transported to
 // aiserver.v1.DashboardService and aiserver.v1.AiService, but are declared in a
 // separate proto file (kept OUT of gen/cursor/) because the core extraction
-// scoped the main cursor.proto to chat/agent flows. Wire format is preserved
-// (all field numbers and types match Cursor 3.10.20 exactly).
+// scoped the main cursor.proto to chat/agent flows. Wire format is preserved:
+// all field numbers and types match Cursor 3.10.20 and 3.11.19 identically
+// (verified against captures/schema-3.11.19.raw.json). Regenerate with:
+//   protoc --proto_path=proto --go_out=usage/pb \
+//     --go_opt=paths=source_relative proto/cursor_usage.proto
 package cursor_usage;
 
 option go_package = "github.com/router-for-me/cursor-proto/usage/pb;usagepb";
@@ -243,4 +246,105 @@ message GetUsageLimitPolicyStatusResponse {
   optional int64 on_demand_min_cents = 21;
   optional int64 on_demand_max_cents = 22;
   optional int64 current_on_demand_limit_cents = 23;
+}
+
+// ---------- DashboardService/GetFilteredUsageEvents ----------
+//
+// Paginated per-request event log — one row per assistant response.
+// Backs the "requests" table in Cursor's Web dashboard and cursor2api's
+// /usage page. Filed as docs/upstream-issues/usage-events-list.md.
+
+message GetFilteredUsageEventsRequest {
+  int32 team_id = 1;
+  optional int64 start_date = 2;
+  optional int64 end_date = 3;
+  optional int32 user_id = 4;
+  optional string model_id = 5;
+  optional int32 page = 6;
+  optional int32 page_size = 7;
+  optional string service_account_id = 8;
+  optional string cloud_agent_id = 9;
+  optional string automation_id = 10;
+  optional string automation_managed_type = 11;
+  optional string client_type = 12;
+}
+
+message GetFilteredUsageEventsResponse {
+  repeated UsageEvent usage_events = 1;
+  int32 total_usage_events_count = 2;
+  repeated UsageEventDisplay usage_events_display = 3;
+}
+
+// UsageEvent is the raw per-request record. `details` is a 17-way
+// oneof (chat / composer / cmd_k / fast_apply / …) that our HTTP
+// surface currently doesn't need — the UsageEventDisplay projection
+// carries everything the /v1/usage/events table renders.
+message UsageEvent {
+  int64 timestamp = 1;
+  // details = 2 skipped — 17-way discriminated union, ~200 nested
+  // messages we don't project into the HTTP surface. Add back when
+  // a downstream needs per-tool breakdown.
+  optional string subscription_product_id = 3;
+  optional string usage_price_id = 4;
+  bool is_slow = 5;
+  string status = 6;
+  optional string owning_user = 7;
+  optional string owning_team = 8;
+  optional float price_cents = 9;
+  optional string team_membership_type = 10;
+}
+
+// UsageEventDisplay is the UI-ready projection Cursor's own dashboard
+// consumes. Fields we care about on cursor2api's /usage table:
+// timestamp / model / kind (enum) / token_usage / requests_costs.
+message UsageEventDisplay {
+  int64 timestamp = 1;
+  string model = 2;
+  UsageEventKind kind = 3;
+  optional string custom_subscription_name = 4;
+  bool max_mode = 5;
+  float requests_costs = 6;
+  optional string usage_based_costs = 7;
+  optional bool is_token_based_call = 8;
+  optional TokenUsage token_usage = 9;
+  optional string owning_user = 10;
+  optional string owning_team = 11;
+  optional string user_email = 12;
+  optional float cursor_token_fee = 13;
+  optional bool is_chargeable = 14;
+  optional string service_account_name = 15;
+  optional string service_account_id = 16;
+  optional bool is_headless = 17;
+  optional float charged_cents = 18;
+  optional string cloud_agent_id = 19;
+  optional string automation_id = 20;
+  optional string automation_managed_type = 21;
+  optional string client_type = 22;
+  optional string conversation_id = 23;
+}
+
+message TokenUsage {
+  int32 input_tokens = 1;
+  int32 output_tokens = 2;
+  int32 cache_write_tokens = 3;
+  int32 cache_read_tokens = 4;
+  float total_cents = 5;
+  optional int32 discount_percent_off = 6;
+  optional float enterprise_usage_discount_percent = 7;
+}
+
+// UsageEventKind categorizes each row for the UI. Values match
+// Cursor's own dashboard buckets one-for-one.
+enum UsageEventKind {
+  USAGE_EVENT_KIND_UNSPECIFIED = 0;
+  USAGE_EVENT_KIND_USAGE_BASED = 1;
+  USAGE_EVENT_KIND_USER_API_KEY = 2;
+  USAGE_EVENT_KIND_INCLUDED_IN_PRO = 3;
+  USAGE_EVENT_KIND_INCLUDED_IN_BUSINESS = 4;
+  USAGE_EVENT_KIND_ERRORED_NOT_CHARGED = 5;
+  USAGE_EVENT_KIND_ABORTED_NOT_CHARGED = 6;
+  USAGE_EVENT_KIND_CUSTOM_SUBSCRIPTION = 7;
+  USAGE_EVENT_KIND_INCLUDED_IN_PRO_PLUS = 8;
+  USAGE_EVENT_KIND_INCLUDED_IN_ULTRA = 9;
+  USAGE_EVENT_KIND_FREE_CREDIT = 10;
 }

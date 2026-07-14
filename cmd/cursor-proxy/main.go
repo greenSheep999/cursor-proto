@@ -342,6 +342,11 @@ func main() {
 	mux.HandleFunc("GET /v1/models/{id}", modelDetailHandler(c))
 	mux.HandleFunc("/v1/usage", usageHandler(c))
 	mux.HandleFunc("/v1/usage/prometheus", usagePrometheusHandler(c))
+	// GET /v1/usage/events — paginated per-request event log.
+	// Backs cursor2api's /usage table. See
+	// docs/upstream-issues/usage-events-list.md in cursor2api for
+	// the downstream spec.
+	mux.HandleFunc("GET /v1/usage/events", usageEventsHandler(c))
 	mux.HandleFunc("/v1/chat/completions", openaiChatHandler(c, cacheStore))
 	mux.HandleFunc("/v1/messages", anthropicMessagesHandler(c, cacheStore))
 	mux.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
