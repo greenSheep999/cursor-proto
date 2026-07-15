@@ -34,6 +34,25 @@ plugin/cursor/cursor.dylib
 plugin/cursor/cursor.h
 plugin/cursor/cursor.dll
 
+# Same artefacts produced at repo root by ad-hoc local rebuilds
+# (`go build -o cursor.dylib ./plugin/cursor`, `go build -o cursor-proxy ./cmd/cursor-proxy`).
+/cursor-proxy
+/cursor.so
+/cursor.dylib
+/cursor.dll
+/cursor.h
+
+# Local rollback safety copies of the above (mv old new -> .bak-YYYYMMDD).
+*.bak-*
+
+# Local one-off diagnostic commands. These are ad-hoc probes used during
+# investigation (cache behaviour, /GetMe dumps, SOCKS5 region-gate testing)
+# and are not meant to ship as user-facing subcommands. Promote to a
+# tracked cmd/* dir intentionally if any of them earns a permanent home.
+cmd/test-cache/
+cmd/test-getme/
+cmd/test-proxy/
+
 # ============================================================================
 # Big binary reference material (keep locally, don't push)
 # ============================================================================
