@@ -59,11 +59,13 @@ type ChatRequest struct {
 	// open with heartbeats indefinitely.
 	AutoStopOnTurnEnd bool
 
-	// AutoStopOnToolCall closes the event channel as soon as an
-	// ExecServerMessage carrying McpArgs arrives — i.e. the model has
-	// requested a user-supplied tool. Cursor's server pauses the SSE at that
-	// point waiting for a BidiAppend tool result; without this flag the
-	// stream would hang until the heartbeat deadline.
+	// AutoStopOnToolCall closes the event channel as soon as a tool-call
+	// start arrives — either an ExecServerMessage carrying McpArgs (legacy
+	// MCP branch) or an InteractionUpdate carrying ToolCallStarted (the
+	// modern generic branch used for client-declared tools). Cursor's
+	// server pauses the SSE at that point waiting for a BidiAppend tool
+	// result; without this flag the stream would hang until the heartbeat
+	// deadline.
 	AutoStopOnToolCall bool
 
 	// Tools is the caller-supplied MCP tool list. When non-empty, the tools
@@ -297,7 +299,21 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 						// server waits for a BidiAppend tool result. Callers
 						// can opt into short-circuiting that wait so the
 						// tool_calls response returns to the client promptly.
-						if autoStopOnToolCall && msg.GetExecServerMessage().GetMcpArgs() != nil {
+						//
+						// Cursor emits tool-call starts on two distinct
+						// message paths (matching translator/events.go):
+						//   1. ExecServerMessage.McpArgs — legacy MCP tool
+						//      branch. Non-nil only for MCP-routed tools.
+						//   2. InteractionUpdate.ToolCallStarted — the modern
+						//      generic path used for client-declared tools
+						//      like write_file / glob / grep. Cursor v3.11+
+						//      routes non-MCP tools exclusively via this
+						//      branch, so watching only path #1 left
+						//      OpenAI-compat callers hanging until the 60s
+						//      heartbeat deadline (see cursor3.11/v0.3.2).
+						if autoStopOnToolCall &&
+							(msg.GetExecServerMessage().GetMcpArgs() != nil ||
+								msg.GetInteractionUpdate().GetToolCallStarted() != nil) {
 							setDeadline(postAssistantGrace)
 						}
 					}
