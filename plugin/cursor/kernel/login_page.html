@@ -213,20 +213,38 @@
     } catch (e) { return null; }
   }
   function readSpaManagementKey() {
-    // Same-origin iframe: can read parent's localStorage directly.
+    // The SPA persists its Zustand auth store to localStorage under the
+    // key 'cli-proxy-auth'. When Remember Password is on the store
+    // includes .state.managementKey. Payload is JSON-stringified after
+    // XOR obfuscation, so: decrypt → JSON.parse → drill into
+    // state.managementKey.
+    //
+    // Also try a legacy top-level `managementKey` key in case an
+    // older SPA build wrote it there — some builds do.
     var raw = null;
-    try { raw = window.localStorage.getItem('managementKey'); } catch (e) { raw = null; }
-    if (!raw) return null;
-    // Value is either raw plaintext (legacy) or JSON-stringified after
-    // obfuscation. Ol.setItem always JSON.stringify's before encrypting,
-    // so decrypt → parse.
-    var val = raw;
-    if (raw.startsWith(ENC_PFX)) {
-      var dec = deobfuscate(raw);
+    try { raw = window.localStorage.getItem('cli-proxy-auth'); } catch (e) { raw = null; }
+    if (raw) {
+      var decoded = raw;
+      if (raw.startsWith(ENC_PFX)) decoded = deobfuscate(raw);
+      if (decoded) {
+        try {
+          var parsed = JSON.parse(decoded);
+          var key = parsed && parsed.state && parsed.state.managementKey;
+          if (typeof key === 'string' && key.trim()) return key.trim();
+        } catch (e) { /* fall through to legacy check */ }
+      }
+    }
+    // Legacy: some SPA builds wrote managementKey as its own key.
+    var legacy = null;
+    try { legacy = window.localStorage.getItem('managementKey'); } catch (e) { legacy = null; }
+    if (!legacy) return null;
+    var val = legacy;
+    if (legacy.startsWith(ENC_PFX)) {
+      var dec = deobfuscate(legacy);
       if (!dec) return null;
       try { val = JSON.parse(dec); } catch (e) { val = dec; }
     } else {
-      try { val = JSON.parse(raw); } catch (e) { /* leave as raw string */ }
+      try { val = JSON.parse(legacy); } catch (e) { /* leave as raw */ }
     }
     return (typeof val === 'string' && val.trim()) ? val.trim() : null;
   }
