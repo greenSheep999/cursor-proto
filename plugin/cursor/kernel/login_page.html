@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add Cursor account</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; background: #fafafa; }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  .sub { color: #666; margin-bottom: 24px; font-size: 14px; }
+  .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .mode { border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: all 0.15s; }
+  .mode:hover { border-color: #007acc; background: #f4faff; }
+  .mode.active { border-color: #007acc; background: #f4faff; }
+  .mode-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .mode-desc { color: #666; font-size: 13px; }
+  .mode-inputs { display: none; margin-top: 12px; }
+  .mode.active .mode-inputs { display: block; }
+  label { display: block; font-size: 13px; margin: 8px 0 4px; color: #444; font-weight: 500; }
+  input[type=text], input[type=email], input[type=url], input[type=password], select {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; font-family: inherit; background: #fff;
+  }
+  button { padding: 10px 18px; border: none; border-radius: 6px; background: #007acc; color: white; font-size: 14px; font-weight: 500; cursor: pointer; }
+  button:hover { background: #005a9e; }
+  button:disabled { background: #999; cursor: not-allowed; }
+  .btn-secondary { background: #f0f0f0; color: #333; }
+  .btn-secondary:hover { background: #e0e0e0; }
+  .actions { margin-top: 20px; display: flex; gap: 8px; }
+  .status { margin-top: 16px; padding: 12px; border-radius: 6px; font-size: 13px; display: none; word-wrap: break-word; }
+  .status.info { display: block; background: #e6f0ff; color: #003580; }
+  .status.error { display: block; background: #fdecea; color: #8b1e1e; }
+  .status.success { display: block; background: #eaf7ea; color: #1e5c1e; }
+  .step2 { display: none; margin-top: 24px; padding-top: 24px; border-top: 1px solid #eee; }
+  .step2.visible { display: block; }
+  .authurl { word-break: break-all; background: #f5f5f5; padding: 10px; border-radius: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin: 8px 0; }
+  a { color: #007acc; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .accounts-list { margin-top: 16px; }
+  .acc { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+  .acc:last-child { border-bottom: none; }
+  .acc-email { font-family: ui-monospace, Menlo, monospace; }
+  .acc-tag { background: #eef; color: #223; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+  .empty { color: #888; padding: 12px; font-style: italic; text-align: center; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .footer { color: #999; font-size: 12px; margin-top: 24px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>Add Cursor account</h1>
+<div class="sub">Pick a login method, complete it in a new tab, then paste the redirected URL or captured code back here.</div>
+
+<div class="card">
+<div id="step1">
+  <div class="mode" data-mode="oauth">
+    <div class="mode-title">OAuth (browser sign-in)</div>
+    <div class="mode-desc">Standard Cursor login. Open the URL in a new tab, complete sign-in at cursor.com, come back — the plugin catches the tokens automatically.</div>
+  </div>
+
+  <div class="mode" data-mode="ide">
+    <div class="mode-title">Import from local Cursor IDE</div>
+    <div class="mode-desc">Read tokens from a Cursor IDE install already signed in on this machine. Fastest when the account is already active in the app.</div>
+    <div class="mode-inputs">
+      <label>IDE state directory (leave blank for default $HOME/Library/Application Support/Cursor)</label>
+      <input type="text" id="ide_state_dir" placeholder="/path/to/Cursor/state">
+    </div>
+  </div>
+
+  <div class="mode" data-mode="otp">
+    <div class="mode-title">Email OTP (magic-code)</div>
+    <div class="mode-desc">Cursor emails a 6-digit code. The plugin can auto-solve captcha + auto-read IMAP, or you can paste both by hand.</div>
+    <div class="mode-inputs">
+      <label>Email address</label>
+      <input type="email" id="otp_email" placeholder="you@example.com" autocomplete="off">
+
+      <label style="margin-top:12px">Captcha</label>
+      <select id="otp_captcha_mode">
+        <option value="yescaptcha">YesCaptcha (auto — needs API key)</option>
+        <option value="manual">Manual (paste token)</option>
+      </select>
+
+      <div id="otp_captcha_yes" class="otp-captcha-inputs">
+        <label style="margin-top:8px">YesCaptcha API key</label>
+        <input type="password" id="otp_yescaptcha_key" autocomplete="off" placeholder="cap-xxxxxxxxxxxxxxxxxxxx">
+      </div>
+
+      <div id="otp_captcha_manual" class="otp-captcha-inputs" style="display:none">
+        <label style="margin-top:8px">Cloudflare Turnstile token (paste after solving)</label>
+        <input type="text" id="otp_captcha_token" autocomplete="off" placeholder="0.xxxxxxxxxxxxxxxxxxxx">
+      </div>
+
+      <label style="margin-top:12px">Code delivery</label>
+      <select id="otp_code_source">
+        <option value="imap">Auto-read from IMAP mailbox</option>
+        <option value="manual">Paste code manually after email arrives</option>
+      </select>
+
+      <div id="otp_imap_inputs">
+        <div class="row2">
+          <div>
+            <label style="margin-top:8px">IMAP host</label>
+            <input type="text" id="otp_imap_host" placeholder="imap.gmail.com">
+          </div>
+          <div>
+            <label style="margin-top:8px">IMAP port</label>
+            <input type="text" id="otp_imap_port" placeholder="993" value="993">
+          </div>
+        </div>
+        <div class="row2">
+          <div>
+            <label style="margin-top:8px">IMAP username (often the email)</label>
+            <input type="text" id="otp_imap_user" placeholder="you@example.com" autocomplete="off">
+          </div>
+          <div>
+            <label style="margin-top:8px">IMAP password / app password</label>
+            <input type="password" id="otp_imap_pass" autocomplete="off">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="start-btn" disabled>Start login</button>
+  </div>
+
+  <div id="status1" class="status"></div>
+</div>
+
+<div id="step2" class="step2">
+  <h2 style="font-size:16px;margin-bottom:8px" id="step2-title">Step 2 — Complete provider login</h2>
+  <div class="sub" id="step2-sub">Open the URL below in a new tab and complete the login. This page will keep polling until it detects success.</div>
+  <div id="step2-oauth" style="display:none">
+    <label>Authorization URL (open in a new tab):</label>
+    <div class="authurl" id="authurl-display"></div>
+    <a id="authurl-open" href="#" target="_blank">Open in new tab ↗</a>
+  </div>
+  <div id="step2-otp-manual" style="display:none">
+    <label>OTP code (from the email Cursor just sent)</label>
+    <input type="text" id="otp_code_input" placeholder="123456" autocomplete="off">
+    <div class="actions">
+      <button id="submit-otp">Submit code</button>
+    </div>
+  </div>
+  <div id="status2" class="status"></div>
+</div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:16px;margin:0 0 8px">Registered accounts (<span id="accounts-count">…</span>)</h2>
+  <div id="accounts-list" class="accounts-list"><div class="empty">Loading…</div></div>
+</div>
+
+<div class="footer">CPA cursor plugin · authenticated via management-key session</div>
+
+<script>
+(function () {
+  // === helpers ==========================================================
+  var $ = function (id) { return document.getElementById(id); };
+  var qs = function (sel) { return document.querySelector(sel); };
+  var qsa = function (sel) { return document.querySelectorAll(sel); };
+  var currentMode = null;
+  var currentState = null;
+  var pollTimer = null;
+
+  // Management API paths. Panel is served under /v0/resource/plugins/cursor/,
+  // API endpoints live under /v0/management/cli-proxy-api/cursor/.
+  var API_START = '/v0/management/cli-proxy-api/cursor/login/start';
+  var API_POLL  = '/v0/management/cli-proxy-api/cursor/login/poll';
+  var API_LIST  = '/v0/management/cli-proxy-api/cursor/accounts';
+
+  function setStatus(el, kind, msg) {
+    el.className = 'status ' + (kind || 'info');
+    el.textContent = msg;
+  }
+
+  function clearStatus(el) {
+    el.className = 'status';
+    el.textContent = '';
+  }
+
+  // === mode picker ======================================================
+  qsa('.mode').forEach(function (el) {
+    el.addEventListener('click', function () {
+      qsa('.mode').forEach(function (m) { m.classList.remove('active'); });
+      el.classList.add('active');
+      currentMode = el.getAttribute('data-mode');
+      $('start-btn').disabled = false;
+    });
+  });
+
+  // Captcha & IMAP conditional visibility
+  $('otp_captcha_mode').addEventListener('change', function () {
+    var m = this.value;
+    $('otp_captcha_yes').style.display    = (m === 'yescaptcha') ? 'block' : 'none';
+    $('otp_captcha_manual').style.display = (m === 'manual')     ? 'block' : 'none';
+  });
+  $('otp_code_source').addEventListener('change', function () {
+    $('otp_imap_inputs').style.display = (this.value === 'imap') ? 'block' : 'none';
+  });
+
+  // === API =============================================================
+  function apiPost(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body || {}),
+    }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; });
+    });
+  }
+  function apiGet(url) {
+    return fetch(url, { credentials: 'same-origin' }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; });
+    });
+  }
+
+  // === accounts list ====================================================
+  function loadAccounts() {
+    apiGet(API_LIST).then(function (r) {
+      var listEl = $('accounts-list');
+      var countEl = $('accounts-count');
+      if (!r.ok) {
+        countEl.textContent = '—';
+        listEl.innerHTML = '<div class="empty">Failed to load: ' + (r.body && r.body.error && r.body.error.message || r.status) + '</div>';
+        return;
+      }
+      var accs = (r.body && r.body.accounts) || [];
+      countEl.textContent = accs.length;
+      if (!accs.length) {
+        listEl.innerHTML = '<div class="empty">No Cursor accounts registered yet.</div>';
+        return;
+      }
+      listEl.innerHTML = accs.map(function (a) {
+        var email = a.email || '(no email)';
+        var plan  = a.plan || 'unknown';
+        var country = a.country || '';
+        return '<div class="acc">' +
+          '<span class="acc-email">' + email + '</span>' +
+          '<span class="acc-tag">' + plan + '</span>' +
+          '<span class="acc-tag">' + (country || '—') + '</span>' +
+          '</div>';
+      }).join('');
+    });
+  }
+  loadAccounts();
+
+  // === start / poll =====================================================
+  $('start-btn').addEventListener('click', function () {
+    if (!currentMode) return;
+    clearStatus($('status1'));
+    clearStatus($('status2'));
+    $('step2').classList.remove('visible');
+    $('start-btn').disabled = true;
+
+    var meta = { mode: currentMode };
+    if (currentMode === 'ide') {
+      var dir = $('ide_state_dir').value.trim();
+      if (dir) meta.state_dir = dir;
+    }
+    if (currentMode === 'otp') {
+      var email = $('otp_email').value.trim();
+      if (!email) {
+        setStatus($('status1'), 'error', 'Email is required for OTP login.');
+        $('start-btn').disabled = false;
+        return;
+      }
+      meta.email = email;
+      var capMode = $('otp_captcha_mode').value;
+      meta.captcha_mode = capMode;
+      if (capMode === 'yescaptcha') {
+        meta.yescaptcha_key = $('otp_yescaptcha_key').value.trim();
+      } else {
+        meta.captcha_token = $('otp_captcha_token').value.trim();
+      }
+      var codeSrc = $('otp_code_source').value;
+      meta.code_source = codeSrc;
+      if (codeSrc === 'imap') {
+        meta.imap_host = $('otp_imap_host').value.trim();
+        meta.imap_port = parseInt($('otp_imap_port').value.trim(), 10) || 993;
+        meta.imap_user = $('otp_imap_user').value.trim() || email;
+        meta.imap_pass = $('otp_imap_pass').value;
+      }
+    }
+
+    setStatus($('status1'), 'info', 'Starting login…');
+
+    apiPost(API_START, { Provider: 'cursor', Metadata: meta }).then(function (r) {
+      $('start-btn').disabled = false;
+      if (!r.ok) {
+        setStatus($('status1'), 'error', (r.body && r.body.error && r.body.error.message) || ('start failed (HTTP ' + r.status + ')'));
+        return;
+      }
+      currentState = r.body.State;
+      clearStatus($('status1'));
+      $('step2').classList.add('visible');
+
+      // OAuth: show the URL, start polling
+      if (currentMode === 'oauth') {
+        $('step2-oauth').style.display = 'block';
+        $('step2-otp-manual').style.display = 'none';
+        $('authurl-display').textContent = r.body.URL || '';
+        $('authurl-open').href = r.body.URL || '#';
+        setStatus($('status2'), 'info', 'Waiting for you to complete sign-in in the new tab…');
+        beginPoll();
+        return;
+      }
+
+      // IDE: poll once (Preresolved)
+      if (currentMode === 'ide') {
+        $('step2-oauth').style.display = 'none';
+        $('step2-otp-manual').style.display = 'none';
+        setStatus($('status2'), 'info', 'Reading tokens from IDE state directory…');
+        beginPoll();
+        return;
+      }
+
+      // OTP: show manual code input if user picked manual delivery
+      if (currentMode === 'otp') {
+        $('step2-oauth').style.display = 'none';
+        var manualCode = ($('otp_code_source').value === 'manual');
+        $('step2-otp-manual').style.display = manualCode ? 'block' : 'none';
+        setStatus($('status2'), 'info', manualCode
+          ? 'Enter the code Cursor just emailed you.'
+          : 'Waiting for Cursor to email the code (auto-reading via IMAP)…');
+        if (!manualCode) beginPoll();
+        return;
+      }
+    }).catch(function (err) {
+      $('start-btn').disabled = false;
+      setStatus($('status1'), 'error', 'Network error: ' + err.message);
+    });
+  });
+
+  $('submit-otp').addEventListener('click', function () {
+    var code = $('otp_code_input').value.trim();
+    if (!code || !currentState) return;
+    setStatus($('status2'), 'info', 'Submitting code…');
+    apiPost(API_POLL, { Provider: 'cursor', State: currentState, Metadata: { otp_code: code } }).then(handlePoll);
+  });
+
+  function beginPoll() {
+    if (pollTimer) clearTimeout(pollTimer);
+    var tick = function () {
+      apiPost(API_POLL, { Provider: 'cursor', State: currentState, Metadata: {} }).then(handlePoll);
+    };
+    pollTimer = setTimeout(tick, 1500);
+  }
+
+  function handlePoll(r) {
+    if (!r.ok) {
+      setStatus($('status2'), 'error', (r.body && r.body.error && r.body.error.message) || ('poll failed (HTTP ' + r.status + ')'));
+      return;
+    }
+    var st = r.body.Status;
+    var msg = r.body.Message || '';
+    if (st === 'success') {
+      setStatus($('status2'), 'success', 'Success — account imported: ' + ((r.body.Auth && r.body.Auth.metadata && r.body.Auth.metadata.email) || '(unknown email)'));
+      loadAccounts();
+      return;
+    }
+    if (st === 'error') {
+      setStatus($('status2'), 'error', msg || 'login failed');
+      return;
+    }
+    // pending — schedule next poll
+    if (msg) setStatus($('status2'), 'info', msg);
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = setTimeout(function () {
+      apiPost(API_POLL, { Provider: 'cursor', State: currentState, Metadata: {} }).then(handlePoll);
+    }, 2000);
+  }
+})();
+</script>
+
+</body>
+</html>

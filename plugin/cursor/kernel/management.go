@@ -42,20 +42,34 @@ const barePluginPrefix = "/" + pluginName
 // it so a single lookup can decide whether to hand the request to us.
 const routePrefix = "/cli-proxy-api/cursor"
 
-// pluginMenuLabel appears in the CPA admin panel sidebar.
-const pluginMenuLabel = "Cursor accounts"
+// pluginMenuLabel appears in the CPA admin panel sidebar under the
+// Plugins section and is what the user clicks to open our panel.
+// The Menu-tagged route pointing at it is /login (HTML panel), so
+// keep this label describing the destination — "Add Cursor account"
+// mirrors the sibling kiro-proto plugin ("Add Kiro account").
+const pluginMenuLabel = "Add Cursor account"
 
 // managementRegisterResult is the JSON payload returned by
 // management.register. It advertises the routes we own so CPA can
 // dispatch matching URLs to management.handle.
 func managementRegisterResult() string {
-	menu := pluginMenuLabel
 	routes := []map[string]any{
+		// Menu-tagged GET routes get auto-promoted by CPA's pluginhost
+		// to the /v0/resource/plugins/cursor/ namespace and appear in
+		// the panel sidebar under the plugin section. /login is the
+		// one we want the user to click — it serves the HTML picker.
+		{
+			"Method":      http.MethodGet,
+			"Path":        routePrefix + "/login",
+			"Menu":        pluginMenuLabel,
+			"Description": "Interactive login for Cursor (OAuth / IDE import / email-OTP). Sub-actions dispatched via POST /login/start and /login/poll.",
+		},
+		// Data endpoints — no Menu, stay under /v0/management/... and
+		// are called by the panel JS with the operator's mgmt session.
 		{
 			"Method":      http.MethodGet,
 			"Path":        routePrefix + "/accounts",
-			"Menu":        menu,
-			"Description": "List Cursor accounts CPA has registered, one status object per account.",
+			"Description": "List Cursor accounts CPA has registered, one status object per account. Backs the panel's Registered accounts card.",
 		},
 		{
 			"Method":      http.MethodGet,
@@ -84,6 +98,16 @@ func managementRegisterResult() string {
 			"Method":      http.MethodGet,
 			"Path":        routePrefix + "/pool-summary",
 			"Description": "Aggregate view of the Cursor pool for the admin dashboard.",
+		},
+		{
+			"Method":      http.MethodPost,
+			"Path":        routePrefix + "/login/start",
+			"Description": "Start a login flow — thin panel wrapper over auth.login.start. Body: {Provider, Metadata:{mode,email,...}}.",
+		},
+		{
+			"Method":      http.MethodPost,
+			"Path":        routePrefix + "/login/poll",
+			"Description": "Poll a running login flow — thin panel wrapper over auth.login.poll. Body: {Provider, State, Metadata}.",
 		},
 	}
 	body := map[string]any{
@@ -159,6 +183,12 @@ func routeManagement(ctx context.Context, req managementRequest) managementRespo
 	method := strings.ToUpper(req.Method)
 
 	switch {
+	case method == http.MethodGet && suffix == "/login":
+		return serveLoginPage()
+	case method == http.MethodPost && suffix == "/login/start":
+		return handleLoginStartHTTP(req.Body)
+	case method == http.MethodPost && suffix == "/login/poll":
+		return handleLoginPollHTTP(req.Body)
 	case method == http.MethodGet && suffix == "/accounts":
 		return handleListAccounts(ctx)
 	case method == http.MethodGet && suffix == "/account":
