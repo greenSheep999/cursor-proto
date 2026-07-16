@@ -193,6 +193,12 @@ func quotaSlotManifest() map[string]any {
 // maps has no code path to encoding errors). Used to embed the slot
 // into managementRegisterResult() without polluting that function
 // with error plumbing.
+//
+// This embed path is a hint for a future CPA that grows quota_slot
+// awareness at the server layer. Today's CPA doesn't forward this
+// field to the frontend, so we ALSO serve the manifest at its own
+// endpoint (handleQuotaSlotManifest) — that endpoint is what the
+// PluginQuotaSection actually reads.
 func mustMarshalQuotaSlot() json.RawMessage {
 	buf, err := json.Marshal(quotaSlotManifest())
 	if err != nil {
@@ -200,4 +206,12 @@ func mustMarshalQuotaSlot() json.RawMessage {
 		panic("quota_slot manifest marshal: " + err.Error())
 	}
 	return buf
+}
+
+// handleQuotaSlotManifest serves GET /quota-slot-manifest. The
+// CPA-frontend probes every plugin at page load; a 200 with a
+// manifest declares the plugin owns a slot on /quota, and a 404
+// (or any 4xx/5xx) means "no slot".
+func handleQuotaSlotManifest() managementResponse {
+	return jsonResponse(http.StatusOK, quotaSlotManifest())
 }

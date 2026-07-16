@@ -69,6 +69,32 @@ func TestQuotaSlotManifest_ShapeMatchesDesignDoc(t *testing.T) {
 	}
 }
 
+// TestHandleQuotaSlotManifest_ServesManifestAtEndpoint verifies the
+// GET /quota-slot-manifest endpoint returns the same manifest the
+// frontend expects. This is the endpoint the CPA-frontend
+// PluginQuotaSection probes at page load — a 200 declares the slot
+// exists, 404 declares the plugin opts out. Wrong shape here means
+// the /quota page silently skips the plugin's card.
+func TestHandleQuotaSlotManifest_ServesManifestAtEndpoint(t *testing.T) {
+	resp := routeManagement(context.Background(), managementRequest{
+		Method: http.MethodGet,
+		Path:   managementBasePath + routePrefix + "/quota-slot-manifest",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("StatusCode = %d, want 200 (body=%s)", resp.StatusCode, string(resp.Body))
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(resp.Body, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	if manifest["id"] != pluginName {
+		t.Errorf("manifest.id = %v, want %s", manifest["id"], pluginName)
+	}
+	if _, ok := manifest["columns"]; !ok {
+		t.Error("manifest missing columns")
+	}
+}
+
 // TestManifestEmbedsInRegisterResult confirms the quota_slot blob
 // actually reaches CPA — a broken embed would leave CPA rendering
 // nothing on /quota and silently blame the plugin.

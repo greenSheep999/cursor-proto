@@ -112,7 +112,12 @@ func managementRegisterResult() string {
 		{
 			"Method":      http.MethodGet,
 			"Path":        routePrefix + "/quota-rows",
-			"Description": "Data endpoint for the /quota page's plugin-quota slot. Returns one row per registered account in the shape declared by the top-level 'quota_slot' manifest field.",
+			"Description": "Data endpoint for the /quota page's plugin-quota slot. Returns one row per registered account in the shape declared by the plugin-quota-slot manifest.",
+		},
+		{
+			"Method":      http.MethodGet,
+			"Path":        routePrefix + "/quota-slot-manifest",
+			"Description": "Plugin-quota-slot manifest — describes column layout + row actions for CPA's /quota page. Consumed by CPA-frontend PluginQuotaSection at plugin-discovery time. Absent = plugin has no slot.",
 		},
 	}
 	body := map[string]any{
@@ -209,6 +214,8 @@ func routeManagement(ctx context.Context, req managementRequest) managementRespo
 		return handlePoolSummary(ctx)
 	case method == http.MethodGet && suffix == "/quota-rows":
 		return handleQuotaRows(ctx)
+	case method == http.MethodGet && suffix == "/quota-slot-manifest":
+		return handleQuotaSlotManifest()
 	default:
 		return jsonErrorResponse(http.StatusNotFound, "unknown_route",
 			fmt.Sprintf("no cursor plugin route for %s %s", method, req.Path))
