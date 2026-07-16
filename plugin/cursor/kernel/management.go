@@ -49,6 +49,15 @@ const routePrefix = "/cli-proxy-api/cursor"
 // mirrors the sibling kiro-proto plugin ("Add Kiro account").
 const pluginMenuLabel = "Add Cursor account"
 
+// quotaSlotMenuSentinel is the magic Menu label the plugin uses on
+// its /quota-slot-manifest route so CPA's pluginhost surfaces it on
+// the plugin list endpoint. The CPA-frontend PluginQuotaSection
+// treats this exact label as "route contains the quota-slot
+// manifest URL" and hides it from the sidebar. The __double_prefix
+// convention is our reserved namespace — real user-visible menu
+// labels never start with __, so operators won't collide with it.
+const quotaSlotMenuSentinel = "__quota-slot__"
+
 // managementRegisterResult is the JSON payload returned by
 // management.register. It advertises the routes we own so CPA can
 // dispatch matching URLs to management.handle.
@@ -115,8 +124,19 @@ func managementRegisterResult() string {
 			"Description": "Data endpoint for the /quota page's plugin-quota slot. Returns one row per registered account in the shape declared by the plugin-quota-slot manifest.",
 		},
 		{
-			"Method":      http.MethodGet,
-			"Path":        routePrefix + "/quota-slot-manifest",
+			"Method": http.MethodGet,
+			"Path":   routePrefix + "/quota-slot-manifest",
+			// Menu-tag with a magic sentinel label. CPA's pluginhost
+			// only exposes Menu-tagged GET routes on the plugin list
+			// endpoint (registeredPluginMenus() in
+			// internal/pluginhost/snapshot.go), which is what lets
+			// the /quota frontend discover this route without
+			// needing new server-side plumbing. The double-underscore
+			// prefix is our reserved namespace — the frontend filters
+			// menus by exact label to consume manifest URLs, and skips
+			// them when rendering the sidebar so users never see this
+			// entry.
+			"Menu":        quotaSlotMenuSentinel,
 			"Description": "Plugin-quota-slot manifest — describes column layout + row actions for CPA's /quota page. Consumed by CPA-frontend PluginQuotaSection at plugin-discovery time. Absent = plugin has no slot.",
 		},
 	}
