@@ -50,6 +50,15 @@
 <h1>Add Cursor account</h1>
 <div class="sub">Pick a login method, complete it in a new tab, then paste the redirected URL or captured code back here.</div>
 
+<div class="card" id="auth-card">
+  <label>Management key <span id="auth-source" style="font-weight:400;color:#888;font-size:12px;margin-left:6px"></span></label>
+  <input type="password" id="mgmt-key" autocomplete="off" placeholder="Paste the same management key you used to sign into CPA">
+  <div style="margin-top:6px;font-size:12px;color:#888">
+    Same key you entered on the CPA login page. Panel keeps it in this tab's sessionStorage only —
+    the SPA's persisted "Remember password" copy is picked up automatically when available.
+  </div>
+</div>
+
 <div class="card">
 <div id="step1">
   <div class="mode" data-mode="oauth">
@@ -169,6 +178,107 @@
   var API_POLL  = '/v0/management/cli-proxy-api/cursor/login/poll';
   var API_LIST  = '/v0/management/cli-proxy-api/cursor/accounts';
 
+  // === management-key acquisition ======================================
+  //
+  // CPA authenticates management API calls with Authorization: Bearer <key>.
+  // The parent SPA holds the key in a Zustand in-memory store; when the
+  // user checks "Remember password" it also gets XOR-obfuscated and stashed
+  // in localStorage.managementKey. Same origin → this iframe can decrypt.
+  //
+  // We try three sources in order:
+  //   1. iframe's own sessionStorage (user pasted into our input already)
+  //   2. parent's localStorage.managementKey (remember-password on)
+  //   3. panel input (user pastes now)
+  var SS_KEY   = 'cursor-panel:mgmt-key';
+  var ENC_PFX  = 'enc::v1::';
+  var ENC_SALT = 'cli-proxy-api-webui::secure-storage';
+
+  function deriveObfuscationKey() {
+    // Mirrors the SPA's xl(): salt|host|userAgent as UTF-8 bytes.
+    var seed = ENC_SALT + '|' + window.location.host + '|' + navigator.userAgent;
+    return new TextEncoder().encode(seed);
+  }
+  function xorBytes(data, key) {
+    var out = new Uint8Array(data.length);
+    for (var i = 0; i < data.length; i++) out[i] = data[i] ^ key[i % key.length];
+    return out;
+  }
+  function deobfuscate(str) {
+    if (!str || typeof str !== 'string' || !str.startsWith(ENC_PFX)) return str;
+    try {
+      var bin = atob(str.slice(ENC_PFX.length));
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder().decode(xorBytes(bytes, deriveObfuscationKey()));
+    } catch (e) { return null; }
+  }
+  function readSpaManagementKey() {
+    // Same-origin iframe: can read parent's localStorage directly.
+    var raw = null;
+    try { raw = window.localStorage.getItem('managementKey'); } catch (e) { raw = null; }
+    if (!raw) return null;
+    // Value is either raw plaintext (legacy) or JSON-stringified after
+    // obfuscation. Ol.setItem always JSON.stringify's before encrypting,
+    // so decrypt → parse.
+    var val = raw;
+    if (raw.startsWith(ENC_PFX)) {
+      var dec = deobfuscate(raw);
+      if (!dec) return null;
+      try { val = JSON.parse(dec); } catch (e) { val = dec; }
+    } else {
+      try { val = JSON.parse(raw); } catch (e) { /* leave as raw string */ }
+    }
+    return (typeof val === 'string' && val.trim()) ? val.trim() : null;
+  }
+  function getMgmtKey() {
+    // 1. This tab's sessionStorage (fastest, no re-decrypt).
+    try {
+      var s = sessionStorage.getItem(SS_KEY);
+      if (s) return s.trim();
+    } catch (e) { /* ignored */ }
+    // 2. Parent SPA's remember-password copy.
+    var spa = readSpaManagementKey();
+    if (spa) return spa;
+    // 3. Current panel input.
+    var input = $('mgmt-key');
+    var v = input && input.value ? input.value.trim() : '';
+    return v || null;
+  }
+  function setMgmtKey(v) {
+    v = (v || '').trim();
+    try { v ? sessionStorage.setItem(SS_KEY, v) : sessionStorage.removeItem(SS_KEY); } catch (e) {}
+    var input = $('mgmt-key');
+    if (input && input.value !== v) input.value = v;
+    updateAuthSourceLabel();
+  }
+  function updateAuthSourceLabel() {
+    var el = $('auth-source');
+    if (!el) return;
+    try {
+      if (sessionStorage.getItem(SS_KEY)) { el.textContent = '(session)'; return; }
+    } catch (e) {}
+    if (readSpaManagementKey()) { el.textContent = '(inherited from remember-password)'; return; }
+    el.textContent = '(not set — paste and blur / accounts list will show 401 until you do)';
+  }
+  // Wire the input.
+  document.addEventListener('DOMContentLoaded', function () {
+    var input = $('mgmt-key');
+    if (!input) return;
+    // Prefer SPA-persisted key on load.
+    var spa = readSpaManagementKey();
+    if (spa) input.value = spa;
+    else {
+      try {
+        var s = sessionStorage.getItem(SS_KEY);
+        if (s) input.value = s;
+      } catch (e) {}
+    }
+    // loadAccounts is defined below (hoisted function declaration).
+    input.addEventListener('change', function () { setMgmtKey(input.value); loadAccounts(); });
+    input.addEventListener('blur',   function () { setMgmtKey(input.value); loadAccounts(); });
+    updateAuthSourceLabel();
+  });
+
   function setStatus(el, kind, msg) {
     el.className = 'status ' + (kind || 'info');
     el.textContent = msg;
@@ -200,19 +310,36 @@
   });
 
   // === API =============================================================
+  //
+  // Every /v0/management/* call needs Authorization: Bearer <mgmt-key>.
+  // Read the header lazily on each request so the user can paste a key
+  // after page load without a refresh.
+  function authHeaders() {
+    var k = getMgmtKey();
+    return k ? { Authorization: 'Bearer ' + k } : {};
+  }
   function apiPost(url, body) {
+    var hdrs = authHeaders();
+    hdrs['Content-Type'] = 'application/json';
     return fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdrs,
       credentials: 'same-origin',
       body: JSON.stringify(body || {}),
-    }).then(function (r) {
-      return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; });
-    });
+    }).then(handleResponse);
   }
   function apiGet(url) {
-    return fetch(url, { credentials: 'same-origin' }).then(function (r) {
-      return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; });
+    return fetch(url, {
+      credentials: 'same-origin',
+      headers: authHeaders(),
+    }).then(handleResponse);
+  }
+  function handleResponse(r) {
+    return r.text().then(function (raw) {
+      var j = null;
+      try { j = raw ? JSON.parse(raw) : {}; }
+      catch (e) { j = { error: { code: 'bad_json', message: raw && raw.slice(0, 200) } }; }
+      return { ok: r.ok, status: r.status, body: j };
     });
   }
 
@@ -223,7 +350,14 @@
       var countEl = $('accounts-count');
       if (!r.ok) {
         countEl.textContent = '—';
-        listEl.innerHTML = '<div class="empty">Failed to load: ' + (r.body && r.body.error && r.body.error.message || r.status) + '</div>';
+        var hint = '';
+        if (r.status === 401) {
+          hint = 'Paste your CPA management key into the field above — the panel needs it to call the management API.';
+        }
+        listEl.innerHTML = '<div class="empty">Failed to load (HTTP ' + r.status + '): '
+          + ((r.body && r.body.error && r.body.error.message) || 'unauthorized')
+          + (hint ? '<br>' + hint : '')
+          + '</div>';
         return;
       }
       var accs = (r.body && r.body.accounts) || [];
