@@ -19,13 +19,27 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-// managementBasePath is the CPA prefix under which every plugin
-// management route sits. Kept in sync with pluginhost/management.go.
+// managementBasePath is the CPA prefix authenticated management API
+// routes sit under. Kept in sync with pluginhost/management.go.
 const managementBasePath = "/v0/management"
 
-// routePrefix is our slice of the management namespace. Every route
-// this plugin declares lives under it so a single lookup can decide
-// whether to hand the request to us.
+// resourceBasePath is the CPA prefix under which GET routes decorated
+// with a Menu field get auto-migrated. CPA's pluginhost treats them
+// as browser-navigable, unauthenticated resources — see the
+// `routeDeclaresLegacyMenuResource` branch in CPA's management.go.
+// Our /accounts and /pool-summary routes carry a Menu, so CPA
+// dispatches them here rather than under managementBasePath.
+const resourceBasePath = "/v0/resource/plugins/" + pluginName
+
+// legacyPluginPrefix and barePluginPrefix are older CPA path shapes
+// still accepted by upstream pluginhost. Matching them keeps this
+// router working across CPA versions without extra coordination.
+const legacyPluginPrefix = "/plugins/" + pluginName
+const barePluginPrefix = "/" + pluginName
+
+// routePrefix is our slice of the management namespace. Every
+// management-authenticated route this plugin declares lives under
+// it so a single lookup can decide whether to hand the request to us.
 const routePrefix = "/cli-proxy-api/cursor"
 
 // pluginMenuLabel appears in the CPA admin panel sidebar.
@@ -120,16 +134,25 @@ func handleManagement(payload []byte) ([]byte, int) {
 // routeManagement decides which handler answers the request. Paths
 // are matched exactly (the pluginhost route table already narrowed
 // URL to exactly the paths we declared).
+//
+// The request Path arrives verbatim from CPA's plugin host, and
+// depending on how CPA classified the registered route it may sit
+// under one of four namespaces:
+//
+//	/v0/management/cli-proxy-api/cursor/...   — authenticated mgmt API
+//	/v0/resource/plugins/cursor/...           — browser-navigable
+//	                                            resource (menu-decorated
+//	                                            GET routes auto-migrate
+//	                                            here in newer CPA)
+//	/plugins/cursor/...                       — legacy prefix
+//	/cursor/...                               — bare (older CPA hosts)
+//
+// We strip whichever prefix arrived, then strip our own routePrefix
+// if present, then match the trailing suffix. Same shape as the
+// sibling cpa-login-hub plugin so behaviour stays uniform across
+// plugins on the same CPA.
 func routeManagement(ctx context.Context, req managementRequest) managementResponse {
-	path := strings.TrimSuffix(req.Path, "/")
-	// The pluginhost rewrites relative paths, but we normalise defensively.
-	if !strings.HasPrefix(path, managementBasePath) {
-		path = managementBasePath + strings.TrimPrefix(path, "/")
-	}
-	suffix := strings.TrimPrefix(path, managementBasePath)
-	if strings.HasPrefix(suffix, routePrefix) {
-		suffix = strings.TrimPrefix(suffix, routePrefix)
-	}
+	suffix := stripCPAPathPrefixes(req.Path)
 	// Query values are supplied by the host as map[string][]string; wrap
 	// as url.Values for the standard .Get() helper.
 	q := url.Values(req.Query)
@@ -150,8 +173,51 @@ func routeManagement(ctx context.Context, req managementRequest) managementRespo
 		return handlePoolSummary(ctx)
 	default:
 		return jsonErrorResponse(http.StatusNotFound, "unknown_route",
-			fmt.Sprintf("no cursor plugin route for %s %s", method, path))
+			fmt.Sprintf("no cursor plugin route for %s %s", method, req.Path))
 	}
+}
+
+// stripCPAPathPrefixes reduces an incoming request Path to the
+// plugin-relative suffix ("/accounts", "/account/events", ...) that
+// routeManagement's switch matches on. It tries every namespace
+// prefix CPA might send us under, in order of specificity, then
+// strips our internal routePrefix if present. Returns an empty
+// string for a path that doesn't map into our namespace at all,
+// which the caller reports as unknown_route.
+func stripCPAPathPrefixes(rawPath string) string {
+	p := strings.TrimSuffix(rawPath, "/")
+	if p == "" {
+		return ""
+	}
+	// Try each CPA-side namespace in order. Longest-prefix-first so
+	// e.g. "/v0/management/..." doesn't get truncated by the bare
+	// "/cursor/..." branch. break on first match — a real path only
+	// belongs to one namespace at a time.
+	for _, prefix := range []string{
+		managementBasePath,
+		resourceBasePath,
+		legacyPluginPrefix,
+		barePluginPrefix,
+	} {
+		if strings.HasPrefix(p, prefix+"/") || p == prefix {
+			p = strings.TrimPrefix(p, prefix)
+			break
+		}
+	}
+	// After stripping the CPA namespace, our plugin-relative path
+	// may still carry the internal routePrefix ("/cli-proxy-api/cursor")
+	// — this is the form the management-API routes register with.
+	// Resource routes register without it, so trimming is optional.
+	if strings.HasPrefix(p, routePrefix+"/") || p == routePrefix {
+		p = strings.TrimPrefix(p, routePrefix)
+	}
+	if p == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return p
 }
 
 // handleListAccounts returns the full AccountStatus for every

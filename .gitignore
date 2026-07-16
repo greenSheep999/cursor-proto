@@ -60,6 +60,14 @@ captures/wb-*.js         # 40 MB Cursor.app JS bundle
 captures/wb-*.js.gz
 
 # ============================================================================
+# Investigation output — Playwright / screenshot debris left after
+# poking at the CPA management panel or other browser flows. Not part
+# of the repo; keep locally if useful, but never track.
+# ============================================================================
+.playwright-mcp/
+/*.png
+
+# ============================================================================
 # OS junk
 # ============================================================================
 .DS_Store
