@@ -109,9 +109,15 @@ func managementRegisterResult() string {
 			"Path":        routePrefix + "/login/poll",
 			"Description": "Poll a running login flow — thin panel wrapper over auth.login.poll. Body: {Provider, State, Metadata}.",
 		},
+		{
+			"Method":      http.MethodGet,
+			"Path":        routePrefix + "/quota-rows",
+			"Description": "Data endpoint for the /quota page's plugin-quota slot. Returns one row per registered account in the shape declared by the top-level 'quota_slot' manifest field.",
+		},
 	}
 	body := map[string]any{
-		"routes": routes,
+		"routes":     routes,
+		"quota_slot": json.RawMessage(mustMarshalQuotaSlot()),
 	}
 	buf, _ := json.Marshal(body)
 	return string(buf)
@@ -201,6 +207,8 @@ func routeManagement(ctx context.Context, req managementRequest) managementRespo
 		return handleAccountEvents(ctx, q)
 	case method == http.MethodGet && suffix == "/pool-summary":
 		return handlePoolSummary(ctx)
+	case method == http.MethodGet && suffix == "/quota-rows":
+		return handleQuotaRows(ctx)
 	default:
 		return jsonErrorResponse(http.StatusNotFound, "unknown_route",
 			fmt.Sprintf("no cursor plugin route for %s %s", method, req.Path))
