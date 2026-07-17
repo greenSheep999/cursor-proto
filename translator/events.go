@@ -274,36 +274,85 @@ func extractToolName(tc *cursorpb.AgentV1_ToolCall) string {
 		}
 		return ""
 	}
-	// Probe the union for known native tool getters. Cursor's ToolCall is a
-	// large oneof; we only surface the tools most commonly seen in agent mode.
+	// Probe the union for known native tool getters. Cursor's ToolCall
+	// is a large oneof; we surface the tools most commonly seen in
+	// agent mode and translate the Cursor exec type into the client-
+	// visible name (Bash / Read / Write / Grep / Glob / LS / WebFetch)
+	// via native_tool_adapter.go. Without this remap, clients see
+	// "Invalid tool 'shell'" and reject the whole turn.
 	if tc.GetShellToolCall() != nil {
-		return "shell"
+		return clientNameForCursorTool("shell")
 	}
 	if tc.GetReadToolCall() != nil {
-		return "read"
+		return clientNameForCursorTool("read")
 	}
 	if tc.GetDeleteToolCall() != nil {
-		return "delete"
+		return clientNameForCursorTool("delete")
 	}
 	if tc.GetGrepToolCall() != nil {
-		return "grep"
+		return clientNameForCursorTool("grep")
 	}
 	if tc.GetLsToolCall() != nil {
-		return "ls"
+		return clientNameForCursorTool("ls")
 	}
 	if tc.GetGlobToolCall() != nil {
-		return "glob"
+		return clientNameForCursorTool("glob")
 	}
 	if tc.GetFetchToolCall() != nil {
-		return "fetch"
+		return clientNameForCursorTool("fetch")
 	}
 	if tc.GetEditToolCall() != nil {
-		return "edit"
+		return clientNameForCursorTool("edit")
 	}
 	if tc.GetAskQuestionToolCall() != nil {
-		return "ask_question"
+		return clientNameForCursorTool("ask_question")
+	}
+	// Grok variant + any new Cursor tool type not yet enumerated
+	// above emit a ToolCall whose oneof branch we don't know. The
+	// pre-fix behaviour returned "" here and the client rejected it
+	// ("Invalid tool ''"). Fall back to whatever raw name the proto
+	// surfaces on the ToolCall envelope — better an approximate
+	// name the client can log than an empty one it rejects outright.
+	if raw := probeUnknownToolName(tc); raw != "" {
+		return raw
 	}
 	return ""
+}
+
+// probeUnknownToolName scans a ToolCall envelope for any string
+// field that looks like a tool name. Used as the last-ditch
+// fallback when the model uses a tool type this build doesn't
+// enumerate in extractToolName (Grok variants, new Cursor
+// releases). Returns "" if nothing usable is on the envelope.
+//
+// The current ToolCall struct doesn't expose a top-level name
+// field — every native tool has its name implicit in the oneof
+// branch. But protoreflect.Descriptor lets us walk the message and
+// look for any populated string field named `name`, `tool_name`,
+// or `type`. Cheap defensive scan; runs only when the typed
+// switch found nothing.
+func probeUnknownToolName(tc *cursorpb.AgentV1_ToolCall) string {
+	if tc == nil {
+		return ""
+	}
+	msg := tc.ProtoReflect()
+	fields := msg.Descriptor().Fields()
+	var found string
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		name := string(fd.Name())
+		if name != "name" && name != "tool_name" && name != "type" {
+			continue
+		}
+		if !msg.Has(fd) {
+			continue
+		}
+		v := msg.Get(fd).String()
+		if v != "" && found == "" {
+			found = v
+		}
+	}
+	return found
 }
 
 // extractToolCallID returns the tool_call_id embedded in a ToolCall envelope
@@ -339,45 +388,17 @@ func extractToolArgsFromStart(tc *cursorpb.AgentV1_ToolCall) string {
 	if mcp := tc.GetMcpToolCall(); mcp != nil {
 		return mcpArgsToJSON(mcp.GetArgs())
 	}
-	// Native tools: each has an `Args` submessage. protojson serialization
-	// gives us the canonical JSON shape.
-	var argsMsg proto.Message
-	switch {
-	case tc.GetShellToolCall() != nil:
-		argsMsg = tc.GetShellToolCall().GetArgs()
-	case tc.GetReadToolCall() != nil:
-		argsMsg = tc.GetReadToolCall().GetArgs()
-	case tc.GetGrepToolCall() != nil:
-		argsMsg = tc.GetGrepToolCall().GetArgs()
-	case tc.GetLsToolCall() != nil:
-		argsMsg = tc.GetLsToolCall().GetArgs()
-	case tc.GetGlobToolCall() != nil:
-		argsMsg = tc.GetGlobToolCall().GetArgs()
-	case tc.GetFetchToolCall() != nil:
-		argsMsg = tc.GetFetchToolCall().GetArgs()
-	case tc.GetEditToolCall() != nil:
-		argsMsg = tc.GetEditToolCall().GetArgs()
-	case tc.GetDeleteToolCall() != nil:
-		argsMsg = tc.GetDeleteToolCall().GetArgs()
-	case tc.GetAskQuestionToolCall() != nil:
-		argsMsg = tc.GetAskQuestionToolCall().GetArgs()
+	// Native tools: run through the adapter so field names match the
+	// client-visible schema (Claude Code Bash/Read/Write/Grep/Glob/…)
+	// instead of Cursor's internal names. Previously we emitted
+	// protojson.Marshal output which used Cursor field names like
+	// `glob_pattern` / `working_directory` / `stream_content` — the
+	// client's tool loop then rejected the input as malformed. See
+	// translator/native_tool_adapter.go for the mapping.
+	if native := mapNativeToolArgsJSON(tc); native != "" {
+		return native
 	}
-	if argsMsg == nil {
-		return "{}"
-	}
-	// EmitUnpopulated keeps optional zero-value fields in the JSON so a
-	// client that expects a fixed shape (e.g. Claude tool loop) sees the
-	// full object. UseProtoNames=false emits camelCase (Anthropic clients
-	// expect that; snake_case would surprise the SDKs).
-	m := protojson.MarshalOptions{
-		UseProtoNames:   false,
-		EmitUnpopulated: false,
-	}
-	b, err := m.Marshal(argsMsg)
-	if err != nil || len(b) == 0 {
-		return "{}"
-	}
-	return string(b)
+	return "{}"
 }
 
 // mcpArgsToJSON is the MCP branch of extractToolArgsFromStart, factored out
