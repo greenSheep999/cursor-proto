@@ -160,9 +160,14 @@ func quotaSlotManifest() map[string]any {
 			{"key": "country", "label": "Region", "type": "tag"},
 			{"key": "spend_cents", "label": "Spend", "type": "cents"},
 			{"key": "limit_cents", "label": "Limit", "type": "cents"},
-			{"key": "total_percent", "label": "Total used", "type": "percent_bar"},
-			{"key": "auto_percent", "label": "Auto+Composer", "type": "percent_bar"},
-			{"key": "api_percent", "label": "API", "type": "percent_bar"},
+			// The three percent bars carry Cursor's "used" percentages
+			// (from usage.Snapshot.*PercentUsed). Mark them inverse so
+			// the panel's progress bar reads 90%+ as red instead of
+			// green — visual matches the semantic. Built-in providers
+			// all report remaining percentages so they omit the flag.
+			{"key": "total_percent", "label": "Total used", "type": "percent_bar", "inverse": true},
+			{"key": "auto_percent", "label": "Auto+Composer", "type": "percent_bar", "inverse": true},
+			{"key": "api_percent", "label": "API", "type": "percent_bar", "inverse": true},
 			{"key": "cache_read_7d", "label": "Cache-read 7d", "type": "int", "hint": "tokens"},
 			{"key": "cache_write_7d", "label": "Cache-write 7d", "type": "int", "hint": "tokens"},
 			{"key": "in_slow_pool", "label": "Slow pool", "type": "boolean"},

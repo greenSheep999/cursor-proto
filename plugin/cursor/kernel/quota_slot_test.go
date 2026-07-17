@@ -67,6 +67,17 @@ func TestQuotaSlotManifest_ShapeMatchesDesignDoc(t *testing.T) {
 			t.Errorf("columns[%d] type %q not in v1 registry", i, typ)
 		}
 	}
+	// Every percent_bar column must carry inverse:true because the
+	// upstream Cursor API reports used percentages, not remaining.
+	// Missing the flag inverts the panel colour scale (90% used
+	// looks green instead of red), which is what this pin catches.
+	for i, c := range cols {
+		if c["type"] == "percent_bar" {
+			if inv, _ := c["inverse"].(bool); !inv {
+				t.Errorf("columns[%d] (%v) is percent_bar but missing inverse:true — panel colour scale will be backwards for used-percent values", i, c["key"])
+			}
+		}
+	}
 }
 
 // TestHandleQuotaSlotManifest_ServesManifestAtEndpoint verifies the

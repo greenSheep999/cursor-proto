@@ -146,7 +146,7 @@ plugin mark one account as broken without failing the whole card.
 | `int`           | Right-aligned; commas at thousands; optional `hint` suffix.    |
 | `cents`         | `$xx.yy` (locale-aware).                                       |
 | `percent`       | `xx.y%` inline number.                                         |
-| `percent_bar`   | Full progress bar with `xx.y%` label — matches Antigravity.    |
+| `percent_bar`   | Full progress bar with `xx.y%` label — matches Antigravity. Set `inverse: true` when the value is "used" (higher = worse); otherwise the bar treats the number as "remaining" (higher = safer, matching the built-in providers). |
 | `iso8601`       | Relative + absolute tooltip ("in 15 days · Aug 1, 2026").      |
 | `boolean`       | Check / cross icon.                                            |
 | `enum`          | Pill with per-value colour; needs `values: {a: "#..."}` in col.|
