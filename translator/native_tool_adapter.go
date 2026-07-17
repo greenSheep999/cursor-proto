@@ -77,7 +77,7 @@ var nativeToolClientName = map[string]string{
 // clientNameForCursorTool returns the client-visible tool name for
 // a Cursor internal exec type. Falls back to the raw name if the
 // type isn't in the mapping — better a technically-wrong name than
-// an empty string, which the client would reject as Invalid tool ''.
+// an empty string, which the client would reject as Invalid tool ”.
 func clientNameForCursorTool(cursorType string) string {
 	if mapped, ok := nativeToolClientName[cursorType]; ok {
 		return mapped
@@ -227,7 +227,7 @@ func marshalJSON(v any) string {
 // shellQuote escapes a path for safe insertion into a shell command
 // string. Only single-quotes need escaping since we wrap the value
 // in single quotes; embedded single-quotes become the standard
-// `'\''` sequence.
+// `'\”` sequence.
 func shellQuote(s string) string {
 	out := "'"
 	for _, r := range s {

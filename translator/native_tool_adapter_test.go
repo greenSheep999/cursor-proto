@@ -78,7 +78,9 @@ func TestMapNativeToolArgsJSON_Shell(t *testing.T) {
 // TestMapNativeToolArgsJSON_Glob is the exact downstream bug report:
 // Cursor's field is `glob_pattern`, client's Claude Code Glob schema
 // wants `pattern`. Without this rename the client sees:
-//   {"globPattern":"**/*.go","targetDirectory":"/foo"}
+//
+//	{"globPattern":"**/*.go","targetDirectory":"/foo"}
+//
 // and rejects the tool_use for missing `pattern`.
 func TestMapNativeToolArgsJSON_Glob(t *testing.T) {
 	tc := &cursorpb.AgentV1_ToolCall{
