@@ -115,6 +115,27 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 		if tc.GetMcpToolCall() != nil {
 			return nil
 		}
+		// Cursor's internal orchestration tools — createPlan,
+		// updateTodos, task, reflect, sendMessage, etc. — are the
+		// model's way of "talking to itself" during planning. They
+		// aren't user-facing tools; harnesses (opencode,
+		// claude-code) don't declare them and reject the call as
+		// unknown. Downstream cursor2api reported on 2026-07-18
+		// (sse-tool-use-9b7b550-report.md) that Composer's FIRST
+		// move on every request is a createPlan call — before any
+		// pi_* execution tool — which loops opencode until
+		// timeout.
+		//
+		// Fix: transparently convert these to an assistant text
+		// delta. The client sees "I'll do X, Y, Z" as the
+		// assistant's opening statement; the model self-continues
+		// on the next turn and reaches the actual Pi execution.
+		if text, ok := internalPlanningToolAsText(tc); ok {
+			if text == "" {
+				return nil
+			}
+			return &Event{Kind: EventTextDelta, Text: text}
+		}
 		callID := s.GetCallId()
 		if callID == "" {
 			callID = extractToolCallID(tc)
@@ -135,6 +156,16 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	}
 	if c := iu.GetToolCallCompleted(); c != nil {
 		tc := c.GetToolCall()
+		// Swallow completion events for internal orchestration
+		// tools — same rationale as the tool_call_started branch
+		// above. We converted the start event to a text delta, so
+		// the completion event has no matching content_block for
+		// downstream writers to close.
+		if tc != nil {
+			if _, isInternal := internalPlanningToolAsText(tc); isInternal {
+				return nil
+			}
+		}
 		callID := c.GetCallId()
 		if callID == "" {
 			callID = extractToolCallID(tc)

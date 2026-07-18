@@ -59,35 +59,42 @@ import (
 // ChatRequest → TranslatorConfig so we can prefer the client's
 // spelling (e.g. lowercase `bash`) over the hardcoded `Bash` when
 // the client declared a compatible tool.
+// Name choice: lowercase, matching what codex / opencode and most
+// OpenAI/Anthropic harnesses declare in their tools[]. Claude Code
+// officially uses `Bash` / `Grep` / `Read` capitalized, but the
+// runtime tool-lookup on Claude Code is case-INsensitive, so
+// lowercase serves both. cursor2api's 2026-07-18 report explicitly
+// asked for this so codex stops erroring with `unsupported call:
+// Bash` (case-sensitive match failure). See "Path C" in the report.
 var nativeToolClientName = map[string]string{
-	"shell":  "Bash",
-	"read":   "Read",
-	"edit":   "Write",
-	"grep":   "Grep",
-	"ls":     "LS",
-	"glob":   "Glob",
-	"delete": "Bash", // no dedicated Delete in Claude Code; map to Bash rm
-	"fetch":  "WebFetch",
+	"shell":  "bash",
+	"read":   "read",
+	"edit":   "write",
+	"grep":   "grep",
+	"ls":     "ls",
+	"glob":   "glob",
+	"delete": "bash", // no dedicated Delete in Claude Code; map to bash rm
+	"fetch":  "web_fetch",
 	// Pi* family — Cursor's Composer-2.5 planning intelligence tools.
 	// Composer prefers these over the shell/edit/read tools even when
 	// the caller registered its own MCP set. Field shapes are already
 	// close to Claude Code's — pi_write.{path,content} maps to
-	// Write.{file_path,content}, pi_bash.command maps to Bash.command,
+	// write.{file_path,content}, pi_bash.command maps to bash.command,
 	// etc. Coverage of these was the specific gap downstream reported
 	// on 2026-07-18 (sse-tool-use-postfix-report.md): write_file
 	// calls yielded name:"" and args:{} because Composer emitted
 	// PiWriteToolCall and our switch didn't enumerate it.
-	"pi_write": "Write",
-	"pi_bash":  "Bash",
-	"pi_edit":  "Write", // string-replace edits collapse to a Write w/ new content
-	"pi_read":  "Read",
-	"pi_find":  "Glob",
-	"pi_grep":  "Grep",
-	"pi_ls":    "LS",
+	"pi_write": "write",
+	"pi_bash":  "bash",
+	"pi_edit":  "write", // string-replace edits collapse to a write w/ new content
+	"pi_read":  "read",
+	"pi_find":  "glob",
+	"pi_grep":  "grep",
+	"pi_ls":    "ls",
 	// ask_question is a Cursor-internal user-facing prompt; it has no
 	// direct Claude Code analogue. Leave the raw name so clients that
 	// know Cursor natively (cursor2api harness) can handle it.
-	"ask_question": "AskQuestion",
+	"ask_question": "ask_question",
 }
 
 // clientNameForCursorTool returns the client-visible tool name for
@@ -99,6 +106,124 @@ func clientNameForCursorTool(cursorType string) string {
 		return mapped
 	}
 	return cursorType
+}
+
+// internalPlanningToolAsText detects Cursor's internal orchestration
+// tools (createPlan, updateTodos, task, etc.) and renders them as
+// a plain-text summary so downstream writers emit them as an
+// assistant text delta instead of a tool_use block.
+//
+// Rationale (from cursor2api's 2026-07-18 report): Composer's
+// *first* tool call on any prompt is a createPlan — before any Pi*
+// execution tool. No harness (opencode / claude-code / codex)
+// declares createPlan, so they all reject the call and loop until
+// timeout. Since createPlan is really the model "narrating its
+// plan", the correct wire-level presentation is assistant text,
+// not a tool_use block.
+//
+// Returns (text, true) when tc is an internal planning tool and
+// the caller should emit a text delta with that string (empty text
+// means "drop the event entirely"). Returns ("", false) when tc is
+// a normal user-facing tool that should flow through the regular
+// extractToolName path.
+func internalPlanningToolAsText(tc *cursorpb.AgentV1_ToolCall) (string, bool) {
+	if tc == nil {
+		return "", false
+	}
+	if cp := tc.GetCreatePlanToolCall(); cp != nil {
+		a := cp.GetArgs()
+		if a == nil {
+			return "", true
+		}
+		return renderCreatePlan(a), true
+	}
+	if ut := tc.GetUpdateTodosToolCall(); ut != nil {
+		a := ut.GetArgs()
+		if a == nil {
+			return "", true
+		}
+		return renderTodos(a.GetTodos()), true
+	}
+	if rt := tc.GetReadTodosToolCall(); rt != nil {
+		// ReadTodos is a "let me check my todo list" no-op from the
+		// user's perspective; drop entirely.
+		_ = rt
+		return "", true
+	}
+	if tk := tc.GetTaskToolCall(); tk != nil {
+		// Task is Composer's subagent-spawn primitive. Its args are
+		// { description, prompt } — surface as a brief text so the
+		// user sees what subtask the agent is about to run.
+		_ = tk
+		return "", true // v1: swallow; upgrade later if downstream asks
+	}
+	return "", false
+}
+
+// renderCreatePlan turns a CreatePlan args payload into a
+// human-readable markdown-ish summary. The client sees this as
+// assistant text and the model self-continues into the actual
+// execution tools on the next turn.
+func renderCreatePlan(a *cursorpb.AgentV1_CreatePlanArgs) string {
+	var b []byte
+	if name := a.GetName(); name != "" {
+		b = append(b, "**Plan: "...)
+		b = append(b, name...)
+		b = append(b, "**\n\n"...)
+	}
+	if overview := a.GetOverview(); overview != "" {
+		b = append(b, overview...)
+		b = append(b, "\n\n"...)
+	}
+	if plan := a.GetPlan(); plan != "" {
+		b = append(b, plan...)
+		b = append(b, "\n\n"...)
+	}
+	if todos := a.GetTodos(); len(todos) > 0 {
+		b = append(b, renderTodos(todos)...)
+	}
+	if phases := a.GetPhases(); len(phases) > 0 {
+		for _, p := range phases {
+			b = append(b, "### "...)
+			b = append(b, p.GetName()...)
+			b = append(b, "\n"...)
+			b = append(b, renderTodos(p.GetTodos())...)
+			b = append(b, "\n"...)
+		}
+	}
+	return string(b)
+}
+
+// renderTodos writes each todo as a checkbox line. Status:
+//
+//	0 (unspecified) / 1 (pending)      -> [ ]
+//	2 (in_progress)                    -> [~]
+//	3 (completed)                      -> [x]
+//
+// We don't rely on the exact enum spelling because the proto's
+// TodoStatus enum may reorder — the numeric ordering ("higher =
+// further along") is stable.
+func renderTodos(todos []*cursorpb.AgentV1_TodoItem) string {
+	if len(todos) == 0 {
+		return ""
+	}
+	var b []byte
+	for _, t := range todos {
+		var mark string
+		switch int32(t.GetStatus()) {
+		case 3:
+			mark = "[x] "
+		case 2:
+			mark = "[~] "
+		default:
+			mark = "[ ] "
+		}
+		b = append(b, "- "...)
+		b = append(b, mark...)
+		b = append(b, t.GetContent()...)
+		b = append(b, '\n')
+	}
+	return string(b)
 }
 
 // mapNativeToolArgsJSON returns the client-schema JSON for a Cursor

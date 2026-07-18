@@ -17,15 +17,15 @@ func TestClientNameForCursorTool(t *testing.T) {
 		cursorType string
 		want       string
 	}{
-		{"shell", "Bash"},
-		{"read", "Read"},
-		{"edit", "Write"},
-		{"grep", "Grep"},
-		{"ls", "LS"},
-		{"glob", "Glob"},
-		{"delete", "Bash"},
-		{"fetch", "WebFetch"},
-		{"ask_question", "AskQuestion"},
+		{"shell", "bash"},
+		{"read", "read"},
+		{"edit", "write"},
+		{"grep", "grep"},
+		{"ls", "ls"},
+		{"glob", "glob"},
+		{"delete", "bash"},
+		{"fetch", "web_fetch"},
+		{"ask_question", "ask_question"},
 		// Unknown types fall back to the raw cursorType — Grok
 		// variants land here so the client sees at least a name
 		// to log, not "".
@@ -209,14 +209,14 @@ func TestExtractToolName_NativeReturnsClientName(t *testing.T) {
 		tc   *cursorpb.AgentV1_ToolCall
 		want string
 	}{
-		{"shell", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_ShellToolCall{ShellToolCall: &cursorpb.AgentV1_ShellToolCall{}}}, "Bash"},
-		{"read", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_ReadToolCall{ReadToolCall: &cursorpb.AgentV1_ReadToolCall{}}}, "Read"},
-		{"edit", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_EditToolCall{EditToolCall: &cursorpb.AgentV1_EditToolCall{}}}, "Write"},
-		{"grep", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_GrepToolCall{GrepToolCall: &cursorpb.AgentV1_GrepToolCall{}}}, "Grep"},
-		{"ls", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_LsToolCall{LsToolCall: &cursorpb.AgentV1_LsToolCall{}}}, "LS"},
-		{"glob", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_GlobToolCall{GlobToolCall: &cursorpb.AgentV1_GlobToolCall{}}}, "Glob"},
-		{"delete", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_DeleteToolCall{DeleteToolCall: &cursorpb.AgentV1_DeleteToolCall{}}}, "Bash"},
-		{"fetch", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_FetchToolCall{FetchToolCall: &cursorpb.AgentV1_FetchToolCall{}}}, "WebFetch"},
+		{"shell", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_ShellToolCall{ShellToolCall: &cursorpb.AgentV1_ShellToolCall{}}}, "bash"},
+		{"read", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_ReadToolCall{ReadToolCall: &cursorpb.AgentV1_ReadToolCall{}}}, "read"},
+		{"edit", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_EditToolCall{EditToolCall: &cursorpb.AgentV1_EditToolCall{}}}, "write"},
+		{"grep", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_GrepToolCall{GrepToolCall: &cursorpb.AgentV1_GrepToolCall{}}}, "grep"},
+		{"ls", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_LsToolCall{LsToolCall: &cursorpb.AgentV1_LsToolCall{}}}, "ls"},
+		{"glob", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_GlobToolCall{GlobToolCall: &cursorpb.AgentV1_GlobToolCall{}}}, "glob"},
+		{"delete", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_DeleteToolCall{DeleteToolCall: &cursorpb.AgentV1_DeleteToolCall{}}}, "bash"},
+		{"fetch", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_FetchToolCall{FetchToolCall: &cursorpb.AgentV1_FetchToolCall{}}}, "web_fetch"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -237,13 +237,13 @@ func TestClientNameForCursorTool_PiFamily(t *testing.T) {
 		cursorType string
 		want       string
 	}{
-		{"pi_write", "Write"},
-		{"pi_bash", "Bash"},
-		{"pi_edit", "Write"},
-		{"pi_read", "Read"},
-		{"pi_find", "Glob"},
-		{"pi_grep", "Grep"},
-		{"pi_ls", "LS"},
+		{"pi_write", "write"},
+		{"pi_bash", "bash"},
+		{"pi_edit", "write"},
+		{"pi_read", "read"},
+		{"pi_find", "glob"},
+		{"pi_grep", "grep"},
+		{"pi_ls", "ls"},
 	}
 	for _, tc := range cases {
 		if got := clientNameForCursorTool(tc.cursorType); got != tc.want {
@@ -316,13 +316,13 @@ func TestExtractToolName_PiFamily(t *testing.T) {
 		tc   *cursorpb.AgentV1_ToolCall
 		want string
 	}{
-		{"pi_write", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiWriteToolCall{PiWriteToolCall: &cursorpb.AgentV1_PiWriteToolCall{}}}, "Write"},
-		{"pi_bash", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiBashToolCall{PiBashToolCall: &cursorpb.AgentV1_PiBashToolCall{}}}, "Bash"},
-		{"pi_edit", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiEditToolCall{PiEditToolCall: &cursorpb.AgentV1_PiEditToolCall{}}}, "Write"},
-		{"pi_read", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiReadToolCall{PiReadToolCall: &cursorpb.AgentV1_PiReadToolCall{}}}, "Read"},
-		{"pi_find", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiFindToolCall{PiFindToolCall: &cursorpb.AgentV1_PiFindToolCall{}}}, "Glob"},
-		{"pi_grep", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiGrepToolCall{PiGrepToolCall: &cursorpb.AgentV1_PiGrepToolCall{}}}, "Grep"},
-		{"pi_ls", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiLsToolCall{PiLsToolCall: &cursorpb.AgentV1_PiLsToolCall{}}}, "LS"},
+		{"pi_write", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiWriteToolCall{PiWriteToolCall: &cursorpb.AgentV1_PiWriteToolCall{}}}, "write"},
+		{"pi_bash", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiBashToolCall{PiBashToolCall: &cursorpb.AgentV1_PiBashToolCall{}}}, "bash"},
+		{"pi_edit", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiEditToolCall{PiEditToolCall: &cursorpb.AgentV1_PiEditToolCall{}}}, "write"},
+		{"pi_read", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiReadToolCall{PiReadToolCall: &cursorpb.AgentV1_PiReadToolCall{}}}, "read"},
+		{"pi_find", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiFindToolCall{PiFindToolCall: &cursorpb.AgentV1_PiFindToolCall{}}}, "glob"},
+		{"pi_grep", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiGrepToolCall{PiGrepToolCall: &cursorpb.AgentV1_PiGrepToolCall{}}}, "grep"},
+		{"pi_ls", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiLsToolCall{PiLsToolCall: &cursorpb.AgentV1_PiLsToolCall{}}}, "ls"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -354,6 +354,82 @@ func TestExtractToolName_UnknownReturnsBranchName(t *testing.T) {
 	// branch label is present.
 	if !strings.Contains(strings.ToLower(got), "createplan") {
 		t.Errorf("extractToolName(CreatePlan) = %q, want to contain 'createplan'", got)
+	}
+}
+
+// TestInternalPlanningToolAsText — Composer's first move on every
+// prompt is a createPlan tool call. No client harness (opencode,
+// claude-code, codex) declares createPlan, so they reject the tool
+// use and loop until timeout. Downstream reported this as the
+// remaining blocker on 2026-07-18. The fix: intercept the internal
+// planning tools at translator layer and synthesize an assistant
+// text delta instead — the plan surfaces as narration, the model
+// self-continues into the actual Pi execution on the next turn.
+func TestInternalPlanningToolAsText_CreatePlan(t *testing.T) {
+	tc := &cursorpb.AgentV1_ToolCall{
+		Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
+			CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{
+				Args: &cursorpb.AgentV1_CreatePlanArgs{
+					Name:     "Write note",
+					Overview: "Create note.txt with '4271'.",
+					Todos: []*cursorpb.AgentV1_TodoItem{
+						{Content: "check dir", Status: cursorpb.AgentV1_TodoStatus(1)},
+						{Content: "write file", Status: cursorpb.AgentV1_TodoStatus(1)},
+					},
+				},
+			},
+		},
+	}
+	text, isInternal := internalPlanningToolAsText(tc)
+	if !isInternal {
+		t.Fatal("CreatePlan should be flagged as internal planning tool")
+	}
+	if !strings.Contains(text, "Write note") {
+		t.Errorf("rendered text missing plan name: %q", text)
+	}
+	if !strings.Contains(text, "Create note.txt") {
+		t.Errorf("rendered text missing overview: %q", text)
+	}
+	if !strings.Contains(text, "check dir") {
+		t.Errorf("rendered text missing todo: %q", text)
+	}
+	if !strings.Contains(text, "write file") {
+		t.Errorf("rendered text missing todo: %q", text)
+	}
+}
+
+// TestInternalPlanningToolAsText_NonPlanning verifies user-facing
+// tools (bash / write / etc.) are NOT flagged as internal, so they
+// keep flowing through extractToolName / mapNativeToolArgsJSON.
+func TestInternalPlanningToolAsText_NonPlanning(t *testing.T) {
+	for _, tc := range []*cursorpb.AgentV1_ToolCall{
+		{Tool: &cursorpb.AgentV1_ToolCall_PiBashToolCall{PiBashToolCall: &cursorpb.AgentV1_PiBashToolCall{}}},
+		{Tool: &cursorpb.AgentV1_ToolCall_ShellToolCall{ShellToolCall: &cursorpb.AgentV1_ShellToolCall{}}},
+		{Tool: &cursorpb.AgentV1_ToolCall_EditToolCall{EditToolCall: &cursorpb.AgentV1_EditToolCall{}}},
+	} {
+		_, isInternal := internalPlanningToolAsText(tc)
+		if isInternal {
+			t.Errorf("user-facing tool %T incorrectly flagged as internal planning", tc.GetTool())
+		}
+	}
+}
+
+// TestInternalPlanningToolAsText_EmptyArgs — an empty CreatePlan
+// still counts as internal (must be swallowed) but yields an empty
+// text so the writer can drop the event entirely without emitting
+// an empty content_block_start.
+func TestInternalPlanningToolAsText_EmptyArgs(t *testing.T) {
+	tc := &cursorpb.AgentV1_ToolCall{
+		Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
+			CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{},
+		},
+	}
+	text, isInternal := internalPlanningToolAsText(tc)
+	if !isInternal {
+		t.Error("empty CreatePlan should still be flagged as internal")
+	}
+	if text != "" {
+		t.Errorf("empty args should yield empty text (caller drops event), got %q", text)
 	}
 }
 
