@@ -228,6 +228,135 @@ func TestExtractToolName_NativeReturnsClientName(t *testing.T) {
 	}
 }
 
+// TestClientNameForCursorTool_PiFamily locks in the Pi* mapping.
+// This is the fix for the downstream 2026-07-18 report — Composer
+// emits PiWriteToolCall for a client-declared write_file, and
+// without these entries the name came out as "".
+func TestClientNameForCursorTool_PiFamily(t *testing.T) {
+	cases := []struct {
+		cursorType string
+		want       string
+	}{
+		{"pi_write", "Write"},
+		{"pi_bash", "Bash"},
+		{"pi_edit", "Write"},
+		{"pi_read", "Read"},
+		{"pi_find", "Glob"},
+		{"pi_grep", "Grep"},
+		{"pi_ls", "LS"},
+	}
+	for _, tc := range cases {
+		if got := clientNameForCursorTool(tc.cursorType); got != tc.want {
+			t.Errorf("clientNameForCursorTool(%q) = %q, want %q", tc.cursorType, got, tc.want)
+		}
+	}
+}
+
+// TestMapNativeToolArgsJSON_PiWrite is the exact downstream
+// regression: Composer's PiWriteToolCall carries { path, content }
+// and the client's write_file expects { file_path, content }. The
+// pre-fix build emitted "{}" here; this test guards that we
+// project both fields into the Claude Code Write schema.
+func TestMapNativeToolArgsJSON_PiWrite(t *testing.T) {
+	tc := &cursorpb.AgentV1_ToolCall{
+		Tool: &cursorpb.AgentV1_ToolCall_PiWriteToolCall{
+			PiWriteToolCall: &cursorpb.AgentV1_PiWriteToolCall{
+				Args: &cursorpb.AgentV1_PiWriteToolArgs{
+					Path:    "/tmp/note.txt",
+					Content: "4271",
+				},
+			},
+		},
+	}
+	got := mapNativeToolArgsJSON(tc)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("output not valid JSON: %v (raw=%s)", err, got)
+	}
+	if parsed["file_path"] != "/tmp/note.txt" {
+		t.Errorf("file_path = %v, want /tmp/note.txt", parsed["file_path"])
+	}
+	if parsed["content"] != "4271" {
+		t.Errorf("content = %v, want 4271", parsed["content"])
+	}
+	if _, leaked := parsed["path"]; leaked {
+		t.Error("Cursor internal `path` leaked into Write shape (should be file_path)")
+	}
+}
+
+// TestMapNativeToolArgsJSON_PiBash covers Composer's PiBashToolCall
+// path — { command, timeout? } wants { command, timeout_ms? }
+// (Claude Code Bash uses milliseconds; Cursor uses seconds float).
+func TestMapNativeToolArgsJSON_PiBash(t *testing.T) {
+	tc := &cursorpb.AgentV1_ToolCall{
+		Tool: &cursorpb.AgentV1_ToolCall_PiBashToolCall{
+			PiBashToolCall: &cursorpb.AgentV1_PiBashToolCall{
+				Args: &cursorpb.AgentV1_PiBashToolArgs{
+					Command: "ls -la",
+				},
+			},
+		},
+	}
+	got := mapNativeToolArgsJSON(tc)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("output not valid JSON: %v", err)
+	}
+	if parsed["command"] != "ls -la" {
+		t.Errorf("command = %v", parsed["command"])
+	}
+}
+
+// TestExtractToolName_PiFamily is the end-to-end for the extractor
+// side of the fix — every Pi* branch must produce a non-empty
+// client-visible name.
+func TestExtractToolName_PiFamily(t *testing.T) {
+	cases := []struct {
+		name string
+		tc   *cursorpb.AgentV1_ToolCall
+		want string
+	}{
+		{"pi_write", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiWriteToolCall{PiWriteToolCall: &cursorpb.AgentV1_PiWriteToolCall{}}}, "Write"},
+		{"pi_bash", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiBashToolCall{PiBashToolCall: &cursorpb.AgentV1_PiBashToolCall{}}}, "Bash"},
+		{"pi_edit", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiEditToolCall{PiEditToolCall: &cursorpb.AgentV1_PiEditToolCall{}}}, "Write"},
+		{"pi_read", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiReadToolCall{PiReadToolCall: &cursorpb.AgentV1_PiReadToolCall{}}}, "Read"},
+		{"pi_find", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiFindToolCall{PiFindToolCall: &cursorpb.AgentV1_PiFindToolCall{}}}, "Glob"},
+		{"pi_grep", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiGrepToolCall{PiGrepToolCall: &cursorpb.AgentV1_PiGrepToolCall{}}}, "Grep"},
+		{"pi_ls", &cursorpb.AgentV1_ToolCall{Tool: &cursorpb.AgentV1_ToolCall_PiLsToolCall{PiLsToolCall: &cursorpb.AgentV1_PiLsToolCall{}}}, "LS"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractToolName(tc.tc)
+			if got != tc.want {
+				t.Errorf("extractToolName(%s) = %q, want %q", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestExtractToolName_UnknownReturnsBranchName guards the raw-name
+// fallback. When Cursor emits a tool variant we don't enumerate
+// (CreatePlan, Task, SemSearch, etc.), extractToolName MUST return
+// the branch name — not "" — so the client at least logs
+// something. This is the second downstream ask from the
+// 2026-07-18 report.
+func TestExtractToolName_UnknownReturnsBranchName(t *testing.T) {
+	tc := &cursorpb.AgentV1_ToolCall{
+		Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
+			CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{},
+		},
+	}
+	got := extractToolName(tc)
+	if got == "" {
+		t.Fatalf("extractToolName(CreatePlan) = %q, want non-empty branch name — client rejects empty tool names outright", got)
+	}
+	// Exact spelling is implementation detail; just require the
+	// branch label is present.
+	if !strings.Contains(strings.ToLower(got), "createplan") {
+		t.Errorf("extractToolName(CreatePlan) = %q, want to contain 'createplan'", got)
+	}
+}
+
 // stringPtr is the pointer-taking helper protobuf oneof fields want
 // for optional strings. Inlined here so the test file doesn't need
 // its own utility import.

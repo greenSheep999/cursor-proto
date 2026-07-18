@@ -68,6 +68,22 @@ var nativeToolClientName = map[string]string{
 	"glob":   "Glob",
 	"delete": "Bash", // no dedicated Delete in Claude Code; map to Bash rm
 	"fetch":  "WebFetch",
+	// Pi* family — Cursor's Composer-2.5 planning intelligence tools.
+	// Composer prefers these over the shell/edit/read tools even when
+	// the caller registered its own MCP set. Field shapes are already
+	// close to Claude Code's — pi_write.{path,content} maps to
+	// Write.{file_path,content}, pi_bash.command maps to Bash.command,
+	// etc. Coverage of these was the specific gap downstream reported
+	// on 2026-07-18 (sse-tool-use-postfix-report.md): write_file
+	// calls yielded name:"" and args:{} because Composer emitted
+	// PiWriteToolCall and our switch didn't enumerate it.
+	"pi_write": "Write",
+	"pi_bash":  "Bash",
+	"pi_edit":  "Write", // string-replace edits collapse to a Write w/ new content
+	"pi_read":  "Read",
+	"pi_find":  "Glob",
+	"pi_grep":  "Grep",
+	"pi_ls":    "LS",
 	// ask_question is a Cursor-internal user-facing prompt; it has no
 	// direct Claude Code analogue. Leave the raw name so clients that
 	// know Cursor natively (cursor2api harness) can handle it.
@@ -207,6 +223,102 @@ func mapNativeToolArgsJSON(tc *cursorpb.AgentV1_ToolCall) string {
 		// error, but that's a per-client policy call, not a data
 		// shape one.
 		return ""
+	// Pi* family — Composer / planning-intelligence tools. Field
+	// shapes are already close to Claude Code's; do a minimal rename
+	// (path → file_path) so a client's write_file / read_file /
+	// glob / grep receives the arguments in the shape it declared.
+	case tc.GetPiWriteToolCall() != nil:
+		a := tc.GetPiWriteToolCall().GetArgs()
+		if a == nil {
+			return "{}"
+		}
+		return marshalJSON(map[string]any{
+			"file_path": a.GetPath(),
+			"content":   a.GetContent(),
+		})
+	case tc.GetPiBashToolCall() != nil:
+		a := tc.GetPiBashToolCall().GetArgs()
+		if a == nil {
+			return "{}"
+		}
+		out := map[string]any{"command": a.GetCommand()}
+		if t := a.GetTimeout(); t > 0 {
+			out["timeout_ms"] = int(t * 1000)
+		}
+		return marshalJSON(out)
+	case tc.GetPiEditToolCall() != nil:
+		a := tc.GetPiEditToolCall().GetArgs()
+		if a == nil {
+			return "{}"
+		}
+		// PiEdit is a stream of {old_text, new_text} replacements.
+		// Claude Code's Write expects one final content blob — we can't
+		// materialise that here without the source file. Expose the
+		// replacements list under `edits` so clients that DO understand
+		// the string-replace shape (Cline, cursor2api native) can use
+		// it; clients that only know Write will reject the tool_use.
+		// Also expose file_path so at least the target file is known.
+		edits := a.GetEdits()
+		out := map[string]any{"file_path": a.GetPath()}
+		if len(edits) > 0 {
+			list := make([]map[string]string, 0, len(edits))
+			for _, e := range edits {
+				list = append(list, map[string]string{
+					"old_string": e.GetOldText(),
+					"new_string": e.GetNewText(),
+				})
+			}
+			out["edits"] = list
+		}
+		return marshalJSON(out)
+	case tc.GetPiReadToolCall() != nil:
+		a := tc.GetPiReadToolCall().GetArgs()
+		if a == nil {
+			return "{}"
+		}
+		out := map[string]any{"file_path": a.GetPath()}
+		if a.GetOffset() != 0 {
+			out["offset"] = a.GetOffset()
+		}
+		if a.GetLimit() != 0 {
+			out["limit"] = a.GetLimit()
+		}
+		return marshalJSON(out)
+	case tc.GetPiFindToolCall() != nil:
+		a := tc.GetPiFindToolCall().GetArgs()
+		if a == nil {
+			return "{}"
+		}
+		// PiFind is fuzzy filename discovery — Claude Code's Glob is
+		// the closest analogue.
+		out := map[string]any{"pattern": a.GetPattern()}
+		if p := a.GetPath(); p != "" {
+			out["path"] = p
+		}
+		return marshalJSON(out)
+	case tc.GetPiGrepToolCall() != nil:
+		a := tc.GetPiGrepToolCall().GetArgs()
+		if a == nil {
+			return "{}"
+		}
+		out := map[string]any{"pattern": a.GetPattern()}
+		if p := a.GetPath(); p != "" {
+			out["path"] = p
+		}
+		if g := a.GetGlob(); g != "" {
+			out["glob"] = g
+		}
+		return marshalJSON(out)
+	case tc.GetPiLsToolCall() != nil:
+		a := tc.GetPiLsToolCall().GetArgs()
+		if a == nil {
+			return "{}"
+		}
+		out := map[string]any{}
+		if p := a.GetPath(); p != "" {
+			out["path"] = p
+		}
+		return marshalJSON(out)
 	}
 	return ""
 }

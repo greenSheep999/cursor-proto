@@ -307,16 +307,90 @@ func extractToolName(tc *cursorpb.AgentV1_ToolCall) string {
 	if tc.GetAskQuestionToolCall() != nil {
 		return clientNameForCursorTool("ask_question")
 	}
-	// Grok variant + any new Cursor tool type not yet enumerated
-	// above emit a ToolCall whose oneof branch we don't know. The
-	// pre-fix behaviour returned "" here and the client rejected it
-	// ("Invalid tool ''"). Fall back to whatever raw name the proto
-	// surfaces on the ToolCall envelope — better an approximate
-	// name the client can log than an empty one it rejects outright.
+	// Pi* family — Composer / planning-intelligence tools. Composer
+	// prefers these over shell/edit/read even when the caller
+	// registered an MCP tool set (downstream reported this on
+	// 2026-07-18: write_file requests hit PiWriteToolCall and our
+	// switch didn't enumerate it, giving the client name:"").
+	if tc.GetPiWriteToolCall() != nil {
+		return clientNameForCursorTool("pi_write")
+	}
+	if tc.GetPiBashToolCall() != nil {
+		return clientNameForCursorTool("pi_bash")
+	}
+	if tc.GetPiEditToolCall() != nil {
+		return clientNameForCursorTool("pi_edit")
+	}
+	if tc.GetPiReadToolCall() != nil {
+		return clientNameForCursorTool("pi_read")
+	}
+	if tc.GetPiFindToolCall() != nil {
+		return clientNameForCursorTool("pi_find")
+	}
+	if tc.GetPiGrepToolCall() != nil {
+		return clientNameForCursorTool("pi_grep")
+	}
+	if tc.GetPiLsToolCall() != nil {
+		return clientNameForCursorTool("pi_ls")
+	}
+	// Any Cursor tool type not enumerated above (CreatePlan, Task,
+	// SemSearch, WebSearch, ListMcpResources, UpdateTodos, and 40+
+	// others). Return the oneof branch name via protoreflect so
+	// clients see SOMETHING they can log or alias instead of the
+	// empty string — the downstream report noted "a client that
+	// sees 'shell' can decide what to do; a client that sees '' has
+	// zero information".
+	if raw := oneofBranchName(tc); raw != "" {
+		return raw
+	}
+	// Last-ditch: scan the envelope for a top-level name string
+	// field. Current proto doesn't expose one, but future revisions
+	// might.
 	if raw := probeUnknownToolName(tc); raw != "" {
 		return raw
 	}
 	return ""
+}
+
+// oneofBranchName returns the CamelCase suffix of the ToolCall
+// oneof branch when the typed switch above didn't match. For
+// example a ToolCall carrying CreatePlanToolCall returns
+// "CreatePlan". Clients can then treat unknown tool names as
+// opaque strings — better than "" which every harness rejects
+// outright.
+func oneofBranchName(tc *cursorpb.AgentV1_ToolCall) string {
+	if tc == nil {
+		return ""
+	}
+	msg := tc.ProtoReflect()
+	// Walk the ToolCall's oneof descriptors — every native tool
+	// branch is one field in the `tool` oneof (see gen/cursor/*.go
+	// AgentV1_ToolCall). WhichOneof returns the populated field
+	// descriptor when exactly one is set.
+	oneofs := msg.Descriptor().Oneofs()
+	for i := 0; i < oneofs.Len(); i++ {
+		od := oneofs.Get(i)
+		fd := msg.WhichOneof(od)
+		if fd == nil {
+			continue
+		}
+		// Field JSON name is e.g. "createPlanToolCall". Strip the
+		// trailing "ToolCall" so we surface "createPlan" — closer to
+		// what a harness would recognise or alias.
+		name := fd.JSONName()
+		return trimSuffixCase(name, "ToolCall")
+	}
+	return ""
+}
+
+// trimSuffixCase strips a suffix from a string when present,
+// mirroring strings.TrimSuffix. Local helper so this file's
+// dependency footprint stays tight.
+func trimSuffixCase(s, suffix string) string {
+	if len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix {
+		return s[:len(s)-len(suffix)]
+	}
+	return s
 }
 
 // probeUnknownToolName scans a ToolCall envelope for any string

@@ -74,3 +74,4 @@ captures/wb-*.js.gz
 *.swp
 *.swo
 Thumbs.db
+.serena/
