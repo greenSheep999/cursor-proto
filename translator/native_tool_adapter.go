@@ -43,6 +43,7 @@ package translator
 
 import (
 	"encoding/json"
+	"strings"
 
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
@@ -106,6 +107,108 @@ func clientNameForCursorTool(cursorType string) string {
 		return mapped
 	}
 	return cursorType
+}
+
+// toolNameAliases groups common client-declared names that map to
+// the same functional tool. Used by ApplyClientToolAlias to pick
+// the client's spelling instead of our hardcoded default.
+//
+// Grouped by concept:
+//   - shell: bash / shell / run_terminal_command / run_shell_command /
+//     run_command / execute
+//   - write: write / write_file / create_file / create
+//   - read:  read / read_file / open_file / view
+//   - grep:  grep / ripgrep_search / grep_search / search_files
+//   - glob:  glob / file_search / find_files
+//   - ls:    ls / list_dir / list_directory
+//   - fetch: web_fetch / webfetch / fetch_url / http_get
+//
+// A single Cursor default like "bash" from Path C above matches any
+// alias in the "shell" group. When the client declared any of those
+// spellings we return the exact one they declared; otherwise we
+// keep our default. See cursor2api's 2026-07-19 codex report — codex
+// declares `shell`, we returned `bash`, hence 6× "unsupported call".
+var toolNameAliases = [][]string{
+	// shell family
+	{"bash", "shell", "run_terminal_command", "run_terminal_cmd", "run_shell_command", "run_command", "execute", "sh"},
+	// write family
+	{"write", "write_file", "create_file", "create", "str_replace_editor"},
+	// read family
+	{"read", "read_file", "open_file", "view"},
+	// grep family
+	{"grep", "ripgrep_search", "grep_search", "search_files"},
+	// glob family
+	{"glob", "file_search", "find_files"},
+	// ls family
+	{"ls", "list_dir", "list_directory", "list_files"},
+	// fetch family
+	{"web_fetch", "webfetch", "fetch_url", "http_get", "web_search"},
+}
+
+// ApplyClientToolAlias rewrites ev.ToolName to whatever the client
+// declared in its tools[] list, when we can identify a compatible
+// alias. When there's no match, leaves the name untouched — a
+// client that doesn't declare shell/bash still sees `bash` (our
+// Path C default), which is at least a valid identifier.
+//
+// clientToolNames comes from OpenAI req.Tools[].function.name or
+// Anthropic req.Tools[].name; case is preserved as-declared so the
+// returned name matches exactly what the client's dispatch table
+// expects.
+//
+// A nil / empty clientToolNames list is a no-op — clients that
+// don't declare tools shouldn't get aliased.
+func ApplyClientToolAlias(ev *Event, clientToolNames []string) {
+	if ev == nil || ev.ToolName == "" || len(clientToolNames) == 0 {
+		return
+	}
+	// Build a lowercase set of client names once. We'll do
+	// case-insensitive matching but return the caller's exact
+	// casing.
+	byLower := make(map[string]string, len(clientToolNames))
+	for _, name := range clientToolNames {
+		n := strings.TrimSpace(name)
+		if n == "" {
+			continue
+		}
+		byLower[strings.ToLower(n)] = n
+	}
+	// If the current ToolName already matches (case-insensitively)
+	// something the client declared, return the client's exact
+	// spelling — this covers the Grok case where the model calls
+	// an MCP tool by the caller's own name.
+	if exact, ok := byLower[strings.ToLower(ev.ToolName)]; ok {
+		ev.ToolName = exact
+		return
+	}
+	// Otherwise find the alias group our default lives in, then
+	// check whether the client declared any other alias in the
+	// same group. If yes, prefer the client's spelling.
+	group := aliasGroupOf(ev.ToolName)
+	if group == nil {
+		return
+	}
+	for _, alias := range group {
+		if exact, ok := byLower[strings.ToLower(alias)]; ok {
+			ev.ToolName = exact
+			return
+		}
+	}
+	// No client alias matched. Leave the current name.
+}
+
+// aliasGroupOf returns the alias list that contains name (case-
+// insensitive lookup), or nil if name isn't in any group.
+func aliasGroupOf(name string) []string {
+	lower := strings.ToLower(name)
+	for _, group := range toolNameAliases {
+		for _, a := range group {
+			if a == lower {
+				return group
+			}
+		}
+	}
+	return nil
 }
 
 // internalPlanningToolAsText detects Cursor's internal orchestration

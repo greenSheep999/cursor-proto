@@ -144,12 +144,13 @@ func geminiGenerateContentHandler(c chatRunner, cacheStore *simcache.Store, stre
 			return
 		}
 
+		clientToolNames := toolDefNames(tools)
 		if streaming {
 			w.Header().Set("x-cursor-cache-source", decision.headerBeforeStream())
-			streamGemini(w, model, events, decision)
+			streamGemini(w, model, events, decision, clientToolNames)
 			return
 		}
-		nonStreamGemini(w, model, events, decision)
+		nonStreamGemini(w, model, events, decision, clientToolNames)
 	}
 }
 
@@ -261,7 +262,7 @@ func convertGeminiTools(in []geminiToolGroup) []executor.ToolDefinition {
 
 // ---------- Streaming path ----------
 
-func streamGemini(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
+func streamGemini(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	flusher, _ := w.(http.Flusher)
 	headersWritten := false
 	commit := func() {
@@ -306,7 +307,7 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}
@@ -333,7 +334,7 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 
 // ---------- Non-streaming path ----------
 
-func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
+func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	acc := translator.GeminiNonStreamingAccumulator{Model: model}
 	assistantSent := ""
 	var trailerErr *executor.TrailerStatus
@@ -355,7 +356,7 @@ func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}

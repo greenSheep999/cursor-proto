@@ -439,3 +439,67 @@ func TestInternalPlanningToolAsText_EmptyArgs(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// TestApplyClientToolAlias — client codex declares `shell`, we
+// default `bash`, alias resolution should pick `shell` because
+// they're in the same family (Cursor's downstream 2026-07-19
+// asked for exactly this).
+func TestApplyClientToolAlias_CodexShell(t *testing.T) {
+	ev := &Event{ToolName: "bash"}
+	ApplyClientToolAlias(ev, []string{"shell", "read", "write"})
+	if ev.ToolName != "shell" {
+		t.Errorf("ApplyClientToolAlias: bash + client{shell} = %q, want shell", ev.ToolName)
+	}
+}
+
+// TestApplyClientToolAlias_ExactMatch — Grok emits `add` (MCP-side
+// exact match). Client declared `add`. Should stay as declared.
+func TestApplyClientToolAlias_ExactMatch(t *testing.T) {
+	ev := &Event{ToolName: "add"}
+	ApplyClientToolAlias(ev, []string{"add", "subtract"})
+	if ev.ToolName != "add" {
+		t.Errorf("exact-match alias returned %q, want add", ev.ToolName)
+	}
+}
+
+// TestApplyClientToolAlias_CaseInsensitiveMatch — Composer emits
+// `bash`, client declared `Bash` (Claude Code capitalisation). We
+// should return the client's exact spelling.
+func TestApplyClientToolAlias_CaseInsensitiveMatch(t *testing.T) {
+	ev := &Event{ToolName: "bash"}
+	ApplyClientToolAlias(ev, []string{"Bash", "Read", "Write"})
+	if ev.ToolName != "Bash" {
+		t.Errorf("case-insensitive match returned %q, want Bash", ev.ToolName)
+	}
+}
+
+// TestApplyClientToolAlias_NoMatch — client declared entirely
+// unrelated tools. Leave the ToolName alone so at least our
+// lowercase default is visible.
+func TestApplyClientToolAlias_NoMatch(t *testing.T) {
+	ev := &Event{ToolName: "bash"}
+	ApplyClientToolAlias(ev, []string{"query_database", "send_email"})
+	if ev.ToolName != "bash" {
+		t.Errorf("no-match alias mutated ToolName to %q; want to keep 'bash' default", ev.ToolName)
+	}
+}
+
+// TestApplyClientToolAlias_NoClientTools — no tools declared,
+// leave name alone.
+func TestApplyClientToolAlias_NoClientTools(t *testing.T) {
+	ev := &Event{ToolName: "bash"}
+	ApplyClientToolAlias(ev, nil)
+	if ev.ToolName != "bash" {
+		t.Errorf("nil client tools mutated ToolName to %q", ev.ToolName)
+	}
+	ApplyClientToolAlias(ev, []string{})
+	if ev.ToolName != "bash" {
+		t.Errorf("empty client tools mutated ToolName to %q", ev.ToolName)
+	}
+}
+
+// TestApplyClientToolAlias_NilEventSafe — defensive
+func TestApplyClientToolAlias_NilEventSafe(t *testing.T) {
+	ApplyClientToolAlias(nil, []string{"shell"})
+	// no panic = pass
+}

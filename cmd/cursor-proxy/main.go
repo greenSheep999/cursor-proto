@@ -398,7 +398,8 @@ func openaiChatHandler(c *executor.Client, cacheStore *simcache.Store) http.Hand
 		// that end in 400, since "tried to use tool X but got
 		// rejected" is exactly the signal downstream wants for
 		// diagnostics.
-		recordToolsFromRequest(extractOpenAIToolNames(req.Tools))
+		clientToolNames := extractOpenAIToolNames(req.Tools)
+		recordToolsFromRequest(clientToolNames)
 
 		systemPrompt := ""
 		convTurns := make([]openaiMessage, 0, len(req.Messages))
@@ -461,10 +462,10 @@ func openaiChatHandler(c *executor.Client, cacheStore *simcache.Store) http.Hand
 			// simulator's pre-stream view (real / simulated). See docs.
 			w.Header().Set("x-cursor-cache-source", decision.headerBeforeStream())
 			includeUsage := req.StreamOptions != nil && req.StreamOptions.IncludeUsage
-			streamOpenAI(w, req.Model, events, includeUsage, decision)
+			streamOpenAI(w, req.Model, events, includeUsage, decision, clientToolNames)
 			return
 		}
-		nonStreamOpenAI(w, req.Model, events, decision)
+		nonStreamOpenAI(w, req.Model, events, decision, clientToolNames)
 	}
 }
 
@@ -520,7 +521,7 @@ func convertAnthropicTools(in []anthropicTool) (out []executor.ToolDefinition, u
 	return out, unsupportedType
 }
 
-func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, includeUsage bool, decision simCacheDecision) {
+func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, includeUsage bool, decision simCacheDecision, clientToolNames []string) {
 	// Defer committing SSE headers until we've either seen a data frame or an
 	// error trailer, so a fast-fail model-gate error can be surfaced as a
 	// proper HTTP status code rather than a 200 with empty content.
@@ -569,7 +570,7 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}
@@ -606,7 +607,7 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 	}
 }
 
-func nonStreamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
+func nonStreamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	acc := translator.NonStreamingAccumulator{Model: model}
 	var trailerErr *executor.TrailerStatus
 	for ev := range events {
@@ -623,7 +624,7 @@ func nonStreamOpenAI(w http.ResponseWriter, model string, events <-chan executor
 			acc.Text = blob.AssistantText
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}
@@ -676,7 +677,8 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 		}
 		// Feed the introspection ring. See openaiChatHandler for
 		// why we record before validation.
-		recordToolsFromRequest(extractAnthropicToolNames(req.Tools))
+		clientToolNames := extractAnthropicToolNames(req.Tools)
+		recordToolsFromRequest(clientToolNames)
 
 		systemPrompt := flattenAnthropicSystem(req.System)
 		lastUserIdx := -1
@@ -751,10 +753,10 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 
 		if req.Stream {
 			w.Header().Set("x-cursor-cache-source", decision.headerBeforeStream())
-			streamAnthropic(w, req.Model, events, decision)
+			streamAnthropic(w, req.Model, events, decision, clientToolNames)
 			return
 		}
-		nonStreamAnthropic(w, req.Model, events, decision)
+		nonStreamAnthropic(w, req.Model, events, decision, clientToolNames)
 	}
 }
 
@@ -830,7 +832,7 @@ func canonicalizeAnthropicModel(model, effort string) string {
 	return base
 }
 
-func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
+func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	flusher, _ := w.(http.Flusher)
 	headersWritten := false
 	commit := func() {
@@ -875,7 +877,7 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}
@@ -907,7 +909,7 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 	writeSSE(tr.Encode(end))
 }
 
-func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
+func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	assistantText := ""
 	var usage *translator.Usage
 	var toolUses []map[string]any
@@ -926,7 +928,7 @@ func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan execu
 			assistantText = blob.AssistantText
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}

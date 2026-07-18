@@ -125,12 +125,13 @@ func responsesHandler(c chatRunner, cacheStore *simcache.Store) http.HandlerFunc
 			return
 		}
 
+		clientToolNames := toolDefNames(tools)
 		if req.Stream {
 			w.Header().Set("x-cursor-cache-source", decision.headerBeforeStream())
-			streamResponses(w, req.Model, events, decision)
+			streamResponses(w, req.Model, events, decision, clientToolNames)
 			return
 		}
-		nonStreamResponses(w, req.Model, events, decision)
+		nonStreamResponses(w, req.Model, events, decision, clientToolNames)
 	}
 }
 
@@ -271,7 +272,7 @@ func convertResponsesTools(in []responsesTool) []executor.ToolDefinition {
 
 // ---------- Streaming path ----------
 
-func streamResponses(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
+func streamResponses(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	flusher, _ := w.(http.Flusher)
 	headersWritten := false
 	commit := func() {
@@ -325,7 +326,7 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}
@@ -357,7 +358,7 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 
 // ---------- Non-streaming path ----------
 
-func nonStreamResponses(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision) {
+func nonStreamResponses(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	acc := translator.ResponsesNonStreamingAccumulator{Model: model}
 	assistantSent := ""
 	var trailerErr *executor.TrailerStatus
@@ -379,7 +380,7 @@ func nonStreamResponses(w http.ResponseWriter, model string, events <-chan execu
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}

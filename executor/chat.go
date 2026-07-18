@@ -313,7 +313,7 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 						//      heartbeat deadline (see cursor3.11/v0.3.2).
 						if autoStopOnToolCall &&
 							(msg.GetExecServerMessage().GetMcpArgs() != nil ||
-								msg.GetInteractionUpdate().GetToolCallStarted() != nil) {
+								isUserFacingToolCallStarted(msg.GetInteractionUpdate().GetToolCallStarted())) {
 							setDeadline(postAssistantGrace)
 						}
 					}
@@ -328,6 +328,46 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 			return
 		}
 	}
+}
+
+// isUserFacingToolCallStarted returns true when a ToolCallStarted
+// update carries a tool call the client is expected to service —
+// shell, edit, pi_bash, pi_write, MCP wrappers, etc. — as opposed
+// to Cursor's internal orchestration tools (create_plan,
+// update_todos, task, read_todos).
+//
+// Why this exists: AutoStopOnToolCall fires setDeadline as soon as
+// the first ToolCallStarted crosses the wire. When the client
+// declared tools[], Cursor's Composer emits create_plan as its
+// FIRST move (per cursor2api's 2026-07-19 report). We don't want
+// to close the SSE on that call — the actual user-facing tool
+// (pi_write, pi_bash) comes a few frames later on the same
+// stream. Ignoring internal tools here lets us keep reading until
+// the client's tool actually fires.
+func isUserFacingToolCallStarted(s *cursorpb.AgentV1_ToolCallStartedUpdate) bool {
+	if s == nil {
+		return false
+	}
+	tc := s.GetToolCall()
+	if tc == nil {
+		return false
+	}
+	// Internal planning tools — never a valid stop trigger.
+	if tc.GetCreatePlanToolCall() != nil {
+		return false
+	}
+	if tc.GetUpdateTodosToolCall() != nil {
+		return false
+	}
+	if tc.GetReadTodosToolCall() != nil {
+		return false
+	}
+	if tc.GetTaskToolCall() != nil {
+		return false
+	}
+	// Any other populated branch (Shell/Read/Write/Grep/Glob/LS/
+	// Fetch/Delete/AskQuestion/Pi*/Mcp/etc.) counts as user-facing.
+	return true
 }
 
 // sniffAssistantBlob returns true when the message is a KV SetBlobArgs whose

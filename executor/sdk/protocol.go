@@ -66,11 +66,11 @@ func (e *RPCError) Error() string {
 
 // PingResult mirrors PingResult in protocol.ts.
 type PingResult struct {
-	Pong          bool   `json:"pong"`
-	SDKVersion    string `json:"sdk_version"`
-	NodeVersion   string `json:"node_version"`
-	ActiveAgents  int    `json:"active_agents"`
-	ActiveRuns    int    `json:"active_runs"`
+	Pong         bool   `json:"pong"`
+	SDKVersion   string `json:"sdk_version"`
+	NodeVersion  string `json:"node_version"`
+	ActiveAgents int    `json:"active_agents"`
+	ActiveRuns   int    `json:"active_runs"`
 }
 
 // ModelSelection is the shape the Node runner expects for
@@ -105,8 +105,8 @@ type AgentCreateParams struct {
 }
 
 type CloudRepo struct {
-	URL          string `json:"url"`
-	StartingRef  string `json:"startingRef,omitempty"`
+	URL         string `json:"url"`
+	StartingRef string `json:"startingRef,omitempty"`
 }
 
 type AgentCreateResult struct {
@@ -154,11 +154,11 @@ type RunEvent struct {
 // try to reconstruct final_text / usage from raw run.event
 // notifications.
 type RunDone struct {
-	RunID      string          `json:"runId"`
-	FinalText  string          `json:"finalText"`
-	Status     string          `json:"status"` // "finished" | "error" | "cancelled"
-	Usage      *TokenUsage     `json:"usage,omitempty"`
-	DurationMs int64           `json:"durationMs,omitempty"`
+	RunID      string            `json:"runId"`
+	FinalText  string            `json:"finalText"`
+	Status     string            `json:"status"` // "finished" | "error" | "cancelled"
+	Usage      *TokenUsage       `json:"usage,omitempty"`
+	DurationMs int64             `json:"durationMs,omitempty"`
 	ToolCalls  []ToolCallSummary `json:"toolCalls,omitempty"`
 }
 
