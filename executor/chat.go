@@ -29,7 +29,21 @@ type ChatRequest struct {
 	UserMessage    string // the human turn text
 	ConversationID string // optional; auto-generated if empty
 	WorkspacePath  string // optional; default os.Getwd
-	Mode           uint32 // 1=ask, 3=agent  (default 3)
+	// Mode selects Cursor's server-side conversation mode. The proto enum is:
+	//   0 UNSPECIFIED — server treats as PLAN (verified 2026-07-19 with a
+	//                   fresh Composer trace: system_reminder "Plan mode is
+	//                   active" injected, tool call blocked, model forced
+	//                   into CreatePlan-only mode).
+	//   1 AGENT       — the real agentic mode; write_file / bash / etc. fire.
+	//   2 ASK         — chat-only, no tools.
+	//   3 PLAN        — explicit CreatePlan-only mode.
+	//   4 DEBUG / 5 TRIAGE / 6 PROJECT / 7 MULTITASK — specialised, rarely
+	//                   used from the wire proxy.
+	// Leave as 0 in a ChatRequest to opt into the executor default (AGENT).
+	// Historical note: this used to be documented as "1=ask, 3=agent" which
+	// was wrong on both counts — that mistake is why every /v1/chat/completions
+	// call landed in Plan mode until we caught it.
+	Mode uint32
 
 	// History is the prior conversation, in chronological order. Everything
 	// before the current turn goes here; UserMessage remains the current
@@ -124,9 +138,15 @@ type ChatEvent struct {
 //
 // Cursor pairs the two via the shared request-id string.
 func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEvent, error) {
-	if req.Mode == 0 {
-		req.Mode = 3
-	}
+	// Historical bug (verified fixed 2026-07-19): this used to set
+	// `req.Mode = 3` when unset, on the assumption that "3 = agent". The
+	// proto enum actually maps 3 to AGENT_MODE_PLAN, so every default call
+	// landed in Plan mode — Composer's server injected a "Plan mode is
+	// active" system_reminder that blocked write_file / bash / edit and
+	// forced CreatePlan-only behaviour. Downstream cursor2api's 2026-07-19
+	// report ("CLI 0/4 built note.txt") traced back to this line. Leave
+	// req.Mode alone here; buildAgentRunRequest promotes UNSPECIFIED (0)
+	// to AGENT (1) with the correct enum value.
 	if req.Model == "" {
 		req.Model = "claude-4.5-sonnet"
 	}
@@ -313,7 +333,7 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 						//      heartbeat deadline (see cursor3.11/v0.3.2).
 						if autoStopOnToolCall &&
 							(msg.GetExecServerMessage().GetMcpArgs() != nil ||
-								isUserFacingToolCallStarted(msg.GetInteractionUpdate().GetToolCallStarted())) {
+								msg.GetInteractionUpdate().GetToolCallStarted() != nil) {
 							setDeadline(postAssistantGrace)
 						}
 					}
@@ -328,46 +348,6 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 			return
 		}
 	}
-}
-
-// isUserFacingToolCallStarted returns true when a ToolCallStarted
-// update carries a tool call the client is expected to service —
-// shell, edit, pi_bash, pi_write, MCP wrappers, etc. — as opposed
-// to Cursor's internal orchestration tools (create_plan,
-// update_todos, task, read_todos).
-//
-// Why this exists: AutoStopOnToolCall fires setDeadline as soon as
-// the first ToolCallStarted crosses the wire. When the client
-// declared tools[], Cursor's Composer emits create_plan as its
-// FIRST move (per cursor2api's 2026-07-19 report). We don't want
-// to close the SSE on that call — the actual user-facing tool
-// (pi_write, pi_bash) comes a few frames later on the same
-// stream. Ignoring internal tools here lets us keep reading until
-// the client's tool actually fires.
-func isUserFacingToolCallStarted(s *cursorpb.AgentV1_ToolCallStartedUpdate) bool {
-	if s == nil {
-		return false
-	}
-	tc := s.GetToolCall()
-	if tc == nil {
-		return false
-	}
-	// Internal planning tools — never a valid stop trigger.
-	if tc.GetCreatePlanToolCall() != nil {
-		return false
-	}
-	if tc.GetUpdateTodosToolCall() != nil {
-		return false
-	}
-	if tc.GetReadTodosToolCall() != nil {
-		return false
-	}
-	if tc.GetTaskToolCall() != nil {
-		return false
-	}
-	// Any other populated branch (Shell/Read/Write/Grep/Glob/LS/
-	// Fetch/Delete/AskQuestion/Pi*/Mcp/etc.) counts as user-facing.
-	return true
 }
 
 // sniffAssistantBlob returns true when the message is a KV SetBlobArgs whose

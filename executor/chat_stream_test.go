@@ -106,96 +106,11 @@ func runReadSSE(body io.ReadCloser, autoStopOnToolCall bool) (<-chan int, int) {
 	return result, 0
 }
 
-// TestIsUserFacingToolCallStarted locks the "internal planning tool"
-// filter used by AutoStopOnToolCall. Composer emits create_plan /
-// update_todos / task / read_todos as internal orchestration moves
-// before the actual user-facing tool (pi_write, pi_bash). Without
-// this filter, AutoStopOnToolCall would fire on create_plan and
-// close the SSE before the real tool arrived — reproduced by
-// cursor2api on 2026-07-19 (sse-tool-use-a0b578d-report.md).
-func TestIsUserFacingToolCallStarted_InternalPlanningIgnored(t *testing.T) {
-	cases := []struct {
-		name string
-		tc   *cursorpb.AgentV1_ToolCall
-	}{
-		{"create_plan", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
-				CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{},
-			},
-		}},
-		{"update_todos", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_UpdateTodosToolCall{
-				UpdateTodosToolCall: &cursorpb.AgentV1_UpdateTodosToolCall{},
-			},
-		}},
-		{"read_todos", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_ReadTodosToolCall{
-				ReadTodosToolCall: &cursorpb.AgentV1_ReadTodosToolCall{},
-			},
-		}},
-		{"task", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_TaskToolCall{
-				TaskToolCall: &cursorpb.AgentV1_TaskToolCall{},
-			},
-		}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := &cursorpb.AgentV1_ToolCallStartedUpdate{ToolCall: tc.tc}
-			if isUserFacingToolCallStarted(s) {
-				t.Errorf("isUserFacingToolCallStarted(%s) = true, want false — "+
-					"internal planning tool should NOT trigger SSE close", tc.name)
-			}
-		})
-	}
-}
-
-// TestIsUserFacingToolCallStarted_RealToolsPass verifies user-facing
-// tools (pi_write / shell / grep / edit / mcp / etc.) still trigger
-// the AutoStopOnToolCall deadline correctly.
-func TestIsUserFacingToolCallStarted_RealToolsPass(t *testing.T) {
-	cases := []struct {
-		name string
-		tc   *cursorpb.AgentV1_ToolCall
-	}{
-		{"pi_write", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_PiWriteToolCall{
-				PiWriteToolCall: &cursorpb.AgentV1_PiWriteToolCall{},
-			},
-		}},
-		{"shell", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_ShellToolCall{
-				ShellToolCall: &cursorpb.AgentV1_ShellToolCall{},
-			},
-		}},
-		{"edit", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_EditToolCall{
-				EditToolCall: &cursorpb.AgentV1_EditToolCall{},
-			},
-		}},
-		{"mcp", &cursorpb.AgentV1_ToolCall{
-			Tool: &cursorpb.AgentV1_ToolCall_McpToolCall{
-				McpToolCall: &cursorpb.AgentV1_McpToolCall{},
-			},
-		}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := &cursorpb.AgentV1_ToolCallStartedUpdate{ToolCall: tc.tc}
-			if !isUserFacingToolCallStarted(s) {
-				t.Errorf("isUserFacingToolCallStarted(%s) = false, want true", tc.name)
-			}
-		})
-	}
-}
-
-// TestIsUserFacingToolCallStarted_NilSafe guards against a nil
-// ToolCallStartedUpdate or nested nil ToolCall crashing the caller.
-func TestIsUserFacingToolCallStarted_NilSafe(t *testing.T) {
-	if isUserFacingToolCallStarted(nil) {
-		t.Error("nil update must return false")
-	}
-	if isUserFacingToolCallStarted(&cursorpb.AgentV1_ToolCallStartedUpdate{}) {
-		t.Error("update with nil ToolCall must return false")
-	}
-}
+// Historical: TestIsUserFacingToolCallStarted_* used to lock a
+// filter that ignored Composer's internal planning tools
+// (create_plan / update_todos / read_todos / task) in
+// AutoStopOnToolCall. That filter caused SSE hangs — Composer
+// waits for a create_plan_response tool_result from the client,
+// but skipping autoStop meant we never surfaced the tool_call
+// back to the client, so nothing ever responded. Reverted here;
+// autoStop now fires on any ToolCallStarted (matches a0b578d).

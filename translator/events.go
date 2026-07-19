@@ -115,27 +115,17 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 		if tc.GetMcpToolCall() != nil {
 			return nil
 		}
-		// Cursor's internal orchestration tools — createPlan,
-		// updateTodos, task, reflect, sendMessage, etc. — are the
-		// model's way of "talking to itself" during planning. They
-		// aren't user-facing tools; harnesses (opencode,
-		// claude-code) don't declare them and reject the call as
-		// unknown. Downstream cursor2api reported on 2026-07-18
-		// (sse-tool-use-9b7b550-report.md) that Composer's FIRST
-		// move on every request is a createPlan call — before any
-		// pi_* execution tool — which loops opencode until
-		// timeout.
-		//
-		// Fix: transparently convert these to an assistant text
-		// delta. The client sees "I'll do X, Y, Z" as the
-		// assistant's opening statement; the model self-continues
-		// on the next turn and reaches the actual Pi execution.
-		if text, ok := internalPlanningToolAsText(tc); ok {
-			if text == "" {
-				return nil
-			}
-			return &Event{Kind: EventTextDelta, Text: text}
-		}
+		// Historical note: v0.3.3 briefly intercepted Composer's
+		// planning tools (create_plan / update_todos / read_todos /
+		// task) here and rendered them as assistant text, because
+		// no client harness declared them. That was wrong —
+		// Composer waits for a *_response tool_result before
+		// emitting pi_write / pi_bash, so text-rendering the plan
+		// meant the follow-up execution tool never fired. Now we
+		// pass them through as regular tool_calls with snake_case
+		// names; downstream (cursor2api) mirrors Cursor's official
+		// client schema and acks them normally. See cursor2api's
+		// 2026-07-19 report.
 		callID := s.GetCallId()
 		if callID == "" {
 			callID = extractToolCallID(tc)
@@ -156,16 +146,11 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	}
 	if c := iu.GetToolCallCompleted(); c != nil {
 		tc := c.GetToolCall()
-		// Swallow completion events for internal orchestration
-		// tools — same rationale as the tool_call_started branch
-		// above. We converted the start event to a text delta, so
-		// the completion event has no matching content_block for
-		// downstream writers to close.
-		if tc != nil {
-			if _, isInternal := internalPlanningToolAsText(tc); isInternal {
-				return nil
-			}
-		}
+		// v0.3.3 filtered planning-tool completions here; reverted
+		// for the same reason as the tool_call_started branch —
+		// planning tools now flow through as real tool_calls, so
+		// their completions must reach the client to close the
+		// content_block.
 		callID := c.GetCallId()
 		if callID == "" {
 			callID = extractToolCallID(tc)
@@ -364,13 +349,29 @@ func extractToolName(tc *cursorpb.AgentV1_ToolCall) string {
 	if tc.GetPiLsToolCall() != nil {
 		return clientNameForCursorTool("pi_ls")
 	}
-	// Any Cursor tool type not enumerated above (CreatePlan, Task,
-	// SemSearch, WebSearch, ListMcpResources, UpdateTodos, and 40+
-	// others). Return the oneof branch name via protoreflect so
-	// clients see SOMETHING they can log or alias instead of the
-	// empty string — the downstream report noted "a client that
-	// sees 'shell' can decide what to do; a client that sees '' has
-	// zero information".
+	// Composer planning-intelligence tools. These are real tool_calls
+	// on the wire — Composer waits for a *_response tool_result before
+	// continuing to pi_write / pi_bash. Return snake_case names so
+	// clients that declared them (Cursor's official client, cursor2api
+	// harnesses that mirror its schema) dispatch correctly.
+	if tc.GetCreatePlanToolCall() != nil {
+		return clientNameForCursorTool("create_plan")
+	}
+	if tc.GetUpdateTodosToolCall() != nil {
+		return clientNameForCursorTool("update_todos")
+	}
+	if tc.GetReadTodosToolCall() != nil {
+		return clientNameForCursorTool("read_todos")
+	}
+	if tc.GetTaskToolCall() != nil {
+		return clientNameForCursorTool("task")
+	}
+	// Any Cursor tool type not enumerated above (SemSearch, WebSearch,
+	// ListMcpResources, and 40+ others). Return the oneof branch name
+	// via protoreflect so clients see SOMETHING they can log or alias
+	// instead of the empty string — the downstream report noted "a
+	// client that sees 'shell' can decide what to do; a client that
+	// sees '' has zero information".
 	if raw := oneofBranchName(tc); raw != "" {
 		return raw
 	}

@@ -49,10 +49,20 @@ func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string) (*curs
 		}
 	}
 
+	// Cursor's server treats Mode=UNSPECIFIED (proto zero) as PLAN mode —
+	// it injects a "Plan mode is active" system_reminder that blocks every
+	// non-readonly tool call. Callers that leave Mode==0 want the normal
+	// agentic flow (write_file / bash / etc.), so promote to AGENT here.
+	// Verified 2026-07-19 by dumping the KV blob for `Mode: 0` vs `Mode: 1`.
+	agentMode := cursorpb.AgentV1_AgentMode(req.Mode)
+	if agentMode == cursorpb.AgentV1_AGENT_MODE_UNSPECIFIED {
+		agentMode = cursorpb.AgentV1_AGENT_MODE_AGENT
+	}
+
 	userMsg := &cursorpb.AgentV1_UserMessage{
 		Text:      req.UserMessage,
 		MessageId: messageID,
-		Mode:      cursorpb.AgentV1_AgentMode(req.Mode),
+		Mode:      agentMode,
 	}
 	umAction := &cursorpb.AgentV1_UserMessageAction{
 		UserMessage:    userMsg,
@@ -77,8 +87,9 @@ func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string) (*curs
 	model := &cursorpb.AgentV1_ModelDetails{ModelId: req.Model}
 
 	trueVal := true
-	mode := cursorpb.AgentV1_AgentMode(req.Mode)
-	convState := &cursorpb.AgentV1_ConversationStateStructure{Mode: &mode}
+	// Reuse agentMode (already defaulted to AGENT for the UNSPECIFIED case
+	// above) so ConversationStateStructure stays in sync with UserMessage.
+	convState := &cursorpb.AgentV1_ConversationStateStructure{Mode: &agentMode}
 
 	arr := &cursorpb.AgentV1_AgentRunRequest{
 		ConversationState:          convState,

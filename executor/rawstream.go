@@ -21,9 +21,9 @@ import (
 // This is not used by the proxy runtime. It exists so cmd/test-rawstream can
 // dump captures without duplicating the RunSSE / BidiAppend orchestration.
 func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadCloser, error) {
-	if req.Mode == 0 {
-		req.Mode = 3
-	}
+	// Do NOT default Mode to 3 here — 3 is PLAN in Cursor's proto, not
+	// AGENT. See chat.go RunChat comment for full context. Leave the field
+	// at 0; downstream request builders normalise UNSPECIFIED to AGENT.
 	if req.Model == "" {
 		req.Model = "claude-4.5-sonnet"
 	}

@@ -336,36 +336,76 @@ func TestExtractToolName_PiFamily(t *testing.T) {
 
 // TestExtractToolName_UnknownReturnsBranchName guards the raw-name
 // fallback. When Cursor emits a tool variant we don't enumerate
-// (CreatePlan, Task, SemSearch, etc.), extractToolName MUST return
-// the branch name — not "" — so the client at least logs
-// something. This is the second downstream ask from the
-// 2026-07-18 report.
+// (SemSearch, ListMcpResources, and 40+ others), extractToolName
+// MUST return the oneof branch name — not "" — so the client at
+// least logs something. Second downstream ask from the 2026-07-18
+// report.
 func TestExtractToolName_UnknownReturnsBranchName(t *testing.T) {
 	tc := &cursorpb.AgentV1_ToolCall{
-		Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
-			CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{},
+		Tool: &cursorpb.AgentV1_ToolCall_SemSearchToolCall{
+			SemSearchToolCall: &cursorpb.AgentV1_SemSearchToolCall{},
 		},
 	}
 	got := extractToolName(tc)
 	if got == "" {
-		t.Fatalf("extractToolName(CreatePlan) = %q, want non-empty branch name — client rejects empty tool names outright", got)
+		t.Fatalf("extractToolName(SemSearch) = %q, want non-empty branch name — client rejects empty tool names outright", got)
 	}
-	// Exact spelling is implementation detail; just require the
-	// branch label is present.
-	if !strings.Contains(strings.ToLower(got), "createplan") {
-		t.Errorf("extractToolName(CreatePlan) = %q, want to contain 'createplan'", got)
+	if !strings.Contains(strings.ToLower(got), "semsearch") {
+		t.Errorf("extractToolName(SemSearch) = %q, want to contain 'semsearch'", got)
 	}
 }
 
-// TestInternalPlanningToolAsText — Composer's first move on every
-// prompt is a createPlan tool call. No client harness (opencode,
-// claude-code, codex) declares createPlan, so they reject the tool
-// use and loop until timeout. Downstream reported this as the
-// remaining blocker on 2026-07-18. The fix: intercept the internal
-// planning tools at translator layer and synthesize an assistant
-// text delta instead — the plan surfaces as narration, the model
-// self-continues into the actual Pi execution on the next turn.
-func TestInternalPlanningToolAsText_CreatePlan(t *testing.T) {
+// TestExtractToolName_PlanningToolsSnakeCase — Composer's planning
+// tools (create_plan / update_todos / read_todos / task) must NOT
+// be rendered as assistant text (older behaviour) and must NOT be
+// left to fall through to the CamelCase oneof-name fallback.
+// Composer waits for a *_response tool_result before continuing, so
+// clients need the exact snake_case name to dispatch. Downstream
+// cursor2api's 2026-07-19 report identified the markdown intercept
+// as the reason all 4 CLI harnesses stalled after the plan.
+func TestExtractToolName_PlanningToolsSnakeCase(t *testing.T) {
+	cases := []struct {
+		name string
+		tc   *cursorpb.AgentV1_ToolCall
+		want string
+	}{
+		{"create_plan", &cursorpb.AgentV1_ToolCall{
+			Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
+				CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{},
+			},
+		}, "create_plan"},
+		{"update_todos", &cursorpb.AgentV1_ToolCall{
+			Tool: &cursorpb.AgentV1_ToolCall_UpdateTodosToolCall{
+				UpdateTodosToolCall: &cursorpb.AgentV1_UpdateTodosToolCall{},
+			},
+		}, "update_todos"},
+		{"read_todos", &cursorpb.AgentV1_ToolCall{
+			Tool: &cursorpb.AgentV1_ToolCall_ReadTodosToolCall{
+				ReadTodosToolCall: &cursorpb.AgentV1_ReadTodosToolCall{},
+			},
+		}, "read_todos"},
+		{"task", &cursorpb.AgentV1_ToolCall{
+			Tool: &cursorpb.AgentV1_ToolCall_TaskToolCall{
+				TaskToolCall: &cursorpb.AgentV1_TaskToolCall{},
+			},
+		}, "task"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := extractToolName(c.tc)
+			if got != c.want {
+				t.Errorf("extractToolName(%s) = %q, want %q", c.name, got, c.want)
+			}
+		})
+	}
+}
+
+// TestMapNativeToolArgs_CreatePlan — args JSON must preserve the
+// full plan schema (name / overview / plan / todos / phases / is_project).
+// A client that declared create_plan expects this shape from
+// Cursor's official client; without it there's nothing to ack with
+// a create_plan_response, and Composer stays stuck.
+func TestMapNativeToolArgs_CreatePlan(t *testing.T) {
 	tc := &cursorpb.AgentV1_ToolCall{
 		Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
 			CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{
@@ -373,63 +413,77 @@ func TestInternalPlanningToolAsText_CreatePlan(t *testing.T) {
 					Name:     "Write note",
 					Overview: "Create note.txt with '4271'.",
 					Todos: []*cursorpb.AgentV1_TodoItem{
-						{Content: "check dir", Status: cursorpb.AgentV1_TodoStatus(1)},
-						{Content: "write file", Status: cursorpb.AgentV1_TodoStatus(1)},
+						{Id: "t1", Content: "check dir", Status: cursorpb.AgentV1_TodoStatus(1)},
+						{Id: "t2", Content: "write file", Status: cursorpb.AgentV1_TodoStatus(2)},
 					},
 				},
 			},
 		},
 	}
-	text, isInternal := internalPlanningToolAsText(tc)
-	if !isInternal {
-		t.Fatal("CreatePlan should be flagged as internal planning tool")
-	}
-	if !strings.Contains(text, "Write note") {
-		t.Errorf("rendered text missing plan name: %q", text)
-	}
-	if !strings.Contains(text, "Create note.txt") {
-		t.Errorf("rendered text missing overview: %q", text)
-	}
-	if !strings.Contains(text, "check dir") {
-		t.Errorf("rendered text missing todo: %q", text)
-	}
-	if !strings.Contains(text, "write file") {
-		t.Errorf("rendered text missing todo: %q", text)
-	}
-}
-
-// TestInternalPlanningToolAsText_NonPlanning verifies user-facing
-// tools (bash / write / etc.) are NOT flagged as internal, so they
-// keep flowing through extractToolName / mapNativeToolArgsJSON.
-func TestInternalPlanningToolAsText_NonPlanning(t *testing.T) {
-	for _, tc := range []*cursorpb.AgentV1_ToolCall{
-		{Tool: &cursorpb.AgentV1_ToolCall_PiBashToolCall{PiBashToolCall: &cursorpb.AgentV1_PiBashToolCall{}}},
-		{Tool: &cursorpb.AgentV1_ToolCall_ShellToolCall{ShellToolCall: &cursorpb.AgentV1_ShellToolCall{}}},
-		{Tool: &cursorpb.AgentV1_ToolCall_EditToolCall{EditToolCall: &cursorpb.AgentV1_EditToolCall{}}},
+	got := mapNativeToolArgsJSON(tc)
+	for _, want := range []string{
+		`"name":"Write note"`,
+		`"overview":"Create note.txt with '4271'."`,
+		`"todos"`,
+		`"content":"check dir"`,
+		`"content":"write file"`,
+		`"status":"pending"`,
+		`"status":"in_progress"`,
 	} {
-		_, isInternal := internalPlanningToolAsText(tc)
-		if isInternal {
-			t.Errorf("user-facing tool %T incorrectly flagged as internal planning", tc.GetTool())
+		if !strings.Contains(got, want) {
+			t.Errorf("mapNativeToolArgsJSON(CreatePlan) missing %q; got %q", want, got)
 		}
 	}
 }
 
-// TestInternalPlanningToolAsText_EmptyArgs — an empty CreatePlan
-// still counts as internal (must be swallowed) but yields an empty
-// text so the writer can drop the event entirely without emitting
-// an empty content_block_start.
-func TestInternalPlanningToolAsText_EmptyArgs(t *testing.T) {
+// TestMapNativeToolArgs_UpdateTodos — todo status must surface as
+// snake_case string, and merge:true flows through when set.
+func TestMapNativeToolArgs_UpdateTodos(t *testing.T) {
 	tc := &cursorpb.AgentV1_ToolCall{
-		Tool: &cursorpb.AgentV1_ToolCall_CreatePlanToolCall{
-			CreatePlanToolCall: &cursorpb.AgentV1_CreatePlanToolCall{},
+		Tool: &cursorpb.AgentV1_ToolCall_UpdateTodosToolCall{
+			UpdateTodosToolCall: &cursorpb.AgentV1_UpdateTodosToolCall{
+				Args: &cursorpb.AgentV1_UpdateTodosArgs{
+					Todos: []*cursorpb.AgentV1_TodoItem{
+						{Id: "t1", Content: "step 1", Status: cursorpb.AgentV1_TodoStatus(3)},
+					},
+					Merge: true,
+				},
+			},
 		},
 	}
-	text, isInternal := internalPlanningToolAsText(tc)
-	if !isInternal {
-		t.Error("empty CreatePlan should still be flagged as internal")
+	got := mapNativeToolArgsJSON(tc)
+	for _, want := range []string{
+		`"todos"`,
+		`"content":"step 1"`,
+		`"status":"completed"`,
+		`"merge":true`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("mapNativeToolArgsJSON(UpdateTodos) missing %q; got %q", want, got)
+		}
 	}
-	if text != "" {
-		t.Errorf("empty args should yield empty text (caller drops event), got %q", text)
+}
+
+// TestMapNativeToolArgs_Task — description + prompt (the two
+// required TaskArgs fields) must survive the JSON round-trip.
+func TestMapNativeToolArgs_Task(t *testing.T) {
+	desc, prompt := "run a subagent", "explore repo"
+	tc := &cursorpb.AgentV1_ToolCall{
+		Tool: &cursorpb.AgentV1_ToolCall_TaskToolCall{
+			TaskToolCall: &cursorpb.AgentV1_TaskToolCall{
+				Args: &cursorpb.AgentV1_TaskArgs{
+					Description: desc,
+					Prompt:      prompt,
+				},
+			},
+		},
+	}
+	got := mapNativeToolArgsJSON(tc)
+	if !strings.Contains(got, `"description":"run a subagent"`) {
+		t.Errorf("mapNativeToolArgsJSON(Task) missing description; got %q", got)
+	}
+	if !strings.Contains(got, `"prompt":"explore repo"`) {
+		t.Errorf("mapNativeToolArgsJSON(Task) missing prompt; got %q", got)
 	}
 }
 
