@@ -1,0 +1,54 @@
+name: direct-cursor-plugin-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing public release tag to receive cursor.so
+        required: true
+        default: cursor3.15/v0.4.0
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Build cursor.so
+        env:
+          CGO_ENABLED: '1'
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          go build -trimpath -ldflags='-s -w' \
+            -buildmode=c-shared \
+            -o dist/cursor.so \
+            ./plugin/cursor
+          file dist/cursor.so
+          sha256sum dist/cursor.so
+          nm -D dist/cursor.so | grep -E 'cliproxy_plugin_init|cliproxyPlugin(Call|Free|Shutdown)'
+
+      - name: Upload directly to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "$RELEASE_TAG" \
+            dist/cursor.so \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
