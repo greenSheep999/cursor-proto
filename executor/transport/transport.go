@@ -20,11 +20,16 @@
 package transport
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"golang.org/x/net/proxy"
 )
 
 // Version enumerates the wire protocols cursor-proxy can force.
@@ -99,7 +104,39 @@ func Parse(s string) (Version, error) {
 // NO_PROXY) still work — we only mutate the h2 negotiation and
 // keepalive knobs.
 func New(v Version) *http.Transport {
+	return NewWithProxy(v, "")
+}
+
+// NewWithProxy returns a transport configured for the requested HTTP version
+// and optional explicit proxy. Empty proxyURL preserves environment-based
+// proxy behavior from http.DefaultTransport.
+func NewWithProxy(v Version, proxyURL string) *http.Transport {
 	base := http.DefaultTransport.(*http.Transport).Clone()
+	if raw := strings.TrimSpace(proxyURL); raw != "" {
+		u, err := url.Parse(raw)
+		if err == nil {
+			switch strings.ToLower(u.Scheme) {
+			case "http", "https":
+				base.Proxy = http.ProxyURL(u)
+			case "socks5", "socks5h":
+				var auth *proxy.Auth
+				if u.User != nil {
+					password, _ := u.User.Password()
+					auth = &proxy.Auth{User: u.User.Username(), Password: password}
+				}
+				dialer, dialErr := proxy.SOCKS5("tcp", u.Host, auth, proxy.Direct)
+				if dialErr == nil {
+					base.Proxy = nil
+					base.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+						if contextDialer, ok := dialer.(proxy.ContextDialer); ok {
+							return contextDialer.DialContext(ctx, network, address)
+						}
+						return dialer.Dial(network, address)
+					}
+				}
+			}
+		}
+	}
 	switch v {
 	case Http1_1, Http1_0:
 		// Disable h2 in two places, matching Go's own upgrade path:
@@ -142,7 +179,12 @@ func (r HTTP1_0RoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 // HTTP/1.0 wrapper. Callers pass their own timeout — cursor-proxy
 // uses 30s for one-shot RPCs and 0 (no timeout) for SSE streams.
 func Client(v Version, timeout time.Duration) *http.Client {
-	var rt http.RoundTripper = New(v)
+	return ClientWithProxy(v, "", timeout)
+}
+
+// ClientWithProxy builds an HTTP client using an optional explicit proxy.
+func ClientWithProxy(v Version, proxyURL string, timeout time.Duration) *http.Client {
+	var rt http.RoundTripper = NewWithProxy(v, proxyURL)
 	if v == Http1_0 {
 		rt = HTTP1_0RoundTripper{Base: rt}
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
@@ -23,6 +24,52 @@ func unwrapOK(t *testing.T, raw []byte) map[string]any {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 	return out
+}
+
+func TestDispatch_ModelForAuthUsesLiveModelsAndProxy(t *testing.T) {
+	previous := listModelsForAuth
+	defer func() { listModelsForAuth = previous }()
+
+	listModelsForAuth = func(acc *auth.Account) ([]string, error) {
+		if acc.ProxyURL != "socks5://proxy.example:1080" {
+			t.Fatalf("ProxyURL = %q", acc.ProxyURL)
+		}
+		return []string{"composer-live", "claude-live"}, nil
+	}
+
+	file := &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:        cpaformat.ProviderType,
+			AccessToken: "tok",
+			Email:       "models@example.com",
+		},
+		ProxyURL: "socks5://proxy.example:1080",
+	}
+	storage, err := file.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(authModelRequest{
+		AuthID:       "models@example.com",
+		AuthProvider: "cursor",
+		StorageJSON:  storage,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw, rc := dispatch("model.for_auth", payload)
+	if rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	result := unwrapOK(t, raw)
+	models := result["Models"].([]any)
+	if len(models) != 2 {
+		t.Fatalf("models = %v", models)
+	}
+	if models[0].(map[string]any)["ID"] != "composer-live" {
+		t.Fatalf("first model = %v", models[0])
+	}
 }
 
 func TestDispatch_Register(t *testing.T) {

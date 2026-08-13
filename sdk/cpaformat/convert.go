@@ -41,6 +41,7 @@ func FromAccount(a *auth.Account) (*AuthFile, error) {
 			Refreshable:      a.Refreshable,
 			RefreshLeadNanos: int64(a.RefreshLead),
 		},
+		ProxyURL: a.ProxyURL,
 	}
 	return out, nil
 }
@@ -75,6 +76,7 @@ func (a *AuthFile) ToAccount() (*auth.Account, error) {
 		ExpiresAt:    expires,
 		MachineID:    a.MachineID,
 		MacMachineID: a.MacMachineID,
+		ProxyURL:     a.ProxyURL,
 		Refreshable:  a.Refreshable,
 		RefreshLead:  time.Duration(a.RefreshLeadNanos),
 	}

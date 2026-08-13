@@ -33,6 +33,10 @@ type Account struct {
 	MachineID    string `json:"machine_id,omitempty"`
 	MacMachineID string `json:"mac_machine_id,omitempty"`
 
+	// ProxyURL routes this account's Cursor upstream traffic through an
+	// account-specific HTTP, HTTPS, SOCKS5, or SOCKS5H proxy.
+	ProxyURL string `json:"proxy_url,omitempty"`
+
 	// Refreshable is true when we hold enough material (a refresh_token) to
 	// perform an unattended token refresh. Batch importers that only receive
 	// an access_token flip this to false so the pool inspector can flag those

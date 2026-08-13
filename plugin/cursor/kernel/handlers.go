@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/router-for-me/cursor-proto/auth"
+	"github.com/router-for-me/cursor-proto/executor"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
@@ -72,7 +74,10 @@ var knownCursorModels = []string{
 // hand-maintained list so operators know what to expect before the
 // account has been used for a live ListModels call.
 func staticModelsResult() string {
-	names := knownCursorModels
+	return modelsResult(knownCursorModels)
+}
+
+func modelsResult(names []string) string {
 	models := make([]map[string]any, 0, len(names))
 	for _, m := range names {
 		models = append(models, map[string]any{
@@ -93,6 +98,62 @@ func staticModelsResult() string {
 	}
 	buf, _ := json.Marshal(body)
 	return string(buf)
+}
+
+type authModelRequest struct {
+	AuthID       string `json:"AuthID"`
+	AuthProvider string `json:"AuthProvider"`
+	StorageJSON  []byte `json:"StorageJSON"`
+}
+
+var listModelsForAuth = func(acc *auth.Account) ([]string, error) {
+	resp, err := executor.NewClient(acc).ListModels()
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{})
+	names := make([]string, 0, len(resp.GetModelNames())+len(resp.GetModels()))
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		if _, exists := seen[name]; exists {
+			return
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	for _, name := range resp.GetModelNames() {
+		add(name)
+	}
+	for _, model := range resp.GetModels() {
+		add(model.GetName())
+	}
+	return names, nil
+}
+
+func handleModelsForAuth(payload []byte) ([]byte, int) {
+	var req authModelRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return okEnvelopeJSON(staticModelsResult()), 0
+	}
+	file, err := cpaformat.Unmarshal(req.StorageJSON)
+	if err != nil {
+		return okEnvelopeJSON(staticModelsResult()), 0
+	}
+	acc, err := file.ToAccount()
+	if err != nil {
+		return okEnvelopeJSON(staticModelsResult()), 0
+	}
+	names, err := listModelsForAuth(acc)
+	if err != nil {
+		return okEnvelopeJSON(staticModelsResult()), 0
+	}
+	if len(names) == 0 {
+		return okEnvelopeJSON(staticModelsResult()), 0
+	}
+	return okEnvelopeJSON(modelsResult(names)), 0
 }
 
 // authParseRequest mirrors pluginapi.AuthParseRequest for the ABI JSON

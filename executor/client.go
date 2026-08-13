@@ -52,6 +52,7 @@ type Client struct {
 	// Transport this drives is baked into HTTP and is also used by
 	// NewStreamClient() for SSE call sites (which need timeout=0).
 	HTTPVersion transport.Version
+	ProxyURL    string
 	HTTP        *http.Client
 }
 
@@ -67,6 +68,12 @@ func WithHTTPVersion(v transport.Version) Option {
 	return func(c *Client) { c.HTTPVersion = v }
 }
 
+// WithProxyURL routes all Cursor upstream calls through the supplied proxy.
+// Supported schemes are http, https, socks5, and socks5h.
+func WithProxyURL(proxyURL string) Option {
+	return func(c *Client) { c.ProxyURL = proxyURL }
+}
+
 // NewClient wires up defaults and applies opts. The HTTP client is
 // built from the resulting HTTPVersion, so callers pass options
 // FIRST — post-construct mutation of HTTPVersion does not rebuild
@@ -79,11 +86,12 @@ func NewClient(acc *auth.Account, opts ...Option) *Client {
 		API2:        DefaultAPI2,
 		API3:        DefaultAPI3,
 		HTTPVersion: transport.Auto,
+		ProxyURL:    acc.ProxyURL,
 	}
 	for _, o := range opts {
 		o(c)
 	}
-	c.HTTP = transport.Client(c.HTTPVersion, 30*time.Second)
+	c.HTTP = transport.ClientWithProxy(c.HTTPVersion, c.ProxyURL, 30*time.Second)
 	return c
 }
 
@@ -92,7 +100,7 @@ func NewClient(acc *auth.Account, opts ...Option) *Client {
 // generation, which may be minutes). Every SSE call site should build
 // its client through this helper so `-http-version` reaches the wire.
 func (c *Client) NewStreamClient() *http.Client {
-	return transport.Client(c.HTTPVersion, 0)
+	return transport.ClientWithProxy(c.HTTPVersion, c.ProxyURL, 0)
 }
 
 // NewUnaryClient returns an *http.Client with the caller's chosen
@@ -101,7 +109,7 @@ func (c *Client) NewStreamClient() *http.Client {
 // count_tokens, which is heavier) can construct their own without
 // stomping the shared client.
 func (c *Client) NewUnaryClient(timeout time.Duration) *http.Client {
-	return transport.Client(c.HTTPVersion, timeout)
+	return transport.ClientWithProxy(c.HTTPVersion, c.ProxyURL, timeout)
 }
 
 // CurrentAccount returns the account after giving the AccountReloader a

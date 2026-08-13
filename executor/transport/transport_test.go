@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,6 +35,25 @@ func TestParse_Aliases(t *testing.T) {
 		if got != c.want {
 			t.Errorf("Parse(%q) = %v, want %v", c.in, got, c.want)
 		}
+	}
+}
+
+func TestClientWithProxy_HTTPProxy(t *testing.T) {
+	var proxySawHost string
+	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxySawHost = r.Host
+		_, _ = io.WriteString(w, "proxied")
+	}))
+	defer proxyServer.Close()
+
+	client := ClientWithProxy(Auto, proxyServer.URL, time.Second)
+	resp, err := client.Get("http://cursor-upstream.invalid/test")
+	if err != nil {
+		t.Fatalf("Get through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+	if proxySawHost != "cursor-upstream.invalid" {
+		t.Fatalf("proxy saw host %q, want cursor-upstream.invalid", proxySawHost)
 	}
 }
 

@@ -165,7 +165,7 @@ func dispatch(method string, payload []byte) ([]byte, int) {
 	case "model.register", "model.static":
 		return okEnvelopeJSON(staticModelsResult()), 0
 	case "model.for_auth":
-		return okEnvelopeJSON(staticModelsResult()), 0
+		return handleModelsForAuth(payload)
 
 	case "management.register":
 		return okEnvelopeJSON(managementRegisterResult()), 0
