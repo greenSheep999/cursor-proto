@@ -1,0 +1,189 @@
+name: direct-release
+
+# Emergency release path for periods when the repository's Actions artifact
+# storage quota is exhausted. Builds on GitHub-hosted runners and uploads
+# assets directly to a draft GitHub Release without actions/upload-artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing cursor<major>.<minor>/v<semver> tag to release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  meta:
+    name: prepare draft release
+    runs-on: ubuntu-latest
+    outputs:
+      cursor_line: ${{ steps.parse.outputs.cursor_line }}
+      semver: ${{ steps.parse.outputs.semver }}
+      release_name: ${{ steps.parse.outputs.release_name }}
+    steps:
+      - name: Parse tag
+        id: parse
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^cursor[0-9]+\.[0-9]+/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          cursor_line="${RELEASE_TAG%%/*}"
+          semver="${RELEASE_TAG#*/}"
+          echo "cursor_line=$cursor_line" >> "$GITHUB_OUTPUT"
+          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          echo "release_name=cursor-proxy $cursor_line $semver" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag and prepare draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_NAME: ${{ steps.parse.outputs.release_name }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft --title "$RELEASE_NAME"
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --draft --generate-notes --title "$RELEASE_NAME"
+          fi
+
+  build:
+    name: build and upload ${{ matrix.name }}
+    needs: meta
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            apt: libsqlite3-dev
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            apt: libsqlite3-dev
+          - name: darwin-arm64
+            runner: macos-14
+            goos: darwin
+            goarch: arm64
+            apt: ""
+          - name: darwin-amd64
+            runner: macos-13
+            goos: darwin
+            goarch: amd64
+            apt: ""
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: node-runner/package-lock.json
+
+      - name: Install CGO dependencies
+        if: matrix.apt != ''
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ${{ matrix.apt }}
+
+      - name: Build Go binary
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+          PROTO_TAG: ${{ inputs.tag }}
+          PLATFORM: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags="-s -w -X main.ProtoVersion=${PROTO_TAG}" \
+            -o "dist/cursor-proxy-${CURSOR_LINE}-${PLATFORM}" \
+            ./cmd/cursor-proxy
+
+      - name: Build Node runner
+        working-directory: node-runner
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+          npm prune --production --no-audit --no-fund
+
+      - name: Assemble agent bundle
+        env:
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+          SEMVER: ${{ needs.meta.outputs.semver }}
+          PLATFORM: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          name="cursor-proxy-${CURSOR_LINE}-${PLATFORM}"
+          mkdir -p "bundle/${name}/cursor-node-runner"
+          cp "dist/${name}" "bundle/${name}/cursor-proxy"
+          chmod +x "bundle/${name}/cursor-proxy"
+          cp -R node-runner/dist "bundle/${name}/cursor-node-runner/dist"
+          cp -R node-runner/node_modules "bundle/${name}/cursor-node-runner/node_modules"
+          cp node-runner/package.json node-runner/README.md "bundle/${name}/cursor-node-runner/"
+          cat > "bundle/${name}/README" <<README
+          cursor-proxy ${CURSOR_LINE} ${SEMVER} (${PLATFORM})
+
+          Wire mode:
+            ./cursor-proxy -addr 127.0.0.1:8317
+
+          Agent mode:
+            CURSOR_API_KEY=crsr_your_key ./cursor-proxy \\
+              -addr 127.0.0.1:8317 \\
+              -node-runner ./cursor-node-runner/dist/index.js
+          README
+          tar -czf "dist/${name}.tar.gz" -C bundle "$name"
+
+      - name: Upload directly to draft Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CURSOR_LINE: ${{ needs.meta.outputs.cursor_line }}
+          PLATFORM: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          name="cursor-proxy-${CURSOR_LINE}-${PLATFORM}"
+          gh release upload "$RELEASE_TAG" \
+            "dist/${name}" \
+            "dist/${name}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  publish:
+    name: publish release
+    needs: [meta, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish completed Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_NAME: ${{ needs.meta.outputs.release_name }}
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --latest --title "$RELEASE_NAME"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,isDraft,isPrerelease,url,assets
