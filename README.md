@@ -8,8 +8,8 @@ Built by rebuilding Cursor's private wire protocol from the shipped
 `workbench.desktop.main.js` (~40 MB) — proto schemas, checksum algorithm,
 machine-id derivation, session identifiers, and header set.
 
-**Currently impersonates Cursor 3.11.19** on `main`. The 3.10.20 line is
-still maintained on `release/cursor-3.10`. See [docs/versioning.md](docs/versioning.md)
+**Currently impersonates Cursor 3.15.19** on `main`. The 3.10.20 and 3.11.19 lines are
+still maintained on `release/cursor-3.10` and `release/cursor-3.11`. See [docs/versioning.md](docs/versioning.md)
 for the release contract and how downstream consumers should pin.
 
 ## Versioning

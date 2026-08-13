@@ -19,12 +19,16 @@ import (
 // (see nVg / DZg in workbench.desktop.main.js, depending on version).
 //
 // Each entry corresponds to the first segment of the update URL:
-//   https://downloads.cursor.com/production/<releaseHash>/<platform>/...
+//
+//	https://downloads.cursor.com/production/<releaseHash>/<platform>/...
+//
 // so it can be re-derived with:
-//   curl -s "https://api2.cursor.sh/updates/api/update/darwin-arm64/cursor/<prev>/stable" | jq .url
+//
+//	curl -s "https://api2.cursor.sh/updates/api/update/darwin-arm64/cursor/<prev>/stable" | jq .url
 const (
 	KnownReleaseHash_3_10_20 = "4071c661bcb367c518becc7b3d4d57cbd69d2291d8b302c558d79080f8fd4f75"
 	KnownReleaseHash_3_11_19 = "bf249e6efb5b097f23d7e21d7283429f0760b74a"
+	KnownReleaseHash_3_15_19 = "de07bee81cefe43461ebf4f40c3d2d78d15052aa"
 )
 
 // KnownReleaseHashFor returns the releaseHash for a specific Cursor
@@ -37,6 +41,8 @@ func KnownReleaseHashFor(version string) string {
 		return KnownReleaseHash_3_10_20
 	case "3.11.19":
 		return KnownReleaseHash_3_11_19
+	case "3.15.19":
+		return KnownReleaseHash_3_15_19
 	default:
 		return ""
 	}

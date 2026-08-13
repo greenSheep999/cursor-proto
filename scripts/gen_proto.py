@@ -362,7 +362,7 @@ def emit_namespace(ns: str, messages, enums, include_msgs, include_enums, cross_
         other_slug = other_ns.replace(".", "_")
         lines.append(f'import "{other_slug}.proto";')
     lines.append('')
-    lines.append(f'// Generated from Cursor 3.10.20 workbench.desktop.main.js')
+    lines.append(f'// Generated from Cursor {schema["cursor_version"]} workbench.desktop.main.js')
     lines.append('')
 
     # Find top-level messages and enums (those with no `.` in their local name)
@@ -395,7 +395,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["core", "full"], default="core")
     ap.add_argument("--schema", default=str(SCHEMA_PATH),
-                    help="path to schema-<cursor>.raw.json (defaults to 3.10.20)")
+                    help="path to schema-<cursor>.raw.json")
     args = ap.parse_args()
 
     schema = json.load(open(args.schema))
@@ -446,7 +446,7 @@ def main():
     lines.append('')
     lines.append('option go_package = "github.com/router-for-me/cursor-proto/gen/cursor;cursorpb";')
     lines.append('')
-    lines.append('// Generated from Cursor 3.10.20 workbench.desktop.main.js')
+    lines.append(f'// Generated from Cursor {schema["cursor_version"]} workbench.desktop.main.js')
     lines.append(f'// commit: {schema["cursor_commit"]}')
     lines.append(f'// Mode: {args.mode}, {len(include_msgs)} messages, {len(include_enums)} enums')
     lines.append('')

@@ -3,6 +3,7 @@ name: release
 # Tag scheme: cursor<major>.<minor>/v<semver>, e.g.
 #   cursor3.10/v0.1.1
 #   cursor3.11/v0.2.0
+#   cursor3.15/v0.4.0
 #
 # See docs/versioning.md for the full contract. The legacy flat tag
 # `v*.*.*` is grandfathered for the initial v0.1.0 release; new
@@ -30,6 +31,7 @@ jobs:
         # Tag comes in as one of:
         #   cursor3.10/v0.1.1  →  cursor_line=cursor3.10, semver=v0.1.1
         #   cursor3.11/v0.2.0  →  cursor_line=cursor3.11, semver=v0.2.0
+        #   cursor3.15/v0.4.0  →  cursor_line=cursor3.15, semver=v0.4.0
         #   v0.1.0             →  cursor_line=cursor3.10, semver=v0.1.0 (legacy)
         run: |
           set -euo pipefail

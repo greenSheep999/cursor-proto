@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Extract Cursor 3.10.20 protobuf schema from workbench.desktop.main.js.
+Extract Cursor's protobuf schema from workbench.desktop.main.js.
 
 Cursor uses @bufbuild/protobuf v2 API:
     XXX = <ns>.makeMessageType("<typeName>", [ ...fields ])
@@ -24,6 +24,9 @@ from collections import OrderedDict
 # works from any checkout without hard-coding an absolute path.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 WB = Path(os.environ.get("CURSOR_PROTO_WB", _REPO_ROOT / "captures" / "wb-3.10.20.js"))
+CURSOR_VERSION = os.environ.get("CURSOR_PROTO_VERSION", "3.10.20")
+CURSOR_COMMIT = os.environ.get("CURSOR_PROTO_COMMIT", "23b9fb205fe595ea2be29da7214e19762d037fc0")
+BASE_SCHEMA = os.environ.get("CURSOR_PROTO_BASE_SCHEMA", "")
 
 SCALAR_TYPES = {
     1: "double", 2: "float", 3: "int64", 4: "uint64", 5: "int32",
@@ -247,6 +250,33 @@ def resolve_refs(messages, enums, ref_map):
     return unresolved
 
 
+def inherit_resolved_refs(messages, base_schema_path):
+    """Restore type names for unchanged fields obscured by a new minifier.
+
+    Cursor occasionally stops leaving a direct makeMessageType binding for a
+    field's generated symbol. When the message name, field number, field name,
+    and kind are unchanged from the previous captured schema, the old resolved
+    type remains authoritative and is safe to carry forward.
+    """
+    if not base_schema_path:
+        return 0
+    base = json.loads(Path(base_schema_path).read_text())
+    restored = 0
+    for message_name, fields in messages.items():
+        old_fields = {
+            (field.get("no"), field.get("name"), field.get("kind")): field
+            for field in base.get("messages", {}).get(message_name, [])
+        }
+        for field in fields:
+            if field.get("kind") != "message" or field.get("T_name"):
+                continue
+            old = old_fields.get((field.get("no"), field.get("name"), field.get("kind")))
+            if old and old.get("T_name"):
+                field["T_name"] = old["T_name"]
+                restored += 1
+    return restored
+
+
 def main():
     print(f"Loading {WB} ...", file=sys.stderr)
     js = WB.read_text()
@@ -265,6 +295,9 @@ def main():
     print(f"  {len(enums)} enums", file=sys.stderr)
 
     unresolved = resolve_refs(messages, enums, ref_map)
+    restored = inherit_resolved_refs(messages, BASE_SCHEMA)
+    if restored:
+        print(f"  Restored refs from base schema: {restored}", file=sys.stderr)
     print(f"  Unresolved refs: {len(unresolved)}", file=sys.stderr)
     if unresolved and len(unresolved) < 30:
         for r in list(unresolved)[:20]:
@@ -282,8 +315,8 @@ def main():
         print(f"  {v:4d}  {k}", file=sys.stderr)
 
     out = {
-        "cursor_version": "3.10.20",
-        "cursor_commit": "23b9fb205fe595ea2be29da7214e19762d037fc0",
+        "cursor_version": CURSOR_VERSION,
+        "cursor_commit": CURSOR_COMMIT,
         "class_refs": ref_map,
         "messages": messages,
         "enums": enums,
