@@ -42,24 +42,24 @@ const (
 // usageEventItem — kept as a separate type here so plugin
 // consumers don't have to depend on cmd/cursor-proxy.
 type UsageEventItem struct {
-	Timestamp       string          `json:"timestamp"` // ISO 8601
-	TimestampMs     int64           `json:"timestamp_ms"`
-	Model           string          `json:"model"`
-	Kind            string          `json:"kind"` // enum name minus prefix
-	MaxMode         bool            `json:"max_mode,omitempty"`
-	RequestsCosts   float64         `json:"requests_costs,omitempty"`
-	UsageBasedCosts string          `json:"usage_based_costs,omitempty"`
-	IsTokenBased    bool            `json:"is_token_based,omitempty"`
-	Tokens          *EventTokens    `json:"tokens,omitempty"`
-	ChargedCents    float64         `json:"charged_cents,omitempty"`
-	IsChargeable    bool            `json:"is_chargeable,omitempty"`
-	ConversationID  string          `json:"conversation_id,omitempty"`
-	CloudAgentID    string          `json:"cloud_agent_id,omitempty"`
-	AutomationID    string          `json:"automation_id,omitempty"`
-	ClientType      string          `json:"client_type,omitempty"`
-	IsHeadless      bool            `json:"is_headless,omitempty"`
-	UserEmail       string          `json:"user_email,omitempty"`
-	ServiceAccount  string          `json:"service_account_name,omitempty"`
+	Timestamp       string       `json:"timestamp"` // ISO 8601
+	TimestampMs     int64        `json:"timestamp_ms"`
+	Model           string       `json:"model"`
+	Kind            string       `json:"kind"` // enum name minus prefix
+	MaxMode         bool         `json:"max_mode,omitempty"`
+	RequestsCosts   float64      `json:"requests_costs,omitempty"`
+	UsageBasedCosts string       `json:"usage_based_costs,omitempty"`
+	IsTokenBased    bool         `json:"is_token_based,omitempty"`
+	Tokens          *EventTokens `json:"tokens,omitempty"`
+	ChargedCents    float64      `json:"charged_cents,omitempty"`
+	IsChargeable    bool         `json:"is_chargeable,omitempty"`
+	ConversationID  string       `json:"conversation_id,omitempty"`
+	CloudAgentID    string       `json:"cloud_agent_id,omitempty"`
+	AutomationID    string       `json:"automation_id,omitempty"`
+	ClientType      string       `json:"client_type,omitempty"`
+	IsHeadless      bool         `json:"is_headless,omitempty"`
+	UserEmail       string       `json:"user_email,omitempty"`
+	ServiceAccount  string       `json:"service_account_name,omitempty"`
 }
 
 type EventTokens struct {

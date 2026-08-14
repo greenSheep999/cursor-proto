@@ -14,8 +14,10 @@ import (
 // requests under. The resource-path row is the critical one — CPA
 // auto-migrates menu-decorated GET routes to /v0/resource/plugins/cursor/,
 // and before we handled it here the browser saw
-//   {"error":{"code":"unknown_route","message":"no cursor plugin route
-//   for GET /v0/managementv0/resource/plugins/cursor/cli-proxy-api/cursor/accounts"}}
+//
+//	{"error":{"code":"unknown_route","message":"no cursor plugin route
+//	for GET /v0/managementv0/resource/plugins/cursor/cli-proxy-api/cursor/accounts"}}
+//
 // (yes, two v0's mashed together) on #/plugin-pages/cursor/0.
 func TestStripCPAPathPrefixes(t *testing.T) {
 	cases := []struct {

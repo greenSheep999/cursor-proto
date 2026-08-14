@@ -229,4 +229,3 @@ func loadAccountFromIDE() *auth.Account {
 		MacMachineID: macID,
 	}
 }
-
