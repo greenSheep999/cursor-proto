@@ -21,9 +21,9 @@ import (
 //
 // Resolution order for each input:
 //
-//   runnerPath: -node-runner flag > $CURSOR_PROXY_NODE_RUNNER
-//   apiKey:     -cursor-api-key flag > $CURSOR_API_KEY
-//   nodeBinary: -node-binary flag > `node` on PATH (via os/exec)
+//	runnerPath: -node-runner flag > $CURSOR_PROXY_NODE_RUNNER
+//	apiKey:     -cursor-api-key flag > $CURSOR_API_KEY
+//	nodeBinary: -node-binary flag > `node` on PATH (via os/exec)
 //
 // A start failure is logged but does NOT kill the process — wire
 // mode should still come up. Operators watching the log see the

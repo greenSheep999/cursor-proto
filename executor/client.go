@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
@@ -36,6 +37,7 @@ const (
 // cmd/cursor-proxy/main.go for the sqlite-mtime-check reloader that
 // wires this up.
 type Client struct {
+	accountMu sync.Mutex
 	// Account is the current authenticated identity. Read via CurrentAccount()
 	// so any reloader is given a chance to run first.
 	Account *auth.Account
@@ -117,6 +119,8 @@ func (c *Client) NewUnaryClient(timeout time.Duration) *http.Client {
 // prefer this over the raw Account field so IDE-side account switches
 // take effect without a proxy restart.
 func (c *Client) CurrentAccount() *auth.Account {
+	c.accountMu.Lock()
+	defer c.accountMu.Unlock()
 	if c.AccountReloader != nil {
 		if fresh := c.AccountReloader(); fresh != nil {
 			c.Account = fresh
@@ -172,9 +176,14 @@ func (c *Client) UnaryCall(service, method string, msg, into proto.Message) erro
 
 // readBody reads the response body and gunzips it if needed.
 func readBody(resp *http.Response) ([]byte, error) {
-	raw, err := io.ReadAll(resp.Body)
+	const maxCompressedBody = 32 << 20
+	const maxDecompressedBody = 64 << 20
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxCompressedBody+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(raw)) > maxCompressedBody {
+		return nil, fmt.Errorf("response body exceeds %d bytes", maxCompressedBody)
 	}
 	if resp.Header.Get("Content-Encoding") == "gzip" ||
 		(len(raw) >= 2 && raw[0] == 0x1f && raw[1] == 0x8b) {
@@ -183,7 +192,14 @@ func readBody(resp *http.Response) ([]byte, error) {
 			return raw, err
 		}
 		defer gz.Close()
-		return io.ReadAll(gz)
+		decoded, err := io.ReadAll(io.LimitReader(gz, maxDecompressedBody+1))
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(decoded)) > maxDecompressedBody {
+			return nil, fmt.Errorf("decompressed response body exceeds %d bytes", maxDecompressedBody)
+		}
+		return decoded, nil
 	}
 	return raw, nil
 }

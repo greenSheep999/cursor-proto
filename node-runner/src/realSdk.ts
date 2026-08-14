@@ -18,7 +18,13 @@
 // Run object but no stable id; we assign one).
 
 import { randomUUID } from "node:crypto";
-import type { SdkAgent, SdkAgentOptions, SdkFactory, SdkRun } from "./sdkInterface.js";
+import type {
+  SdkAgent,
+  SdkAgentOptions,
+  SdkFactory,
+  SdkRun,
+  SdkSendOptions,
+} from "./sdkInterface.js";
 
 // Lazy import so unit tests that swap in a fake factory don't have
 // to install @cursor/sdk. Node ESM `import()` is async; we await
@@ -31,7 +37,7 @@ type CursorSdkModule = {
 
 interface CursorSdkAgent {
   readonly agentId: string;
-  send(prompt: string): Promise<CursorSdkRun>;
+  send(prompt: string, options?: unknown): Promise<CursorSdkRun>;
   close(): void | Promise<void>;
 }
 
@@ -93,8 +99,19 @@ class RealAgent implements SdkAgent {
     return this.inner.agentId;
   }
 
-  async send(prompt: string): Promise<SdkRun> {
-    const runInner = await this.inner.send(prompt);
+  async send(prompt: string, options?: SdkSendOptions): Promise<SdkRun> {
+    // Translate our SdkSendOptions into the SDK's SendOptions shape.
+    // customTools go under `local.customTools` per SDK contract
+    // (LocalSendOptions.customTools in @cursor/sdk options.d.ts).
+    // Cloud agents reject `local.customTools` — the SDK throws with
+    // a clear message; we let it bubble.
+    let sdkSendOpts: Record<string, unknown> | undefined;
+    if (options?.customTools) {
+      sdkSendOpts = { local: { customTools: options.customTools } };
+    }
+    const runInner = sdkSendOpts
+      ? await this.inner.send(prompt, sdkSendOpts)
+      : await this.inner.send(prompt);
     // The SDK doesn't currently expose a stable run id; we assign
     // one so the protocol can address runs uniformly across SDK
     // versions.

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/cursor-proto/executor"
 )
@@ -187,6 +188,7 @@ func TestGeminiRouter_MultiTurnHistory(t *testing.T) {
 }
 
 func TestGeminiRouter_ToolsFunctionDeclarations(t *testing.T) {
+	observedTools = newToolRing(4096)
 	fake := &fakeChatRunner{events: []executor.ChatEvent{turnEndedEvent(0, 0, 0)}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1beta/models/{tail}", geminiRouter(fake, nil))
@@ -209,6 +211,10 @@ func TestGeminiRouter_ToolsFunctionDeclarations(t *testing.T) {
 	}
 	if fake.lastReq.Tools[0].Name != "get_time" {
 		t.Fatalf("Tools[0].Name = %q, want get_time", fake.lastReq.Tools[0].Name)
+	}
+	obs := observedTools.snapshotSince(time.Now().Add(-time.Minute))
+	if len(obs) != 1 || obs[0].name != "get_time" {
+		t.Fatalf("observed tools = %+v, want get_time", obs)
 	}
 }
 

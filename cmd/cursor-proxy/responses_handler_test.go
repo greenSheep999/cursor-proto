@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/cursor-proto/executor"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
@@ -217,6 +218,7 @@ func TestResponsesHandler_ArrayInputHistorySplit(t *testing.T) {
 }
 
 func TestResponsesHandler_ToolsFlatSchema(t *testing.T) {
+	observedTools = newToolRing(4096)
 	fake := &fakeChatRunner{events: []executor.ChatEvent{turnEndedEvent(0, 0, 0)}}
 
 	body := `{
@@ -239,6 +241,10 @@ func TestResponsesHandler_ToolsFlatSchema(t *testing.T) {
 	}
 	if !fake.lastReq.AutoStopOnToolCall {
 		t.Fatalf("AutoStopOnToolCall should be true when tools are provided")
+	}
+	obs := observedTools.snapshotSince(time.Now().Add(-time.Minute))
+	if len(obs) != 1 || obs[0].name != "get_time" {
+		t.Fatalf("observed tools = %+v, want get_time", obs)
 	}
 }
 

@@ -140,13 +140,13 @@ func sseWriteRaw(w http.ResponseWriter, event string, data []byte) {
 // raw stream events. See node-runner/src/runner.ts pumpStream()
 // and https://cursor.com/cn/docs/sdk/typescript#waiting-in-non-streaming-mode.
 type nonStreamResponse struct {
-	RunID      string           `json:"run_id"`
-	Status     string           `json:"status"`
-	FinalText  string           `json:"final_text"`
-	ToolCalls  []toolCallEntry  `json:"tool_calls,omitempty"`
-	Usage      *sdk.TokenUsage  `json:"usage,omitempty"`
-	DurationMs int64            `json:"duration_ms,omitempty"`
-	Error      *runErrorBody    `json:"error,omitempty"`
+	RunID      string          `json:"run_id"`
+	Status     string          `json:"status"`
+	FinalText  string          `json:"final_text"`
+	ToolCalls  []toolCallEntry `json:"tool_calls,omitempty"`
+	Usage      *sdk.TokenUsage `json:"usage,omitempty"`
+	DurationMs int64           `json:"duration_ms,omitempty"`
+	Error      *runErrorBody   `json:"error,omitempty"`
 }
 
 type toolCallEntry struct {

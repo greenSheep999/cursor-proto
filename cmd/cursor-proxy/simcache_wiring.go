@@ -8,6 +8,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -82,12 +83,23 @@ func (d simCacheDecision) applyToUsage(u *translator.Usage, markCreation bool) {
 	}
 }
 
-// prefixFromOpenAI reconstructs the stable prefix (system + all history
-// turns) used as the cache key for an OpenAI request. The last user turn is
-// NOT part of the prefix — it is always the fresh input for the current
-// call.
-func prefixFromOpenAI(systemPrompt string, history []executor.HistoryTurn) string {
+// prefixForSimCache builds a cache namespace plus the stable prompt prefix.
+// Account, protocol, model, and tool schema are included so a dashboard-only
+// simulated hit cannot leak across identities or semantically different
+// requests. The last user turn is intentionally omitted as the fresh input.
+func prefixForSimCache(protocol, model string, tools []executor.ToolDefinition, systemPrompt string, history []executor.HistoryTurn) string {
 	var b strings.Builder
+	b.WriteString("account: ")
+	b.WriteString(wireAccountEmailString())
+	b.WriteString("\nprotocol: ")
+	b.WriteString(protocol)
+	b.WriteString("\nmodel: ")
+	b.WriteString(model)
+	b.WriteString("\ntools: ")
+	if raw, err := json.Marshal(tools); err == nil {
+		b.Write(raw)
+	}
+	b.WriteString("\n")
 	if s := strings.TrimSpace(systemPrompt); s != "" {
 		b.WriteString("system: ")
 		b.WriteString(s)

@@ -22,6 +22,14 @@ const (
 	ErrAgentNotFound  = -32002 // protocol.ts ERR_AGENT_NOT_FOUND
 	ErrRunNotFound    = -32003 // protocol.ts ERR_RUN_NOT_FOUND
 	ErrSDKFailure     = -32004 // protocol.ts ERR_SDK_FAILURE
+	// customTools reverse-RPC error codes. Sent by the Go supervisor
+	// (via tool.result notifications) or the HTTP layer when a tool
+	// call can't complete normally. See docs/sdk-integration.md
+	// §"Custom tools" and protocol.ts for the same constants.
+	ErrToolClientDisconnected = -32005 // protocol.ts ERR_TOOL_CLIENT_DISCONNECTED
+	ErrToolCallTimeout        = -32006 // protocol.ts ERR_TOOL_CALL_TIMEOUT
+	ErrToolCallCancelled      = -32007 // protocol.ts ERR_TOOL_CALL_CANCELLED
+	ErrToolCallExpired        = -32008 // protocol.ts ERR_TOOL_CALL_EXPIRED (HTTP layer only)
 )
 
 // rpcRequest is what we send to the Node child. Fields are exported
@@ -129,6 +137,25 @@ type AgentListResult struct {
 type AgentSendParams struct {
 	AgentID string `json:"agentId"`
 	Prompt  string `json:"prompt"`
+	// CustomTools declares HTTP-client-hosted tools the Node runner
+	// should expose to the SDK for this run. Each entry carries only
+	// schema — the actual execute() callback synthesized in Node
+	// bounces back over stdio (tool.execute request) so the HTTP
+	// client can service it via SSE + POST /tool_results. Empty means
+	// no custom tools; SDK's own built-ins still apply. Local
+	// runtime only (SDK rejects it on cloud agents).
+	CustomTools []CustomToolDef `json:"customTools,omitempty"`
+}
+
+// CustomToolDef mirrors the CustomToolDef in protocol.ts. Passed
+// through Node → SDK.LocalSendOptions.customTools[name].
+// TimeoutMs is enforced Go-side inside handleInboundRequest;
+// zero uses the supervisor's default (300 000 ms).
+type CustomToolDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+	TimeoutMs   int64           `json:"timeoutMs,omitempty"`
 }
 
 type AgentSendResult struct {
@@ -186,4 +213,55 @@ type RunError struct {
 	RunID   string `json:"runId"`
 	Message string `json:"message"`
 	Code    int    `json:"code,omitempty"`
+}
+
+// -------- customTools reverse-RPC (stage 2/3) --------
+
+// ToolExecuteRequest is the inbound request Node emits when the SDK
+// invokes an HTTP-registered custom tool. Response is a
+// ToolExecuteResult (Result field) or an RPCError.
+type ToolExecuteRequest struct {
+	RunID  string          `json:"runId"`
+	CallID string          `json:"callId"`
+	Name   string          `json:"name"`
+	Args   json.RawMessage `json:"args"`
+}
+
+// ToolExecuteResult mirrors SDKCustomToolResult in options.d.ts, but
+// serialized as JSON. The Node runner unpacks this back into the
+// SDK's execute() promise value. Callers should populate at most one
+// of Content / Text / StructuredContent — string or content array
+// are the SDK's two documented result shapes. IsError=true asks the
+// SDK to treat the result as a tool error (surfaced to the model as
+// an error message instead of a normal tool_result content block).
+type ToolExecuteResult struct {
+	Content           []ToolExecuteContent `json:"content,omitempty"`
+	Text              string               `json:"text,omitempty"`
+	IsError           bool                 `json:"isError,omitempty"`
+	StructuredContent json.RawMessage      `json:"structuredContent,omitempty"`
+}
+
+// ToolExecuteContent mirrors the SDKCustomToolContent union in
+// options.d.ts. Image payloads carry base64-encoded bytes in Data.
+type ToolExecuteContent struct {
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Data     string `json:"data,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+}
+
+// ToolResultNotify is the Go → Node notification used when the Go
+// side needs to force-resolve a pending tool.execute WITHOUT waiting
+// for the client's POST /tool_results — typically because the HTTP
+// client disconnected, the per-call timeout fired, or the run was
+// cancelled. Node's toolBridge rejects the pending execute() promise
+// with the given error code. If both a stdio response and a
+// tool.result notification arrive for the same callId (a race),
+// Node treats the first as authoritative and drops the second.
+type ToolResultNotify struct {
+	CallID string    `json:"callId"`
+	Error  *RPCError `json:"error,omitempty"`
+	// Result is deliberately omitted: tool.result is only used for
+	// error paths. Success paths always ride the tool.execute
+	// rpcResponse the HTTP handler synthesizes.
 }

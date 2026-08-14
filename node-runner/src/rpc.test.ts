@@ -29,6 +29,13 @@ test("LineReader handles UTF-8 multibyte characters across chunk boundaries", ()
   assert.deepEqual([...first, ...second], ["汉字漢字emoji😀"]);
 });
 
+test("LineReader drops oversized frames without retaining them", () => {
+  const r = new LineReader();
+  assert.deepEqual(r.push(Buffer.alloc(LineReader.MAX_FRAME_BYTES + 1, 0x78)), []);
+  assert.equal(r.pending().length, 0);
+  assert.deepEqual(r.push(Buffer.from("still-oversized\nsmall\n")), ["small"]);
+});
+
 test("parseLine accepts a well-formed request", () => {
   const p = parseLine('{"jsonrpc":"2.0","id":7,"method":"ping"}');
   assert.equal(p.kind, "request");

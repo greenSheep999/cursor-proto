@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -67,16 +68,16 @@ func RequireAPIKeys(keys []string, next http.Handler) http.Handler {
 		keyBytes[i] = []byte(k)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Metadata + observation endpoints are always reachable —
-		// cursor2api's sidecar supervisor probes them before it has
-		// the API key wired up, and none of them expose a secret.
+		// Local metadata + observation probes remain reachable before
+		// cursor2api wires its API key. Remote callers must authenticate
+		// because these endpoints expose account and tool activity metadata.
 		//   /v1/proxy-info                     — version / commit / http_version
 		//   /v1/capabilities                   — feature matrix
 		//   /v1/introspect/recent-tools        — aggregated tool usage
 		//   /v1/introspect/recent-mcp-servers  — aggregated MCP server usage
-		if r.URL.Path == "/v1/proxy-info" ||
+		if isLoopbackRequest(r) && (r.URL.Path == "/v1/proxy-info" ||
 			r.URL.Path == "/v1/capabilities" ||
-			strings.HasPrefix(r.URL.Path, "/v1/introspect/") {
+			strings.HasPrefix(r.URL.Path, "/v1/introspect/")) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -100,6 +101,15 @@ func RequireAPIKeys(keys []string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isLoopbackRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 // extractAPIKey returns the first non-empty API key surfaced by the request

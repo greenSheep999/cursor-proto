@@ -36,6 +36,7 @@ import {
   ERR_SDK_FAILURE,
 } from "./protocol.js";
 import type { SdkAgent, SdkFactory } from "./sdkInterface.js";
+import type { ToolBridge } from "./toolBridge.js";
 
 /** One line-serialized message emitted for the parent to write out. */
 export type Emit = (
@@ -68,6 +69,13 @@ export interface RunnerOptions {
   factory: SdkFactory;
   sdkVersion: string; // reported via ping
   emit: Emit;
+  /**
+   * Optional bridge for customTools reverse-RPC. When set, agent.send
+   * with a non-empty customTools list wires the SDK's execute()
+   * callbacks through this bridge to the Go supervisor. Left
+   * undefined in unit tests that don't exercise the reverse channel.
+   */
+  toolBridge?: ToolBridge;
 }
 
 export class Runner {
@@ -203,6 +211,14 @@ export class Runner {
       // asked us to release, we drop our tracking either way.
     }
     this.agents.delete(p.agentId);
+    // Reject any pending tool.execute promises for the runs we just
+    // torched. rejectRun with the ended runId is safe even if there
+    // are no pending calls for it.
+    if (this.opts.toolBridge) {
+      for (const r of toCancel) {
+        this.opts.toolBridge.rejectRun(r.runId, "agent closed");
+      }
+    }
     return { ok: true };
   }
 
@@ -216,9 +232,50 @@ export class Runner {
     if (typeof p.prompt !== "string") {
       throw new ProtocolError(ERR_INVALID_PARAMS, "prompt must be a string");
     }
+    // customTools reverse-RPC: only supported for local agents, per
+    // SDK's LocalSendOptions.customTools contract. Reject cloud + tools
+    // eagerly so the error surfaces at agent.send time instead of
+    // deep inside the SDK.
+    if (p.customTools && p.customTools.length > 0) {
+      if (rec.runtime !== "local") {
+        throw new ProtocolError(
+          ERR_INVALID_PARAMS,
+          "customTools require a local agent (SDK LocalSendOptions.customTools contract)",
+        );
+      }
+      if (!this.opts.toolBridge) {
+        throw new ProtocolError(
+          ERR_INVALID_PARAMS,
+          "customTools requested but runner started without a toolBridge",
+        );
+      }
+    }
+
+    // Peek the runId we'll assign so the bridge can pre-register.
+    // We rely on the SDK's send returning a Run object; the runId
+    // comes from that. To let the bridge inject a fresh
+    // execute-per-run closure keyed on that runId, we assemble the
+    // Record BEFORE calling send() using a placeholder runId — that
+    // placeholder is patched to the real runId as soon as send()
+    // returns. This is safe because SDK.send() is awaited before
+    // any execute() fires.
     let run;
     try {
-      run = await rec.agent.send(p.prompt);
+      if (p.customTools && p.customTools.length > 0 && this.opts.toolBridge) {
+        // Pre-build the tools map with a placeholder runId. Actual
+        // runId is only known after send() resolves; the toolBridge's
+        // callId is the SDK's own ctx.toolCallId which is stable
+        // per-invocation, so the runId in tool.execute params is
+        // for logging / correlation only.
+        const placeholderRunId = "pending";
+        const tools = this.opts.toolBridge.buildCustomTools(
+          placeholderRunId,
+          p.customTools,
+        );
+        run = await rec.agent.send(p.prompt, { customTools: tools });
+      } else {
+        run = await rec.agent.send(p.prompt);
+      }
     } catch (e) {
       throw new ProtocolError(
         ERR_SDK_FAILURE,
@@ -238,10 +295,14 @@ export class Runner {
       streamTask,
       cancel: () => run.cancel(),
     });
-    // On completion (success or failure), drop the run record. We
-    // don't await because callers shouldn't block on stream drain.
+    // On completion (success or failure), drop the run record and
+    // reject any pending tool.execute promises so a client can't
+    // hang forever waiting on a run that already ended.
     void streamTask.finally(() => {
       this.runs.delete(runId);
+      if (this.opts.toolBridge) {
+        this.opts.toolBridge.rejectRun(runId, "run ended before tool result arrived");
+      }
     });
     return { runId };
   }
@@ -257,6 +318,12 @@ export class Runner {
       await rec.cancel();
     } catch {
       // Same reasoning: cancel-then-race with natural end is fine.
+    }
+    // The stream pump's finally() will call rejectRun once the run
+    // fully unwinds, but do it here too in case the SDK's cancel
+    // path holds the pump open past user-facing cancel semantics.
+    if (this.opts.toolBridge) {
+      this.opts.toolBridge.rejectRun(p.runId, "run cancelled");
     }
     return { ok: true };
   }

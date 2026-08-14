@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { LineReader, err, notify, ok, parseLine, writeMessage } from "./rpc.js";
+import { LineReader, err, notify, ok, parseAny, writeMessage } from "./rpc.js";
 import type {
   AgentCloseParams,
   AgentCreateParams,
@@ -24,6 +24,8 @@ import { ERR_INTERNAL, ERR_METHOD_NOT_FOUND } from "./protocol.js";
 import { ProtocolError, Runner } from "./runner.js";
 import { realSdkFactory } from "./realSdk.js";
 import type { Emit } from "./runner.js";
+import { ToolBridge } from "./toolBridge.js";
+import type { ToolResultNotifyParams } from "./toolBridge.js";
 
 // Read our own SDK version out of the installed @cursor/sdk
 // package.json without imposing a build-time constant. The SDK's
@@ -144,11 +146,17 @@ async function dispatch(runner: Runner, req: RpcRequest, emit: Emit): Promise<vo
 }
 
 async function main(): Promise<void> {
+  // toolBridge owns outbound tool.execute requests + their pending
+  // map. Wired here (not in Runner) because it writes directly to
+  // stdout, mirroring the emit() serializer's contract.
+  const toolBridge = new ToolBridge(process.stdout);
+
   const runner = new Runner({
     apiKey: process.env.CURSOR_API_KEY,
     factory: realSdkFactory,
     sdkVersion: readSdkVersion(),
     emit: makeEmit(),
+    toolBridge,
   });
 
   const reader = new LineReader();
@@ -156,27 +164,58 @@ async function main(): Promise<void> {
 
   process.stdin.on("data", (chunk: Buffer) => {
     for (const line of reader.push(chunk)) {
-      const parsed = parseLine(line);
-      if (parsed.kind === "parse_error") {
-        // If the request had a valid id, use it; otherwise 0 is a
-        // reasonable "we couldn't tell who this was for" marker.
-        // The Go side treats id=0 responses as unsolicited errors
-        // and logs them without matching to a pending call.
-        const id = parsed.id ?? 0;
-        emit({
-          kind: "error",
-          id,
-          code: parsed.error.code,
-          message: parsed.error.message,
-          data: parsed.error.data,
-        });
-        continue;
+      const parsed = parseAny(line);
+      switch (parsed.kind) {
+        case "parse_error": {
+          // If the request had a valid id, use it; otherwise 0 is a
+          // reasonable "we couldn't tell who this was for" marker.
+          // The Go side treats id=0 responses as unsolicited errors
+          // and logs them without matching to a pending call.
+          const id = parsed.id ?? 0;
+          emit({
+            kind: "error",
+            id,
+            code: parsed.error.code,
+            message: parsed.error.message,
+            data: parsed.error.data,
+          });
+          break;
+        }
+        case "request": {
+          // Dispatch asynchronously — but do NOT parallelize different
+          // requests, because agent.send / agent.create can race on
+          // the runner's state maps if we let them. Serial dispatch
+          // is what index.ts guarantees.
+          void dispatch(runner, parsed.req, emit);
+          break;
+        }
+        case "response": {
+          // Reply to a Node → Go request. Today the only outbound
+          // requests are tool.execute; toolBridge owns them and
+          // will resolve the matching pending promise.
+          const r = parsed.resp;
+          if ("result" in r) {
+            toolBridge.handleResponse(r.id, r.result, null);
+          } else {
+            toolBridge.handleResponse(r.id, null, r.error);
+          }
+          break;
+        }
+        case "notification": {
+          // Only tool.result is defined for the Go → Node direction
+          // today. Anything else logs; we don't want an unknown
+          // notification to crash the runner.
+          if (parsed.note.method === "tool.result") {
+            toolBridge.handleToolResultNotify(
+              parsed.note.params as ToolResultNotifyParams,
+            );
+          } else {
+            // eslint-disable-next-line no-console
+            console.error(`unhandled notification method=${parsed.note.method}`);
+          }
+          break;
+        }
       }
-      // Dispatch asynchronously — but do NOT parallelize different
-      // requests, because agent.send / agent.create can race on
-      // the runner's state maps if we let them. Serial dispatch
-      // is what index.ts guarantees.
-      void dispatch(runner, parsed.req, emit);
     }
   });
 

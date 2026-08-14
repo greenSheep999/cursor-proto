@@ -76,6 +76,23 @@ type Supervisor struct {
 	runsMu  sync.Mutex
 	runSubs map[string]chan RunStreamMsg
 
+	// runToolChannels correlates runId → per-run tool-call channel.
+	// Only populated for runs whose HTTP request declared
+	// customTools. Populated lazily by SubscribeToolCalls (the HTTP
+	// SSE handler) and torn down by closeRun. When Node emits a
+	// tool.execute request whose runId has no subscriber, the
+	// request is answered immediately with ErrToolClientDisconnected.
+	runToolsMu      sync.Mutex
+	runToolChannels map[string]chan *ToolExecuteRequest
+	// pendingToolResults correlates callId → per-call response
+	// channel. Populated when handleInboundRequest routes a
+	// tool.execute request out to a HTTP SSE subscriber; drained by
+	// CompleteToolCall when the HTTP client POSTs /tool_results.
+	// Absent (or already-drained) entries make CompleteToolCall
+	// return ErrToolCallExpired.
+	pendingToolMu      sync.Mutex
+	pendingToolResults map[string]chan toolCallOutcome
+
 	// writeMu serializes stdin writes across goroutines. bufio.Writer
 	// is not itself concurrency-safe.
 	writeMu     sync.Mutex
@@ -85,6 +102,7 @@ type Supervisor struct {
 	closeOnce sync.Once
 	closeErr  atomic.Value // stores error
 	stopped   chan struct{}
+	exited    chan struct{}
 }
 
 // RunStreamMsg is one event on a per-run subscription channel. Exactly
@@ -95,6 +113,14 @@ type RunStreamMsg struct {
 	Event *RunEvent
 	Done  *RunDone
 	Error *RunError
+}
+
+// toolCallOutcome carries the HTTP client's answer for one
+// tool.execute request. Result is populated on success; Err on
+// failure. Exactly one is non-nil.
+type toolCallOutcome struct {
+	Result *ToolExecuteResult
+	Err    *RPCError
 }
 
 // New builds a Supervisor without starting it. Call Start() to spawn
@@ -109,10 +135,13 @@ func New(opts Options) *Supervisor {
 		opts.NodeBinary = "node"
 	}
 	return &Supervisor{
-		opts:    opts,
-		pending: map[uint64]chan *rpcResponse{},
-		runSubs: map[string]chan RunStreamMsg{},
-		stopped: make(chan struct{}),
+		opts:               opts,
+		pending:            map[uint64]chan *rpcResponse{},
+		runSubs:            map[string]chan RunStreamMsg{},
+		runToolChannels:    map[string]chan *ToolExecuteRequest{},
+		pendingToolResults: map[string]chan toolCallOutcome{},
+		stopped:            make(chan struct{}),
+		exited:             make(chan struct{}),
 	}
 }
 
@@ -200,21 +229,21 @@ func (s *Supervisor) Close() error {
 		if s.stdin != nil {
 			_ = s.stdin.Close()
 		}
-		// Give it a moment to exit gracefully, then SIGKILL.
-		exited := make(chan struct{})
-		go func() {
-			if s.cmd != nil && s.cmd.Process != nil {
-				_ = s.cmd.Wait()
+		// awaitExit owns the single os/exec.Cmd.Wait call. Calling Wait from
+		// both goroutines races inside os/exec and can corrupt its state.
+		if s.cmd != nil {
+			exited := s.exited
+			select {
+			case <-exited:
+			case <-time.After(3 * time.Second):
+				if s.cmd.Process != nil {
+					_ = s.cmd.Process.Kill()
+				}
+				select {
+				case <-exited:
+				case <-time.After(3 * time.Second):
+				}
 			}
-			close(exited)
-		}()
-		select {
-		case <-exited:
-		case <-time.After(3 * time.Second):
-			if s.cmd != nil && s.cmd.Process != nil {
-				_ = s.cmd.Process.Kill()
-			}
-			<-exited
 		}
 		// Fail all pending requests and close all run streams.
 		s.pendingMu.Lock()
@@ -370,7 +399,16 @@ func (s *Supervisor) readStdout() {
 			continue
 		}
 		if resp.Method != "" {
-			// Notification.
+			if resp.ID != 0 {
+				// Inbound request from Node (customTools reverse RPC).
+				// Serviced asynchronously so a slow tool doesn't stall
+				// the reader; handleInboundRequest writes the response
+				// back over stdin when the client's tool_result arrives
+				// or the per-call deadline fires.
+				go s.handleInboundRequest(resp.ID, resp.Method, resp.Params)
+				continue
+			}
+			// Notification (id=0 / omitted).
 			s.dispatchNotification(resp.Method, resp.Params)
 			continue
 		}
@@ -419,6 +457,7 @@ func (s *Supervisor) awaitExit() {
 		return
 	}
 	err := s.cmd.Wait()
+	close(s.exited)
 	if err != nil {
 		s.opts.Logger("node runner exited: %v", err)
 		s.closeErr.Store(fmt.Errorf("sdk: node runner exited: %w", err))
@@ -492,6 +531,22 @@ func (s *Supervisor) closeRun(runID string) {
 	if ok {
 		close(ch)
 	}
+	// customTools cleanup: close the run's tool-call channel so the
+	// SSE loop exits, and unblock every in-flight pendingToolResults
+	// entry that belongs to this run. Which callId belongs to which
+	// run is only known through the ToolExecuteRequest in flight
+	// (RunID field); handleInboundRequest tags each pending entry
+	// with its runId via a separate map so we don't have to scan
+	// every pending outcome here.
+	s.runToolsMu.Lock()
+	tch, hasTools := s.runToolChannels[runID]
+	if hasTools {
+		delete(s.runToolChannels, runID)
+	}
+	s.runToolsMu.Unlock()
+	if hasTools {
+		close(tch)
+	}
 }
 
 // registerRun creates a subscription channel for a runId. Called by
@@ -505,4 +560,263 @@ func (s *Supervisor) registerRun(runID string) <-chan RunStreamMsg {
 	s.runSubs[runID] = ch
 	s.runsMu.Unlock()
 	return ch
+}
+
+// -------- reverse-RPC plumbing (customTools) --------
+
+// handleInboundRequest services a request Node initiated on stdout.
+// tool.execute is the only method today. Dispatch flow:
+//  1. Parse the request payload; error → immediate stdio error reply.
+//  2. Look up the run's tool-call channel. Missing (or already
+//     closed) → immediate ErrToolClientDisconnected reply so Node
+//     surfaces a tool_error to the SDK instead of blocking forever.
+//  3. Register a per-callId outcome channel in pendingToolResults.
+//  4. Deliver the request onto the run's tool channel (non-blocking
+//     — HTTP SSE drains promptly; a full channel means the client
+//     is slow, and we surface that as a tool error rather than
+//     block the reader loop).
+//  5. Wait on the outcome channel with a per-tool timeout; on
+//     receive, write the corresponding rpcResponse back to Node.
+//
+// Concurrency note: called from a fresh goroutine per inbound
+// request (see readStdout) so many concurrent tool.execute calls
+// don't queue up.
+func (s *Supervisor) handleInboundRequest(id uint64, method string, params json.RawMessage) {
+	switch method {
+	case "tool.execute":
+		var req ToolExecuteRequest
+		if err := json.Unmarshal(params, &req); err != nil {
+			s.writeResponseErr(id, &RPCError{
+				Code:    ErrInvalidParams,
+				Message: "tool.execute: invalid params: " + err.Error(),
+			})
+			return
+		}
+		if req.RunID == "" || req.CallID == "" || req.Name == "" {
+			s.writeResponseErr(id, &RPCError{
+				Code:    ErrInvalidParams,
+				Message: "tool.execute: runId, callId, and name are required",
+			})
+			return
+		}
+		s.dispatchToolExecute(id, &req)
+	default:
+		s.writeResponseErr(id, &RPCError{
+			Code:    ErrMethodNotFound,
+			Message: "unknown inbound method: " + method,
+		})
+	}
+}
+
+// dispatchToolExecute routes one tool.execute request to the HTTP
+// client's SSE subscriber and blocks (in its own goroutine) until
+// the client's POST /tool_results comes back, or the supervisor is
+// stopped, or the run ends. Client-side timeout is enforced by the
+// HTTP handler (per-tool timeoutMs); we don't apply a Go-side
+// deadline here because a legitimate long-running tool would race
+// with it.
+func (s *Supervisor) dispatchToolExecute(id uint64, req *ToolExecuteRequest) {
+	// Look up the run's tool channel.
+	s.runToolsMu.Lock()
+	ch, ok := s.runToolChannels[req.RunID]
+	s.runToolsMu.Unlock()
+	if !ok {
+		// No subscriber. Could mean the client never subscribed, or
+		// the run ended already. Either way, surface a clean error.
+		s.writeResponseErr(id, &RPCError{
+			Code:    ErrToolClientDisconnected,
+			Message: "no HTTP subscriber for run " + req.RunID + " (client disconnected or run ended)",
+		})
+		return
+	}
+
+	// Register the pending outcome slot first, so a very fast client
+	// (POSTing tool_results before we've finished enqueue) still
+	// finds a channel to write into.
+	outcomeCh := make(chan toolCallOutcome, 1)
+	s.pendingToolMu.Lock()
+	// Guard: never overwrite an existing entry — that would strand
+	// the previous execute goroutine forever. If the callId already
+	// exists (protocol misuse from Node) surface an internal error.
+	if _, dup := s.pendingToolResults[req.CallID]; dup {
+		s.pendingToolMu.Unlock()
+		s.writeResponseErr(id, &RPCError{
+			Code:    ErrInternal,
+			Message: "duplicate callId " + req.CallID + " (protocol misuse)",
+		})
+		return
+	}
+	s.pendingToolResults[req.CallID] = outcomeCh
+	s.pendingToolMu.Unlock()
+
+	// Enqueue for the SSE writer. Non-blocking — if the channel is
+	// full we treat the client as too slow and fail this call.
+	select {
+	case ch <- req:
+	default:
+		s.dropPendingTool(req.CallID)
+		s.writeResponseErr(id, &RPCError{
+			Code:    ErrToolClientDisconnected,
+			Message: "HTTP subscriber for run " + req.RunID + " is not keeping up (channel full)",
+		})
+		return
+	}
+
+	// Await the outcome. supervisor Close closes s.stopped so we
+	// unwind cleanly if the process is torn down.
+	select {
+	case outcome := <-outcomeCh:
+		s.dropPendingTool(req.CallID)
+		if outcome.Err != nil {
+			s.writeResponseErr(id, outcome.Err)
+			return
+		}
+		if outcome.Result == nil {
+			s.writeResponseErr(id, &RPCError{
+				Code:    ErrInternal,
+				Message: "empty tool outcome",
+			})
+			return
+		}
+		s.writeResponseOk(id, outcome.Result)
+	case <-s.stopped:
+		s.dropPendingTool(req.CallID)
+		s.writeResponseErr(id, &RPCError{
+			Code:    ErrInternal,
+			Message: "supervisor stopped before tool result arrived",
+		})
+	}
+}
+
+func (s *Supervisor) dropPendingTool(callID string) {
+	s.pendingToolMu.Lock()
+	delete(s.pendingToolResults, callID)
+	s.pendingToolMu.Unlock()
+}
+
+// SubscribeToolCalls registers an HTTP SSE stream as the sink for a
+// run's tool.execute requests. Called from the /v1/agents/{id}/runs/stream
+// handler after sup.Send returns the runId. Returns a receive-only
+// channel that closes when closeRun tears down the run.
+//
+// Only one subscriber per run is supported (matches runSubs). If a
+// second subscribe arrives, the older channel is abandoned — the
+// HTTP layer is responsible for enforcing single-subscribe semantics
+// upstream.
+func (s *Supervisor) SubscribeToolCalls(runID string) <-chan *ToolExecuteRequest {
+	ch := make(chan *ToolExecuteRequest, 16)
+	s.runToolsMu.Lock()
+	if existing, ok := s.runToolChannels[runID]; ok {
+		// A previous subscriber exists. Close it so any select loops
+		// blocked on it unwind before we swap in the new channel.
+		close(existing)
+	}
+	s.runToolChannels[runID] = ch
+	s.runToolsMu.Unlock()
+	return ch
+}
+
+// CompleteToolCall delivers the HTTP client's answer for one
+// tool.execute request. Called from POST /tool_results. Returns
+// ErrToolCallExpired if the callId is unknown (timed out, cancelled,
+// or already answered).
+func (s *Supervisor) CompleteToolCall(callID string, outcome toolCallOutcome) error {
+	s.pendingToolMu.Lock()
+	ch, ok := s.pendingToolResults[callID]
+	s.pendingToolMu.Unlock()
+	if !ok {
+		return &RPCError{
+			Code:    ErrToolCallExpired,
+			Message: "tool call " + callID + " has expired or was already answered",
+		}
+	}
+	// Non-blocking send — outcomeCh is buffered 1; a second delivery
+	// (protocol misuse) is silently dropped.
+	select {
+	case ch <- outcome:
+	default:
+	}
+	return nil
+}
+
+// ForceExpireToolCall proactively fails an in-flight tool.execute
+// call and additionally sends a tool.result notification so Node's
+// toolBridge unblocks even if the stdio response hasn't threaded
+// through yet. Used by the HTTP layer on client disconnect or
+// per-tool timeout.
+func (s *Supervisor) ForceExpireToolCall(callID string, rpcErr *RPCError) {
+	_ = s.CompleteToolCall(callID, toolCallOutcome{Err: rpcErr})
+	s.writeNotify("tool.result", ToolResultNotify{CallID: callID, Error: rpcErr})
+}
+
+// writeResponseOk writes a JSON-RPC success response back to Node.
+// Reused by tool.execute in stage 2 once the HTTP client's result
+// lands. Serialization errors are logged but not fatal — the caller
+// (Node's toolBridge) will time out its own pending map.
+func (s *Supervisor) writeResponseOk(id uint64, result any) {
+	raw, err := json.Marshal(result)
+	if err != nil {
+		s.opts.Logger("writeResponseOk: marshal result id=%d: %v", id, err)
+		s.writeResponseErr(id, &RPCError{Code: ErrInternal, Message: err.Error()})
+		return
+	}
+	resp := struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      uint64          `json:"id"`
+		Result  json.RawMessage `json:"result"`
+	}{"2.0", id, raw}
+	s.writeFrame(resp)
+}
+
+// writeResponseErr writes a JSON-RPC error response back to Node.
+func (s *Supervisor) writeResponseErr(id uint64, rpcErr *RPCError) {
+	resp := struct {
+		JSONRPC string    `json:"jsonrpc"`
+		ID      uint64    `json:"id"`
+		Error   *RPCError `json:"error"`
+	}{"2.0", id, rpcErr}
+	s.writeFrame(resp)
+}
+
+// writeNotify writes a Go → Node notification (no id). Used by the
+// stage 2/3 tool.result path to force-reject an in-flight execute()
+// promise when the HTTP client won't be providing a result.
+func (s *Supervisor) writeNotify(method string, params any) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		s.opts.Logger("writeNotify: marshal params for %s: %v", method, err)
+		return
+	}
+	frame := struct {
+		JSONRPC string          `json:"jsonrpc"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params"`
+	}{"2.0", method, raw}
+	s.writeFrame(frame)
+}
+
+// writeFrame serializes one JSON value with a trailing newline and
+// flushes. Shares the same writeMu as call() so response / notify /
+// request writes don't interleave. Errors are logged; a dead child
+// will surface via readStdout / awaitExit and Close() will drain
+// any waiters.
+func (s *Supervisor) writeFrame(v any) {
+	buf, err := json.Marshal(v)
+	if err != nil {
+		s.opts.Logger("writeFrame: marshal: %v", err)
+		return
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if s.writeBuffer == nil {
+		// Supervisor closed; drop.
+		return
+	}
+	if _, werr := s.writeBuffer.Write(append(buf, '\n')); werr != nil {
+		s.opts.Logger("writeFrame: write: %v", werr)
+		return
+	}
+	if ferr := s.writeBuffer.Flush(); ferr != nil {
+		s.opts.Logger("writeFrame: flush: %v", ferr)
+	}
 }

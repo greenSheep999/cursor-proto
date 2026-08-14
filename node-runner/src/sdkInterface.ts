@@ -21,6 +21,26 @@ export interface SdkAgentOptions {
 }
 
 /**
+ * Per-send options — a superset of what agentSend accepts from the
+ * wire. customTools carries an already-built Record synthesized by
+ * toolBridge.buildCustomTools; the SDK receives it verbatim as
+ * SendOptions.local.customTools. Local-agent only per SDK contract.
+ */
+export interface SdkSendOptions {
+  customTools?: Record<
+    string,
+    {
+      description?: string;
+      inputSchema?: Record<string, unknown>;
+      execute: (
+        args: Record<string, unknown>,
+        ctx: { toolCallId?: string },
+      ) => unknown | Promise<unknown>;
+    }
+  >;
+}
+
+/**
  * One agent handle. `agentId` is stable for the agent's lifetime and
  * matches what `Agent.create()` in @cursor/sdk returns (`agent-<uuid>`
  * for local, `bc-<uuid>` for cloud).
@@ -29,7 +49,7 @@ export interface SdkAgent {
   readonly agentId: string;
 
   /** Start a run. The returned handle produces the event stream. */
-  send(prompt: string): Promise<SdkRun>;
+  send(prompt: string, options?: SdkSendOptions): Promise<SdkRun>;
 
   /** Free resources. Cancels in-flight runs. */
   close(): Promise<void>;

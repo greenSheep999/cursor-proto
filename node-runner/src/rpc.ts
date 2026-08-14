@@ -22,6 +22,19 @@ import type {
   RpcResponseOk,
 } from "./protocol.js";
 
+// A parsed inbound frame. Stdin used to carry only requests (Go → Node),
+// so `parseLine` returned `request | parse_error`. With customTools we
+// added a reverse channel: Node makes tool.execute requests to Go, and
+// Go replies with an RpcResponse. Go also sends tool.result
+// notifications when it can't wait for a stdio response (client
+// disconnect / timeout). `parseAny` covers all four inbound shapes so
+// the stdin dispatcher in index.ts can route each to the right handler.
+export type ParseAnyResult =
+  | { kind: "request"; req: RpcRequest }
+  | { kind: "response"; resp: RpcResponse }
+  | { kind: "notification"; note: RpcNotification }
+  | { kind: "parse_error"; error: RpcError; id: number | null };
+
 // -------- reader: parse a Readable line-by-line into RpcRequests --------
 
 /**
@@ -30,21 +43,38 @@ import type {
  * survive chunks that split a JSON object across boundaries.
  */
 export class LineReader {
+  static readonly MAX_FRAME_BYTES = 4 * 1024 * 1024;
   private buf: Buffer = Buffer.alloc(0);
+  private discardingOversized = false;
 
   /** Push one chunk (arbitrary length). Returns 0-or-more complete lines. */
   push(chunk: Buffer): string[] {
+    if (this.discardingOversized) {
+      const nl = chunk.indexOf(0x0a);
+      if (nl === -1) return [];
+      this.discardingOversized = false;
+      chunk = chunk.subarray(nl + 1);
+    }
     this.buf = Buffer.concat([this.buf, chunk]);
     const lines: string[] = [];
     let start = 0;
     while (true) {
       const nl = this.buf.indexOf(0x0a /* \n */, start);
       if (nl === -1) {
+        if (this.buf.length > LineReader.MAX_FRAME_BYTES) {
+          // Drop an oversized frame without retaining attacker-controlled
+          // bytes until its newline arrives. The peer gets no response for
+          // this malformed frame, but the runner remains available.
+          this.buf = Buffer.alloc(0);
+          this.discardingOversized = true;
+        }
         break;
       }
       const line = this.buf.subarray(start, nl).toString("utf8");
       if (line.length > 0) {
-        lines.push(line);
+        if (Buffer.byteLength(line, "utf8") <= LineReader.MAX_FRAME_BYTES) {
+          lines.push(line);
+        }
       }
       start = nl + 1;
     }
@@ -113,12 +143,86 @@ export function parseLine(line: string): ParseResult {
  * event loop only long enough to JSON.stringify. Errors from the
  * underlying stream (parent died mid-write, e.g.) bubble up and are
  * fatal — the runner should die when its parent dies.
+ *
+ * The `RpcRequest` case (Node → Go) is used by toolBridge for the
+ * customTools reverse channel; it was added when we extended stdio
+ * from unidirectional to duplex. See protocol.ts §"Method inventory".
  */
 export function writeMessage(
   stream: Writable,
-  msg: RpcResponse | RpcNotification,
+  msg: RpcRequest | RpcResponse | RpcNotification,
 ): void {
   stream.write(JSON.stringify(msg) + "\n");
+}
+
+/**
+ * Broader parser used by index.ts's stdin dispatcher: distinguishes
+ * request / response / notification purely from the frame shape, per
+ * JSON-RPC 2.0 §4-6. Rules:
+ *   - method:string + id:number       → request
+ *   - method:string, no id            → notification
+ *   - id:number + (result | error)    → response
+ * Anything else is a parse error.
+ *
+ * We deliberately do not fall back to `parseLine`: the old parser
+ * assumed inbound was always a request, which was true before we
+ * added the tool.execute reverse channel. Callers that only want
+ * to accept inbound requests (tests, or a future no-reverse mode)
+ * can wrap `parseAny` and reject other kinds.
+ */
+export function parseAny(line: string): ParseAnyResult {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(line);
+  } catch (e) {
+    return {
+      kind: "parse_error",
+      error: {
+        code: -32700, // ERR_PARSE_ERROR
+        message: `parse error: ${(e as Error).message}`,
+        data: { line: line.slice(0, 200) },
+      },
+      id: null,
+    };
+  }
+  if (typeof obj !== "object" || obj === null) {
+    return badRequest("frame is not a JSON object");
+  }
+  const o = obj as Record<string, unknown>;
+  if (o.jsonrpc !== "2.0") {
+    return badRequest("missing or wrong jsonrpc version");
+  }
+  const hasMethod = typeof o.method === "string";
+  const hasIdNum = typeof o.id === "number";
+  const hasResult = Object.prototype.hasOwnProperty.call(o, "result");
+  const hasError = Object.prototype.hasOwnProperty.call(o, "error");
+
+  if (hasMethod && hasIdNum) {
+    return { kind: "request", req: o as unknown as RpcRequest };
+  }
+  if (hasMethod && !hasIdNum) {
+    return { kind: "notification", note: o as unknown as RpcNotification };
+  }
+  if (hasIdNum && (hasResult || hasError)) {
+    return { kind: "response", resp: o as unknown as RpcResponse };
+  }
+  const idRaw = o.id;
+  return {
+    kind: "parse_error",
+    error: {
+      code: -32600, // ERR_INVALID_REQUEST
+      message: "frame is not a valid JSON-RPC 2.0 request/response/notification",
+    },
+    id: typeof idRaw === "number" ? idRaw : null,
+  };
+}
+
+function badRequest(msg: string): ParseAnyResult {
+  return {
+    kind: "parse_error",
+    error: { code: -32600, message: msg },
+    id: null,
+  };
 }
 
 export function ok<R>(id: number, result: R): RpcResponseOk<R> {

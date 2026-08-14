@@ -90,10 +90,13 @@ type responsesInputItem struct {
 func responsesHandler(c chatRunner, cacheStore *simcache.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req responsesRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
+		if err := decodeJSONRequest(w, r, &req, false); err != nil {
+			http.Error(w, err.Error(), jsonRequestErrorStatus(err))
 			return
 		}
+		tools := convertResponsesTools(req.Tools)
+		clientToolNames := toolDefNames(tools)
+		recordToolsFromRequest(clientToolNames)
 
 		systemPrompt, history, userText, err := parseResponsesInput(&req)
 		if err != nil {
@@ -105,10 +108,9 @@ func responsesHandler(c chatRunner, cacheStore *simcache.Store) http.HandlerFunc
 			return
 		}
 
-		prefix := prefixFromOpenAI(strings.TrimSpace(systemPrompt), history)
+		prefix := prefixForSimCache("openai-responses", req.Model, tools, strings.TrimSpace(systemPrompt), history)
 		decision := decideSimCache(cacheStore, prefix)
 
-		tools := convertResponsesTools(req.Tools)
 		events, err := c.RunChat(r.Context(), &executor.ChatRequest{
 			Model:              req.Model,
 			UserMessage:        userText,
@@ -125,7 +127,6 @@ func responsesHandler(c chatRunner, cacheStore *simcache.Store) http.HandlerFunc
 			return
 		}
 
-		clientToolNames := toolDefNames(tools)
 		if req.Stream {
 			w.Header().Set("x-cursor-cache-source", decision.headerBeforeStream())
 			streamResponses(w, req.Model, events, decision, clientToolNames)

@@ -156,24 +156,24 @@ const (
 // snake_case matches the rest of /v1/usage/*; the raw pb.go type is
 // camelCase (Go convention) so we spell fields out explicitly.
 type usageEventItem struct {
-	Timestamp        string     `json:"timestamp"`               // ISO 8601
-	TimestampMs      int64      `json:"timestamp_ms"`            // raw for sorting
-	Model            string     `json:"model"`
-	Kind             string     `json:"kind"`                    // enum name minus prefix
-	MaxMode          bool       `json:"max_mode,omitempty"`
-	RequestsCosts    float64    `json:"requests_costs,omitempty"`
-	UsageBasedCosts  string     `json:"usage_based_costs,omitempty"`
-	IsTokenBased     bool       `json:"is_token_based,omitempty"`
-	Tokens           *tokenBrk  `json:"tokens,omitempty"`
-	ChargedCents     float64    `json:"charged_cents,omitempty"`
-	IsChargeable     bool       `json:"is_chargeable,omitempty"`
-	ConversationID   string     `json:"conversation_id,omitempty"`
-	CloudAgentID     string     `json:"cloud_agent_id,omitempty"`
-	AutomationID     string     `json:"automation_id,omitempty"`
-	ClientType       string     `json:"client_type,omitempty"`
-	IsHeadless       bool       `json:"is_headless,omitempty"`
-	UserEmail        string     `json:"user_email,omitempty"`
-	ServiceAccount   string     `json:"service_account_name,omitempty"`
+	Timestamp       string    `json:"timestamp"`    // ISO 8601
+	TimestampMs     int64     `json:"timestamp_ms"` // raw for sorting
+	Model           string    `json:"model"`
+	Kind            string    `json:"kind"` // enum name minus prefix
+	MaxMode         bool      `json:"max_mode,omitempty"`
+	RequestsCosts   float64   `json:"requests_costs,omitempty"`
+	UsageBasedCosts string    `json:"usage_based_costs,omitempty"`
+	IsTokenBased    bool      `json:"is_token_based,omitempty"`
+	Tokens          *tokenBrk `json:"tokens,omitempty"`
+	ChargedCents    float64   `json:"charged_cents,omitempty"`
+	IsChargeable    bool      `json:"is_chargeable,omitempty"`
+	ConversationID  string    `json:"conversation_id,omitempty"`
+	CloudAgentID    string    `json:"cloud_agent_id,omitempty"`
+	AutomationID    string    `json:"automation_id,omitempty"`
+	ClientType      string    `json:"client_type,omitempty"`
+	IsHeadless      bool      `json:"is_headless,omitempty"`
+	UserEmail       string    `json:"user_email,omitempty"`
+	ServiceAccount  string    `json:"service_account_name,omitempty"`
 }
 
 type tokenBrk struct {

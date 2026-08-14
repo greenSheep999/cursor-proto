@@ -78,12 +78,12 @@ type WireModeInfo struct {
 // runtime from the supervisor's most recent Ping; falls back to
 // stub values when agent mode is off.
 type AgentModeInfo struct {
-	Available     bool     `json:"available"`
-	SDKVersion    string   `json:"sdk_version,omitempty"`
-	NodeVersion   string   `json:"node_version,omitempty"`
-	Runtimes      []string `json:"runtimes,omitempty"`
-	ActiveAgents  int      `json:"active_agents,omitempty"`
-	ActiveRuns    int      `json:"active_runs,omitempty"`
+	Available    bool     `json:"available"`
+	SDKVersion   string   `json:"sdk_version,omitempty"`
+	NodeVersion  string   `json:"node_version,omitempty"`
+	Runtimes     []string `json:"runtimes,omitempty"`
+	ActiveAgents int      `json:"active_agents,omitempty"`
+	ActiveRuns   int      `json:"active_runs,omitempty"`
 }
 
 // currentHTTPVersion holds the runtime -http-version choice. main() sets

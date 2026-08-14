@@ -360,3 +360,27 @@ func stringSliceEqual(a, b []string) bool {
 	}
 	return true
 }
+
+func TestRequireAPIKeys_LocalMetadataBypassesAuth(t *testing.T) {
+	stub := &stubOK{}
+	h := RequireAPIKeys([]string{"sk-good"}, stub)
+	req := httptest.NewRequest(http.MethodGet, "/v1/proxy-info", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent || stub.called != 1 {
+		t.Fatalf("local metadata probe should pass: status=%d called=%d", rec.Code, stub.called)
+	}
+}
+
+func TestRequireAPIKeys_RemoteMetadataRequiresAuth(t *testing.T) {
+	stub := &stubOK{}
+	h := RequireAPIKeys([]string{"sk-good"}, stub)
+	req := httptest.NewRequest(http.MethodGet, "/v1/proxy-info", nil)
+	req.RemoteAddr = "203.0.113.10:12345"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized || stub.called != 0 {
+		t.Fatalf("remote metadata probe should require auth: status=%d called=%d", rec.Code, stub.called)
+	}
+}

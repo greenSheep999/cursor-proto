@@ -48,8 +48,8 @@ func estimateTokens(text string) int {
 // contract stays aligned with /v1/messages.
 func countTokensHandler(w http.ResponseWriter, r *http.Request) {
 	var req anthropicMessagesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeJSONRequest(w, r, &req, false); err != nil {
+		http.Error(w, err.Error(), jsonRequestErrorStatus(err))
 		return
 	}
 

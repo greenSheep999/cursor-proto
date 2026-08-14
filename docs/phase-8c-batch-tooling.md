@@ -88,6 +88,10 @@ cursor-batch-import --csv … --skip-validate   # don't call GetMe
 - `refresh_lead: 30m` is stamped onto every imported account (as a
   Go duration in the JSON), giving the future refresh loop a default
   headroom to work with.
+- JWTs with `type=web` are rejected before Dashboard validation. Dashboard
+  acceptance is not sufficient proof that a token can authenticate Cursor
+  IDE AI requests; use the cookie-backed `cursor-login` flow documented in
+  `web-session-login.md` to exchange them for `type=session` credentials.
 
 ## `cursor-to-cpa` (extended)
 

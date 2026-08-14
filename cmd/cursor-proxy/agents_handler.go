@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -139,12 +138,12 @@ func agentsRootHandler(w http.ResponseWriter, r *http.Request) {
 // createAgentRequest is the HTTP shape mirroring
 // sdk.AgentCreateParams with JSON tags for the request body.
 type createAgentRequest struct {
-	Runtime      string            `json:"runtime"`
+	Runtime      string             `json:"runtime"`
 	Model        sdk.ModelSelection `json:"model"`
-	CWD          string            `json:"cwd,omitempty"`
-	Repos        []sdk.CloudRepo   `json:"repos,omitempty"`
-	AutoCreatePR bool              `json:"auto_create_pr,omitempty"`
-	EnvVars      map[string]string `json:"env_vars,omitempty"`
+	CWD          string             `json:"cwd,omitempty"`
+	Repos        []sdk.CloudRepo    `json:"repos,omitempty"`
+	AutoCreatePR bool               `json:"auto_create_pr,omitempty"`
+	EnvVars      map[string]string  `json:"env_vars,omitempty"`
 }
 
 func agentsCreateHandler(w http.ResponseWriter, r *http.Request) {
@@ -158,8 +157,8 @@ func agentsCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req createAgentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-		writeAgentError(w, http.StatusBadRequest, "invalid_request",
+	if err := decodeJSONRequest(w, r, &req, true); err != nil {
+		writeAgentError(w, jsonRequestErrorStatus(err), "invalid_request",
 			fmt.Sprintf("bad JSON body: %v", err))
 		return
 	}
@@ -277,8 +276,8 @@ func agentsSendHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req sendRunRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAgentError(w, http.StatusBadRequest, "invalid_request",
+	if err := decodeJSONRequest(w, r, &req, false); err != nil {
+		writeAgentError(w, jsonRequestErrorStatus(err), "invalid_request",
 			fmt.Sprintf("bad JSON body: %v", err))
 		return
 	}
@@ -347,7 +346,7 @@ func agentsStreamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = r.PathValue("id") // agentId is validated on send; here we
-	                      // only need the runId.
+	// only need the runId.
 	runID := r.PathValue("run_id")
 	if runID == "" {
 		writeAgentError(w, http.StatusBadRequest, "invalid_request", "empty run id")
@@ -391,8 +390,8 @@ func agentsSendStreamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req sendRunRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAgentError(w, http.StatusBadRequest, "invalid_request",
+	if err := decodeJSONRequest(w, r, &req, false); err != nil {
+		writeAgentError(w, jsonRequestErrorStatus(err), "invalid_request",
 			fmt.Sprintf("bad JSON body: %v", err))
 		return
 	}

@@ -35,8 +35,8 @@ type legacyCompletionsRequest struct {
 func completionsHandler(c chatRunner, cacheStore *simcache.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req legacyCompletionsRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
+		if err := decodeJSONRequest(w, r, &req, false); err != nil {
+			http.Error(w, err.Error(), jsonRequestErrorStatus(err))
 			return
 		}
 
@@ -50,7 +50,7 @@ func completionsHandler(c chatRunner, cacheStore *simcache.Store) http.HandlerFu
 			return
 		}
 
-		prefix := prefixFromOpenAI("", nil)
+		prefix := prefixForSimCache("openai-completions", req.Model, nil, "", nil)
 		decision := decideSimCache(cacheStore, prefix)
 
 		events, err := c.RunChat(r.Context(), &executor.ChatRequest{

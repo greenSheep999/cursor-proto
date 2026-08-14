@@ -71,7 +71,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 		return nil, fmt.Errorf("RunSSE dial: %w", err)
 	}
 	if sseResp.StatusCode != 200 {
-		body, _ := io.ReadAll(sseResp.Body)
+		body, _ := io.ReadAll(io.LimitReader(sseResp.Body, 64<<10))
 		sseResp.Body.Close()
 		return nil, fmt.Errorf("RunSSE http %d: %s", sseResp.StatusCode, string(body))
 	}

@@ -11,13 +11,25 @@
 //     agent.list()                                          → { agents: AgentSummary[] }
 //     agent.status(agentId)                                 → AgentSummary
 //     agent.close(agentId)                                  → { ok: true }
-//     agent.send(agentId, prompt)                           → { runId }
+//     agent.send(agentId, prompt, customTools?)             → { runId }
 //     run.cancel(runId)                                     → { ok: true }
+//
+//   Request/response methods (Node → Go → Node):
+//     tool.execute(runId, callId, name, args)               → ToolExecuteResult
+//         Fired inside SDKCustomTool.execute so the Go supervisor
+//         (and its HTTP client) can service the call. Response
+//         resolves the SDK's execute() promise.
 //
 //   Notifications (Node → Go, no id):
 //     run.event  — one per SDK stream event
 //     run.done   — end marker with final text + usage
 //     run.error  — SDK / runtime error; caller aborts the stream
+//
+//   Notifications (Go → Node, no id):
+//     tool.result — externally-triggered rejection of an in-flight
+//         tool.execute (client disconnect / run cancel / timeout).
+//         Node's toolBridge uses it to force-resolve the pending
+//         execute() promise without waiting for a stdio response.
 
 /**
  * JSON-RPC 2.0 envelope. We use `id: number` (auto-incremented on the
@@ -67,6 +79,17 @@ export const ERR_NO_API_KEY = -32001;
 export const ERR_AGENT_NOT_FOUND = -32002;
 export const ERR_RUN_NOT_FOUND = -32003;
 export const ERR_SDK_FAILURE = -32004;
+// customTools reverse-RPC error codes. Emitted by the Go supervisor
+// via tool.result notifications when the HTTP client's tool response
+// won't arrive; the Node toolBridge rejects the pending execute()
+// promise with these codes so the SDK can decide whether to retry.
+export const ERR_TOOL_CLIENT_DISCONNECTED = -32005;
+export const ERR_TOOL_CALL_TIMEOUT = -32006;
+export const ERR_TOOL_CALL_CANCELLED = -32007;
+// Emitted by the HTTP layer on POST /tool_results when the callId
+// has already been retired (timeout / cancel / run.done fired first).
+// Never reaches Node — HTTP-layer only.
+export const ERR_TOOL_CALL_EXPIRED = -32008;
 
 // -------- payload shapes --------
 
@@ -139,6 +162,26 @@ export interface AgentSendParams {
   // constructs prompts from HTTP request bodies which are always
   // strings.
   prompt: string;
+  /**
+   * Custom tools the HTTP client wants to expose to the SDK for this
+   * run. Node synthesizes SDKCustomTool.execute callbacks that bounce
+   * back over stdio via tool.execute requests. Empty / omitted means
+   * SDK's built-in tools only. Local runtime only.
+   */
+  customTools?: CustomToolDef[];
+}
+
+/**
+ * Schema-only handle for a client-hosted custom tool. execute() is
+ * synthesized on the Node side and forwards through toolBridge. Kept
+ * shape-compatible with the CustomToolDef struct in
+ * executor/sdk/protocol.go.
+ */
+export interface CustomToolDef {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  timeoutMs?: number;
 }
 
 export interface AgentSendResult {

@@ -29,9 +29,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -389,8 +389,8 @@ func modelsHandler(c *executor.Client) http.HandlerFunc {
 func openaiChatHandler(c *executor.Client, cacheStore *simcache.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req openaiChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
+		if err := decodeJSONRequest(w, r, &req, false); err != nil {
+			http.Error(w, err.Error(), jsonRequestErrorStatus(err))
 			return
 		}
 		// Record declared tools in the ring buffer BEFORE any
@@ -436,10 +436,9 @@ func openaiChatHandler(c *executor.Client, cacheStore *simcache.Store) http.Hand
 
 		// Ask the simulator whether it has seen this stable prefix before.
 		// The result is consulted after RunChat to rewrite `cached_tokens`.
-		prefix := prefixFromOpenAI(strings.TrimSpace(systemPrompt), history)
-		decision := decideSimCache(cacheStore, prefix)
-
 		tools := convertOpenAITools(req.Tools)
+		prefix := prefixForSimCache("openai-chat", req.Model, tools, strings.TrimSpace(systemPrompt), history)
+		decision := decideSimCache(cacheStore, prefix)
 		events, err := c.RunChat(r.Context(), &executor.ChatRequest{
 			Model:              req.Model,
 			UserMessage:        userText,
@@ -671,8 +670,8 @@ func diffSuffix(sent, full string) string {
 func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req anthropicMessagesRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
+		if err := decodeJSONRequest(w, r, &req, false); err != nil {
+			http.Error(w, err.Error(), jsonRequestErrorStatus(err))
 			return
 		}
 		// Feed the introspection ring. See openaiChatHandler for
@@ -704,9 +703,6 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 			})
 		}
 
-		prefix := prefixFromOpenAI(strings.TrimSpace(systemPrompt), history)
-		decision := decideSimCache(cacheStore, prefix)
-
 		// Reject server-side Anthropic tools (web_search_20250305 etc.)
 		// with a 400 instead of silently dropping them — clients rely on
 		// tool_use blocks that Cursor's upstream will never emit for
@@ -720,6 +716,8 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 					unsupportedTool))
 			return
 		}
+		prefix := prefixForSimCache("anthropic-messages", req.Model, tools, strings.TrimSpace(systemPrompt), history)
+		decision := decideSimCache(cacheStore, prefix)
 
 		// Resolve the target Cursor tier. Priority:
 		//   1. Explicit tier suffix already on req.Model (e.g. "claude-sonnet-5-high") wins.
@@ -1021,9 +1019,9 @@ func flattenAnthropicSystem(s any) string {
 //
 //   - text            → the text itself
 //   - tool_use        → "[tool_use name=X input={...}]" so the model sees
-//                       it already made this call and doesn't repeat it
+//     it already made this call and doesn't repeat it
 //   - tool_result     → "[tool_result for tool_use_id=Y: <content>]" so
-//                       the model sees the result of its previous call
+//     the model sees the result of its previous call
 //
 // This is a fallback for the fact that Cursor's HistoryTurn is text-only;
 // a proper fix (native tool_use / tool_result in the Cursor wire) would
@@ -1162,6 +1160,7 @@ func makeIDEAccountReloader(dbPath string, initial time.Time) func() *auth.Accou
 		}
 		acc.FillSessionDefaults(time.Now())
 		lastMTime = info.ModTime()
+		SetWireAccountEmail(acc.Email)
 		log.Printf("[proxy] IDE account reloaded: email=%s", acc.Email)
 		return acc
 	}

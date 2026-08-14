@@ -104,10 +104,13 @@ func geminiRouter(c chatRunner, cacheStore *simcache.Store) http.HandlerFunc {
 func geminiGenerateContentHandler(c chatRunner, cacheStore *simcache.Store, streaming bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req geminiGenerateContentRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if err := decodeJSONRequest(w, r, &req, false); err != nil {
+			http.Error(w, err.Error(), jsonRequestErrorStatus(err))
 			return
 		}
+		tools := convertGeminiTools(req.Tools)
+		clientToolNames := toolDefNames(tools)
+		recordToolsFromRequest(clientToolNames)
 		model := r.URL.Query().Get("_model")
 		if model == "" {
 			http.Error(w, "missing model", http.StatusBadRequest)
@@ -124,10 +127,9 @@ func geminiGenerateContentHandler(c chatRunner, cacheStore *simcache.Store, stre
 			return
 		}
 
-		prefix := prefixFromOpenAI(strings.TrimSpace(systemPrompt), history)
+		prefix := prefixForSimCache("gemini-generate-content", model, tools, strings.TrimSpace(systemPrompt), history)
 		decision := decideSimCache(cacheStore, prefix)
 
-		tools := convertGeminiTools(req.Tools)
 		events, err := c.RunChat(r.Context(), &executor.ChatRequest{
 			Model:              model,
 			UserMessage:        userText,
@@ -144,7 +146,6 @@ func geminiGenerateContentHandler(c chatRunner, cacheStore *simcache.Store, stre
 			return
 		}
 
-		clientToolNames := toolDefNames(tools)
 		if streaming {
 			w.Header().Set("x-cursor-cache-source", decision.headerBeforeStream())
 			streamGemini(w, model, events, decision, clientToolNames)
