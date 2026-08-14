@@ -15,16 +15,35 @@ import (
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
+	"github.com/router-for-me/cursor-proto/executor/transport"
 )
 
 func main() {
 	model := flag.String("model", "claude-4.5-sonnet", "model to use")
 	msg := flag.String("msg", "Say hi in one word.", "user message")
 	timeout := flag.Duration("timeout", 60*time.Second, "overall timeout")
+	upstreamProxy := flag.String("upstream-proxy", "", "upstream proxy URL for Cursor backend calls")
+	httpVersion := flag.String("http-version", "auto", "upstream HTTP protocol version: auto | http1.1 | http1.0")
 	flag.Parse()
 
 	acc := loadAccountFromIDE()
-	c := executor.NewClient(acc)
+	if *upstreamProxy == "" {
+		for _, envKey := range []string{"CURSOR_PROXY_UPSTREAM", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+			if value := os.Getenv(envKey); value != "" {
+				*upstreamProxy = value
+				break
+			}
+		}
+	}
+	httpVer, err := transport.Parse(*httpVersion)
+	if err != nil {
+		log.Fatalf("bad -http-version: %v", err)
+	}
+	options := []executor.Option{executor.WithHTTPVersion(httpVer)}
+	if *upstreamProxy != "" {
+		options = append(options, executor.WithProxyURL(*upstreamProxy))
+	}
+	c := executor.NewClient(acc, options...)
 	// RunSSE / BidiAppend both live on api2 for regular users, not api3.
 	// api3 was seen in mitmproxy TLS handshake failures — that's a *pinned*
 	// path used by some other subsystem (likely the retrieval index). Chat
@@ -33,6 +52,8 @@ func main() {
 	fmt.Printf("✓ Client ready\n")
 	fmt.Printf("  model=%s\n", *model)
 	fmt.Printf("  message=%q\n\n", *msg)
+	fmt.Printf("  http_version=%s\n", httpVer)
+	fmt.Printf("  upstream_proxy=%s\n\n", proxySummary(*upstreamProxy))
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
@@ -99,6 +120,13 @@ func summarizeTrailer(b []byte) string {
 	// Trailer body is textual grpc-status headers. Fully print it — decoding
 	// the base64 details often reveals actionable messages.
 	return "\n" + string(b)
+}
+
+func proxySummary(raw string) string {
+	if raw == "" {
+		return "(none)"
+	}
+	return "(configured)"
 }
 
 func loadAccountFromIDE() *auth.Account {

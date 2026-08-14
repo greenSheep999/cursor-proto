@@ -11,6 +11,7 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -84,7 +85,10 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	}
 
 	format := normaliseFormat(req.Format, req.SourceFormat)
-	body := collectNonStreaming(format, shape.Model, events)
+	body, errCollect := collectNonStreaming(format, shape.Model, events)
+	if errCollect != nil {
+		return errorEnvelope("upstream_error", errCollect.Error(), true), 0
+	}
 	headers := map[string][]string{"Content-Type": {"application/json"}}
 	resp := executorResponse{Payload: body, Headers: headers}
 	buf, errMarshal := json.Marshal(resp)
@@ -96,13 +100,28 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 
 // collectNonStreaming iterates the RunChat channel and produces a
 // full response body in the requested output format.
-func collectNonStreaming(format, model string, events <-chan executor.ChatEvent) []byte {
+func collectNonStreaming(format, model string, events <-chan executor.ChatEvent) ([]byte, error) {
 	switch format {
 	case "claude":
 		return buildClaudeNonStreaming(model, events)
 	default:
 		return buildOpenAINonStreaming(model, events)
 	}
+}
+
+const emptyUpstreamResponseMessage = "empty response from upstream (no content, tool calls, or token usage)"
+
+var errEmptyUpstreamResponse = errors.New(emptyUpstreamResponseMessage)
+
+func isEmptyPluginUpstreamResponse(hasOutput bool, usage *translator.Usage) bool {
+	if hasOutput {
+		return false
+	}
+	return usage == nil || usage.InputTokens == 0 &&
+		usage.OutputTokens == 0 &&
+		usage.CacheReadTokens == 0 &&
+		usage.CacheWriteTokens == 0 &&
+		usage.ReasoningTokens == 0
 }
 
 // buildOpenAINonStreaming mirrors nonStreamOpenAI in cmd/cursor-proxy.
@@ -114,7 +133,7 @@ func collectNonStreaming(format, model string, events <-chan executor.ChatEvent)
 // arrive (e.g. legacy stream shape or when a KV blob never gets
 // flushed), we accumulate the deltas so the final response is still
 // populated.
-func buildOpenAINonStreaming(model string, events <-chan executor.ChatEvent) []byte {
+func buildOpenAINonStreaming(model string, events <-chan executor.ChatEvent) ([]byte, error) {
 	acc := translator.NonStreamingAccumulator{Model: model}
 	sawBlob := false
 	deltaText := ""
@@ -144,13 +163,16 @@ func buildOpenAINonStreaming(model string, events <-chan executor.ChatEvent) []b
 	if !sawBlob && deltaText != "" {
 		acc.Text = deltaText
 	}
-	return acc.Response("chatcmpl-" + auth.GenerateSessionID())
+	if isEmptyPluginUpstreamResponse(acc.Text != "" || len(acc.ToolCalls) > 0, acc.Usage) {
+		return nil, errEmptyUpstreamResponse
+	}
+	return acc.Response("chatcmpl-" + auth.GenerateSessionID()), nil
 }
 
 // buildClaudeNonStreaming mirrors nonStreamAnthropic in cmd/cursor-proxy.
 // Falls back to accumulating text deltas when Cursor never emits a
 // KV blob (see buildOpenAINonStreaming for the rationale).
-func buildClaudeNonStreaming(model string, events <-chan executor.ChatEvent) []byte {
+func buildClaudeNonStreaming(model string, events <-chan executor.ChatEvent) ([]byte, error) {
 	assistantText := ""
 	sawBlob := false
 	deltaText := ""
@@ -193,6 +215,9 @@ func buildClaudeNonStreaming(model string, events <-chan executor.ChatEvent) []b
 	if !sawBlob && deltaText != "" {
 		assistantText = deltaText
 	}
+	if isEmptyPluginUpstreamResponse(assistantText != "" || len(toolUses) > 0, usage) {
+		return nil, errEmptyUpstreamResponse
+	}
 	content := []map[string]any{}
 	if assistantText != "" {
 		content = append(content, map[string]any{"type": "text", "text": assistantText})
@@ -217,7 +242,7 @@ func buildClaudeNonStreaming(model string, events <-chan executor.ChatEvent) []b
 		resp["usage"] = translator.BuildAnthropicUsage(usage)
 	}
 	buf, _ := json.Marshal(resp)
-	return buf
+	return buf, nil
 }
 
 // handleExecutorExecuteStream implements executor.execute_stream. It
@@ -325,6 +350,8 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 	assistantSent := ""
 	sawTurnEnd := false
 	sawBlob := false
+	sawOutput := false
+	var lastUsage *translator.Usage
 	for ev := range events {
 		if ev.Server == nil {
 			continue
@@ -334,6 +361,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
+				sawOutput = true
 				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
 					return
@@ -351,12 +379,14 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 			// KV blob for this turn. Doing both would double-encode
 			// the assistant text.
 			if !sawBlob && trEv.Text != "" {
+				sawOutput = true
 				if err := emit(streamID, tr.Encode(trEv)); err != nil {
 					*errOut = err.Error()
 					return
 				}
 			}
 		case translator.EventToolCallStarted, translator.EventToolCallDelta:
+			sawOutput = true
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
 					*errOut = err.Error()
@@ -365,6 +395,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 			}
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
+			lastUsage = trEv.Usage
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
 					*errOut = err.Error()
@@ -372,6 +403,10 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 				}
 			}
 		}
+	}
+	if isEmptyPluginUpstreamResponse(sawOutput, lastUsage) {
+		*errOut = emptyUpstreamResponseMessage
+		return
 	}
 	// Synthetic tool_calls terminator when the server never sent
 	// turn_ended — same rescue path as cursor-proxy's http handler.
@@ -402,6 +437,7 @@ func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errO
 	tr := translator.NewAnthropicStreamWriter(model)
 	assistantSent := ""
 	sawBlob := false
+	sawOutput := false
 	var lastUsage *translator.Usage
 	for ev := range events {
 		if ev.Server == nil {
@@ -412,6 +448,7 @@ func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errO
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
+				sawOutput = true
 				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
 					return
@@ -426,12 +463,14 @@ func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errO
 		switch trEv.Kind {
 		case translator.EventTextDelta:
 			if !sawBlob && trEv.Text != "" {
+				sawOutput = true
 				if err := emit(streamID, tr.Encode(trEv)); err != nil {
 					*errOut = err.Error()
 					return
 				}
 			}
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
+			sawOutput = true
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
 					*errOut = err.Error()
@@ -441,6 +480,10 @@ func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errO
 		case translator.EventTurnEnded:
 			lastUsage = trEv.Usage
 		}
+	}
+	if isEmptyPluginUpstreamResponse(sawOutput, lastUsage) {
+		*errOut = emptyUpstreamResponseMessage
+		return
 	}
 	end := &translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}
 	if payload := tr.Encode(end); len(payload) > 0 {

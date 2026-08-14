@@ -273,7 +273,10 @@ func main() {
 		ideReloader = makeIDEAccountReloader(dbPath, startMTime)
 	}
 
-	c := executor.NewClient(acc, executor.WithHTTPVersion(httpVer))
+	c := executor.NewClient(acc,
+		executor.WithHTTPVersion(httpVer),
+		executor.WithProxyURL(strings.TrimSpace(*upstreamProxy)),
+	)
 	c.API3 = c.API2 // chat also lives on api2
 	if ideReloader != nil {
 		c.AccountReloader = ideReloader
@@ -372,9 +375,9 @@ func modelsHandler(c *executor.Client) http.HandlerFunc {
 			return
 		}
 		list := []map[string]any{}
-		for _, m := range resp.Models {
+		for _, id := range executor.AvailableModelIDs(resp) {
 			list = append(list, map[string]any{
-				"id":       m.GetName(),
+				"id":       id,
 				"object":   "model",
 				"owned_by": "cursor",
 			})
@@ -808,48 +811,12 @@ func canonicalizeAnthropicModel(model, effort string) string {
 	if m == "" {
 		return m
 	}
-	// Alias table: Anthropic bare name → Cursor tier-less base.
-	// Kept intentionally small; extend as new Claude generations ship.
-	aliases := map[string]string{
-		// Sonnet 4.5 family
-		"claude-sonnet-4-5":          "claude-4.5-sonnet",
-		"claude-sonnet-4-5-20250929": "claude-4.5-sonnet",
-		// Opus 4.5
-		"claude-opus-4-5":          "claude-4.5-opus",
-		"claude-opus-4-5-20250929": "claude-4.5-opus",
-		// Sonnet 5 (Cursor-style tier root)
-		"claude-sonnet-5": "claude-sonnet-5",
-		// Haiku 4.5
-		"claude-haiku-4-5":          "claude-4.5-haiku",
-		"claude-haiku-4-5-20251001": "claude-4.5-haiku",
-	}
-	base := m
-	wasAliased := false
-	if canonical, ok := aliases[m]; ok {
-		base = canonical
-		wasAliased = true
-	}
-	// Only tier-suffix models that came in as Anthropic bare names (i.e.
-	// the ones our alias table maps). Cursor-native names like `default`,
-	// `composer-2.5`, `cursor-grok-4.5-medium`, or a Cursor tier root
-	// like `claude-4.5-sonnet` that the caller typed directly are passed
-	// through unchanged — the caller either knows what they want or the
-	// name already carries its own tier. Appending `-medium` to
-	// `default` would produce `default-medium`, which the Cursor backend
-	// rejects as ERROR_BAD_MODEL_NAME.
-	if !wasAliased {
-		return base
-	}
-	if effort == "low" || effort == "medium" || effort == "high" {
-		if !strings.HasSuffix(base, "-low") &&
-			!strings.HasSuffix(base, "-medium") &&
-			!strings.HasSuffix(base, "-high") &&
-			!strings.HasSuffix(base, "-xhigh") &&
-			!strings.HasSuffix(base, "-fast") {
-			return base + "-" + effort
-		}
-	}
-	return base
+	// The live model catalog now advertises concrete Cursor variant IDs
+	// (legacy_slug / variant_string_representation). Do not rewrite them
+	// through a hard-coded alias table here; downstream should send an ID
+	// it received from /v1/models, and we pass it through unchanged.
+	_ = effort
+	return m
 }
 
 func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {

@@ -103,6 +103,7 @@ func main() {
 	format := flag.String("format", "openai", "output format: openai or claude")
 	timeout := flag.Duration("timeout", 90*time.Second, "overall stream timeout")
 	logPath := flag.String("log", "phase-8b-verify.log", "verification log path (overwritten)")
+	upstreamProxy := flag.String("upstream-proxy", "", "upstream proxy URL persisted into the CPA auth storage")
 	flag.Parse()
 
 	if !*skipBuild {
@@ -127,6 +128,9 @@ func main() {
 	}
 
 	acc := loadAccountFromIDE()
+	if *upstreamProxy != "" {
+		acc.ProxyURL = *upstreamProxy
+	}
 	storage, err := marshalStorage(acc)
 	if err != nil {
 		log.Fatalf("marshal storage: %v", err)

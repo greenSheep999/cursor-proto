@@ -111,26 +111,7 @@ var listModelsForAuth = func(acc *auth.Account) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]struct{})
-	names := make([]string, 0, len(resp.GetModelNames())+len(resp.GetModels()))
-	add := func(name string) {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return
-		}
-		if _, exists := seen[name]; exists {
-			return
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
-	}
-	for _, name := range resp.GetModelNames() {
-		add(name)
-	}
-	for _, model := range resp.GetModels() {
-		add(model.GetName())
-	}
-	return names, nil
+	return executor.AvailableModelIDs(resp), nil
 }
 
 func handleModelsForAuth(payload []byte) ([]byte, int) {

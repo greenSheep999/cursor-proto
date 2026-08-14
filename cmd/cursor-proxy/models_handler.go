@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/router-for-me/cursor-proto/executor"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
 
@@ -26,10 +27,11 @@ func listModels(c modelLister) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]map[string]any, 0, len(resp.Models))
-	for _, m := range resp.Models {
+	ids := executor.AvailableModelIDs(resp)
+	out := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
 		out = append(out, map[string]any{
-			"id":       m.GetName(),
+			"id":       id,
 			"object":   "model",
 			"owned_by": "cursor",
 		})
