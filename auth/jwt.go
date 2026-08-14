@@ -12,10 +12,22 @@ import (
 // and expiration timestamps. Cursor's access tokens are Auth0-issued JWTs
 // carrying at least "iat", "exp" and often "sub".
 type JWTClaims struct {
-	Sub string `json:"sub,omitempty"`
-	Iat int64  `json:"iat,omitempty"`
-	Nbf int64  `json:"nbf,omitempty"`
-	Exp int64  `json:"exp,omitempty"`
+	Sub             string `json:"sub,omitempty"`
+	Type            string `json:"type,omitempty"`
+	Iat             int64  `json:"iat,omitempty"`
+	Nbf             int64  `json:"nbf,omitempty"`
+	Exp             int64  `json:"exp,omitempty"`
+	WorkOSSessionID string `json:"workosSessionId,omitempty"`
+}
+
+// TokenType returns Cursor's token-purpose claim (for example "web" or
+// "session"). An empty string means the token is malformed or has no type.
+func TokenType(token string) string {
+	claims, err := DecodeJWTClaims(token)
+	if err != nil || claims == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(claims.Type))
 }
 
 // DecodeJWTClaims parses the payload segment of a JWT-shaped access token.

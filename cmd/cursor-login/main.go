@@ -6,6 +6,7 @@
 //
 //	cursor-login -email you@example.com -out ~/.cursor-proto
 //	cursor-login -no-browser          # print URL only, don't try to open
+//	cursor-login -credential-file account.txt -cookie-header-file cookies.txt
 package main
 
 import (
@@ -18,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
@@ -27,11 +29,28 @@ func main() {
 	email := flag.String("email", "", "email to associate with the account (used for filename)")
 	outDir := flag.String("out", defaultOutDir(), "directory to store account json")
 	noBrowser := flag.Bool("no-browser", false, "just print the URL; do not try to open a browser")
+	credentialFile := flag.String("credential-file", "", "file containing user_id::web-JWT or email----password----user_id::web-JWT")
+	cookieHeaderFile := flag.String("cookie-header-file", "", "file containing the full cursor.com Cookie header from a normal signed-in browser session")
 	timeout := flag.Duration("timeout", 5*time.Minute, "how long to wait for the browser flow")
 	interval := flag.Duration("interval", 3*time.Second, "poll interval")
 	flag.Parse()
 
-	if *email == "" {
+	var webCredential *auth.WebSessionCredential
+	if strings.TrimSpace(*credentialFile) != "" {
+		credentialEmail, rawCredential, err := readCredentialFile(*credentialFile)
+		if err != nil {
+			log.Fatalf("read credential file: %v", err)
+		}
+		if strings.TrimSpace(*email) == "" {
+			*email = credentialEmail
+		}
+		webCredential, err = auth.ParseWebSessionCredential(rawCredential)
+		if err != nil {
+			log.Fatalf("parse web session credential: %v", err)
+		}
+	}
+
+	if strings.TrimSpace(*email) == "" {
 		fmt.Fprintln(os.Stderr, "-email is required")
 		os.Exit(2)
 	}
@@ -41,19 +60,36 @@ func main() {
 		log.Fatalf("start login: %v", err)
 	}
 
-	fmt.Println("=====================================================")
-	fmt.Println("Open this URL in your browser to authorize:")
-	fmt.Println(sess.LoginURL)
-	fmt.Println("=====================================================")
-
-	if !*noBrowser {
-		if err := openURL(sess.LoginURL); err != nil {
-			fmt.Fprintf(os.Stderr, "(couldn't open browser automatically: %v)\n", err)
-		}
-	}
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+
+	if webCredential != nil {
+		if strings.TrimSpace(*cookieHeaderFile) == "" {
+			log.Fatal("-cookie-header-file is required with -credential-file; first sign in normally and export the full cursor.com Cookie header")
+		}
+		cookieHeader, err := readSecretFile(*cookieHeaderFile)
+		if err != nil {
+			log.Fatalf("read cookie header file: %v", err)
+		}
+		if override := strings.TrimSpace(os.Getenv("CURSOR_LOGIN_CALLBACK_URL_OVERRIDE")); override != "" {
+			sess.LoginCallbackURL = override
+		}
+		fmt.Println("Authorizing PKCE login with the existing browser cookie environment...")
+		if err := sess.AuthorizeWithWebSession(ctx, webCredential, cookieHeader); err != nil {
+			log.Fatalf("authorize web session: %v", err)
+		}
+	} else {
+		fmt.Println("=====================================================")
+		fmt.Println("Open this URL in your browser to authorize:")
+		fmt.Println(sess.LoginURL)
+		fmt.Println("=====================================================")
+
+		if !*noBrowser {
+			if err := openURL(sess.LoginURL); err != nil {
+				fmt.Fprintf(os.Stderr, "(couldn't open browser automatically: %v)\n", err)
+			}
+		}
+	}
 
 	fmt.Printf("Polling every %s, timeout %s...\n", *interval, *timeout)
 	result, err := sess.WaitForLogin(ctx, *interval, *timeout)
@@ -82,6 +118,40 @@ func main() {
 	fmt.Printf("  machine_id:       %s...\n", head(acc.MachineID, 16))
 	fmt.Printf("  mac_machine_id:   %s...\n", head(acc.MacMachineID, 16))
 	fmt.Printf("  checksum_sess:    %s...\n", head(acc.ChecksumSession, 24))
+}
+
+func readCredentialFile(path string) (email, credential string, err error) {
+	raw, err := readSecretFile(path)
+	if err != nil {
+		return "", "", err
+	}
+	line := ""
+	for _, candidate := range strings.Split(raw, "\n") {
+		if strings.TrimSpace(candidate) != "" {
+			line = strings.TrimSpace(candidate)
+			break
+		}
+	}
+	if line == "" {
+		return "", "", fmt.Errorf("credential file is empty")
+	}
+	parts := strings.SplitN(line, "----", 3)
+	if len(parts) == 3 {
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[2]), nil
+	}
+	return "", line, nil
+}
+
+func readSecretFile(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	value := strings.TrimSpace(string(raw))
+	if value == "" {
+		return "", fmt.Errorf("%s is empty", path)
+	}
+	return value, nil
 }
 
 func defaultOutDir() string {

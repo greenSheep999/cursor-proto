@@ -79,6 +79,16 @@ func TestNewAccountFromPollBuildsRealChecksum(t *testing.T) {
 	}
 }
 
+func TestNewAccountFromPollRejectsWebToken(t *testing.T) {
+	pr := &PollResult{
+		AccessToken: typedJWT(t, "web", "auth0|user_ABC"),
+		AuthID:      "auth0|user_ABC",
+	}
+	if _, err := NewAccountFromPoll(pr, "test@example.com"); err == nil {
+		t.Fatal("expected type=web poll token to be rejected")
+	}
+}
+
 func TestExtractUserID(t *testing.T) {
 	cases := map[string]string{
 		"auth0|user_01KX3G":  "user_01KX3G",

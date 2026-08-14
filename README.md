@@ -400,6 +400,28 @@ Documented in `docs/`:
 | `test-kv` | Dumps KV blob contents for reverse engineering |
 | `test-sniff` | Prints blob head bytes for the auto-stop heuristic |
 
+### Website-session account exports
+
+Account strings shaped like `email----password----user_id::JWT` may carry a
+website JWT (`type=web`) rather than an IDE JWT (`type=session`). Do not write
+the JWT directly into Cursor's `state.vscdb`: Dashboard endpoints can accept
+it while the IDE AI endpoints still return `ERROR_NOT_LOGGED_IN`.
+
+`cursor-login` supports the compatible flow when supplied with the complete
+cookie environment from a normally signed-in `cursor.com` browser session:
+
+```bash
+go run ./cmd/cursor-login \
+  -credential-file account.txt \
+  -cookie-header-file cursor-cookie-header.txt \
+  -out ~/.cursor-pool
+```
+
+The command replaces only `WorkosCursorSessionToken`, preserves companion
+WorkOS cookies, authorizes the official PKCE flow, and requires the poll
+result to contain a real IDE `type=session` token. See
+`docs/web-session-login.md` for the full workflow and security notes.
+
 ## Regenerating the proto
 
 If Cursor ships a new release:

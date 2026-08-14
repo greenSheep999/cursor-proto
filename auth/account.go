@@ -130,6 +130,9 @@ func NewAccountFromPoll(pr *PollResult, email string) (*Account, error) {
 	if pr == nil || pr.AccessToken == "" {
 		return nil, fmt.Errorf("poll result missing accessToken")
 	}
+	if tokenType := TokenType(pr.AccessToken); tokenType != "" && tokenType != "session" {
+		return nil, fmt.Errorf("poll access token has type %q, want %q", tokenType, "session")
+	}
 	userID := extractUserID(pr.AuthID)
 
 	machineID, _ := GetMachineID()

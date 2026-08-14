@@ -17,6 +17,8 @@
 //
 // Behaviour:
 //   - Rows without an access_token are logged and skipped.
+//   - Website session JWTs (type=web) are rejected before validation; they
+//     must be converted through cursor-login's cookie-backed PKCE flow.
 //   - Each row is validated against Cursor's DashboardService.GetMe. On
 //     failure with a refresh_token present, one retry is attempted; if
 //     that still fails the row is logged and skipped.

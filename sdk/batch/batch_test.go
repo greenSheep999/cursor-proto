@@ -93,6 +93,18 @@ func makeJWT(t *testing.T, iat, exp int64) string {
 		base64.RawURLEncoding.EncodeToString([]byte("sig"))
 }
 
+func makeTypedJWT(t *testing.T, tokenType string) string {
+	t.Helper()
+	body, err := json.Marshal(struct {
+		Type string `json:"type"`
+	}{Type: tokenType})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`)) + "." +
+		base64.RawURLEncoding.EncodeToString(body) + ".sig"
+}
+
 func TestAccountFromRow_DerivesFromJWT(t *testing.T) {
 	tok := makeJWT(t, 1_700_000_000, 1_700_003_600)
 	row := InputRow{
@@ -127,5 +139,12 @@ func TestAccountFromRow_MarksNonRefreshable(t *testing.T) {
 	}
 	if acc.Refreshable {
 		t.Fatal("expected Refreshable=false when refresh token is absent")
+	}
+}
+
+func TestAccountFromRowRejectsWebToken(t *testing.T) {
+	row := InputRow{Email: "web@example.com", AccessToken: makeTypedJWT(t, "web")}
+	if _, err := AccountFromRow(row, "", ""); err == nil {
+		t.Fatal("expected type=web token to be rejected")
 	}
 }

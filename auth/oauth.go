@@ -65,6 +65,9 @@ type LoginSession struct {
 	// default PollURL". Useful for testing the batch login CLI against a
 	// mock server.
 	PollURLBase string
+	// LoginCallbackURL overrides the cursor.com callback endpoint used by
+	// AuthorizeWithWebSession. Empty means the production endpoint.
+	LoginCallbackURL string
 }
 
 // StartLogin creates a fresh login session. Present LoginURL to the user in a

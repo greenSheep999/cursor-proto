@@ -56,3 +56,11 @@ func TestExpiresAtFromJWT(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestTokenType(t *testing.T) {
+	head := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"type":"web"}`))
+	if got := TokenType(head + "." + payload + ".sig"); got != "web" {
+		t.Fatalf("TokenType = %q, want web", got)
+	}
+}

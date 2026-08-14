@@ -149,6 +149,9 @@ func AccountFromRow(row InputRow, machineID, macMachineID string) (*auth.Account
 	if strings.TrimSpace(row.AccessToken) == "" {
 		return nil, fmt.Errorf("access_token is required for %s", row.Email)
 	}
+	if tokenType := auth.TokenType(row.AccessToken); tokenType == "web" {
+		return nil, fmt.Errorf("access_token for %s is a Cursor website token (type=web), not an IDE session token; use cursor-login -credential-file with a normal browser cookie environment", row.Email)
+	}
 	issued := auth.IssuedAtFromJWT(row.AccessToken)
 	if issued.IsZero() {
 		issued = nowUTC()
