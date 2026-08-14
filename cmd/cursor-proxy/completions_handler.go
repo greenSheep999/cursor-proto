@@ -117,6 +117,7 @@ func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan 
 	assistantSent := ""
 	sawFinish := false
 	sawAnyOutput := false
+	var lastUsage *translator.Usage
 	var trailerErr *executor.TrailerStatus
 
 	for ev := range events {
@@ -152,16 +153,22 @@ func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan 
 			}
 		case translator.EventTurnEnded:
 			sawFinish = true
+			lastUsage = trEv.Usage
 			decision.applyToUsage(trEv.Usage, false)
-			commit()
-			writeLegacyChunk(w, flusher, id, created, model, "", "stop")
+			if sawAnyOutput {
+				commit()
+				writeLegacyChunk(w, flusher, id, created, model, "", "stop")
+			}
 		}
 	}
 	if !headersWritten && trailerErr != nil {
 		writeUpstreamOpenAIError(w, trailerErr)
 		return
 	}
-	_ = sawAnyOutput
+	if !headersWritten && isEmptyUpstreamResponse(sawAnyOutput, lastUsage) {
+		writeEmptyUpstreamOpenAIError(w)
+		return
+	}
 	if !sawFinish {
 		commit()
 		writeLegacyChunk(w, flusher, id, created, model, "", "stop")
@@ -230,6 +237,10 @@ func nonStreamLegacyCompletions(w http.ResponseWriter, model string, events <-ch
 	}
 	if trailerErr != nil && acc.Text == "" {
 		writeUpstreamOpenAIError(w, trailerErr)
+		return
+	}
+	if isEmptyUpstreamResponse(acc.Text != "", acc.Usage) {
+		writeEmptyUpstreamOpenAIError(w)
 		return
 	}
 	var realCacheRead int64

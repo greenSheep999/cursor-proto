@@ -289,6 +289,9 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 	tr := translator.NewGeminiStreamWriter(model)
 	assistantSent := ""
 	sawTurnEnd := false
+	wroteTurnEnd := false
+	sawOutput := false
+	var lastUsage *translator.Usage
 	var trailerErr *executor.TrailerStatus
 	for ev := range events {
 		if ev.Trailer {
@@ -304,6 +307,7 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
+				sawOutput = true
 				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
@@ -314,22 +318,36 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			if trEv.Text != "" {
+				sawOutput = true
+			}
 			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta:
+			sawOutput = true
 			// Gemini writer buffers tool calls until turn_ended.
 			tr.Encode(trEv)
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
+			lastUsage = trEv.Usage
 			decision.applyToUsage(trEv.Usage, false)
-			writeSSE(tr.Encode(trEv))
+			if sawOutput {
+				writeSSE(tr.Encode(trEv))
+				wroteTurnEnd = true
+			}
 		}
 	}
 	if !headersWritten && trailerErr != nil {
 		writeUpstreamGeminiError(w, trailerErr)
 		return
 	}
+	if !headersWritten && isEmptyUpstreamResponse(sawOutput, lastUsage) {
+		writeEmptyUpstreamGeminiError(w)
+		return
+	}
 	if !sawTurnEnd {
 		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}))
+	} else if !wroteTurnEnd {
+		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}))
 	}
 }
 
@@ -365,6 +383,10 @@ func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor
 	}
 	if trailerErr != nil && !acc.HasOutput() {
 		writeUpstreamGeminiError(w, trailerErr)
+		return
+	}
+	if isEmptyUpstreamResponse(acc.HasOutput(), acc.Usage) {
+		writeEmptyUpstreamGeminiError(w)
 		return
 	}
 	var realCacheRead int64

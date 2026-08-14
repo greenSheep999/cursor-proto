@@ -550,6 +550,9 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 	tr.IncludeUsage = includeUsage
 	assistantSent := ""
 	sawTurnEnd := false
+	wroteTurnEnd := false
+	sawOutput := false
+	var lastUsage *translator.Usage
 	var trailerErr *executor.TrailerStatus
 	for ev := range events {
 		if ev.Trailer {
@@ -565,6 +568,7 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
+				sawOutput = true
 				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
@@ -575,13 +579,21 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			if trEv.Text != "" {
+				sawOutput = true
+			}
 			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta:
+			sawOutput = true
 			writeSSE(tr.Encode(trEv))
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
+			lastUsage = trEv.Usage
 			decision.applyToUsage(trEv.Usage, false)
-			writeSSE(tr.Encode(trEv))
+			if sawOutput {
+				writeSSE(tr.Encode(trEv))
+				wroteTurnEnd = true
+			}
 		}
 	}
 	// If we've written nothing yet and the trailer reported an error, respond
@@ -592,11 +604,17 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 		writeUpstreamOpenAIError(w, trailerErr)
 		return
 	}
+	if !headersWritten && isEmptyUpstreamResponse(sawOutput, lastUsage) {
+		writeEmptyUpstreamOpenAIError(w)
+		return
+	}
 	// If a tool call arrived but the server never sent turn_ended (typical
 	// when Cursor is waiting on a BidiAppend tool result), synthesize a
 	// finish_reason=tool_calls terminator so OpenAI clients see a valid stop.
 	if !sawTurnEnd && tr.SawToolCall {
 		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}))
+	} else if sawTurnEnd && !wroteTurnEnd {
+		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}))
 	}
 	writeSSE(tr.FinalUsageFrame())
 	commit()
@@ -641,6 +659,10 @@ func nonStreamOpenAI(w http.ResponseWriter, model string, events <-chan executor
 	// errors instead of an empty 200 with `content:""`.
 	if trailerErr != nil && acc.Text == "" && len(acc.ToolCalls) == 0 {
 		writeUpstreamOpenAIError(w, trailerErr)
+		return
+	}
+	if isEmptyUpstreamResponse(acc.Text != "" || len(acc.ToolCalls) > 0, acc.Usage) {
+		writeEmptyUpstreamOpenAIError(w)
 		return
 	}
 	// Non-streaming: we can see Cursor's real cache_read before writing, so
@@ -855,6 +877,7 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 
 	tr := translator.NewAnthropicStreamWriter(model)
 	assistantSent := ""
+	sawOutput := false
 	var lastUsage *translator.Usage
 	var trailerErr *executor.TrailerStatus
 	for ev := range events {
@@ -871,6 +894,7 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
+				sawOutput = true
 				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
@@ -881,8 +905,12 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			if trEv.Text != "" {
+				sawOutput = true
+			}
 			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
+			sawOutput = true
 			writeSSE(tr.Encode(trEv))
 		case translator.EventTurnEnded:
 			lastUsage = trEv.Usage
@@ -890,6 +918,10 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 	}
 	if !headersWritten && trailerErr != nil {
 		writeUpstreamAnthropicError(w, trailerErr)
+		return
+	}
+	if !headersWritten && isEmptyUpstreamResponse(sawOutput, lastUsage) {
+		writeEmptyUpstreamAnthropicError(w)
 		return
 	}
 	// Anthropic streaming: on a miss, advertise cache_creation_input_tokens
@@ -953,6 +985,10 @@ func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan execu
 	}
 	if trailerErr != nil && assistantText == "" && len(toolUses) == 0 {
 		writeUpstreamAnthropicError(w, trailerErr)
+		return
+	}
+	if isEmptyUpstreamResponse(assistantText != "" || len(toolUses) > 0, usage) {
+		writeEmptyUpstreamAnthropicError(w)
 		return
 	}
 	content := []map[string]any{}

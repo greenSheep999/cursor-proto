@@ -304,6 +304,9 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 
 	assistantSent := ""
 	sawTurnEnd := false
+	wroteTurnEnd := false
+	sawOutput := false
+	var lastUsage *translator.Usage
 	var trailerErr *executor.TrailerStatus
 	for ev := range events {
 		if ev.Trailer {
@@ -315,14 +318,13 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 		if ev.Server == nil {
 			continue
 		}
-		if !headersWritten && len(initFrames) > 0 {
-			writeSSE(initFrames)
-			initFrames = nil
-		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
 			delta := diffSuffix(assistantSent, blob.AssistantText)
 			if delta != "" {
 				assistantSent = blob.AssistantText
+				sawOutput = true
+				writeSSE(initFrames)
+				initFrames = nil
 				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
 			continue
@@ -333,17 +335,33 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			if trEv.Text != "" {
+				sawOutput = true
+				writeSSE(initFrames)
+				initFrames = nil
+			}
 			writeSSE(tr.Encode(trEv))
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
+			sawOutput = true
+			writeSSE(initFrames)
+			initFrames = nil
 			writeSSE(tr.Encode(trEv))
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
+			lastUsage = trEv.Usage
 			decision.applyToUsage(trEv.Usage, false)
-			writeSSE(tr.Encode(trEv))
+			if sawOutput {
+				writeSSE(tr.Encode(trEv))
+				wroteTurnEnd = true
+			}
 		}
 	}
 	if !headersWritten && trailerErr != nil {
 		writeUpstreamOpenAIError(w, trailerErr)
+		return
+	}
+	if !headersWritten && isEmptyUpstreamResponse(sawOutput, lastUsage) {
+		writeEmptyUpstreamOpenAIError(w)
 		return
 	}
 	// Late fallback: never emitted init frames because the whole stream was
@@ -353,6 +371,8 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 	}
 	if !sawTurnEnd {
 		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}))
+	} else if !wroteTurnEnd {
+		writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}))
 	}
 	writeSSE(tr.FinalCompletedFrame())
 }
@@ -389,6 +409,10 @@ func nonStreamResponses(w http.ResponseWriter, model string, events <-chan execu
 	}
 	if trailerErr != nil && !acc.HasOutput() {
 		writeUpstreamOpenAIError(w, trailerErr)
+		return
+	}
+	if isEmptyUpstreamResponse(acc.HasOutput(), acc.Usage) {
+		writeEmptyUpstreamOpenAIError(w)
 		return
 	}
 	var realCacheRead int64

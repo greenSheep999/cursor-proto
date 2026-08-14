@@ -6,7 +6,21 @@ import (
 	"net/http"
 
 	"github.com/router-for-me/cursor-proto/executor"
+	"github.com/router-for-me/cursor-proto/translator"
 )
+
+const emptyUpstreamMessage = "empty response from upstream (no content, tool calls, or token usage)"
+
+func isEmptyUpstreamResponse(hasOutput bool, usage *translator.Usage) bool {
+	if hasOutput {
+		return false
+	}
+	return usage == nil || usage.InputTokens == 0 &&
+		usage.OutputTokens == 0 &&
+		usage.CacheReadTokens == 0 &&
+		usage.CacheWriteTokens == 0 &&
+		usage.ReasoningTokens == 0
+}
 
 // upstreamHTTPStatus maps a Cursor gRPC-status trailer into an HTTP status
 // code appropriate for the OpenAI/Anthropic/Gemini surface. Cursor uses the
@@ -69,6 +83,19 @@ func writeUpstreamOpenAIError(w http.ResponseWriter, status *executor.TrailerSta
 	}
 }
 
+func writeEmptyUpstreamOpenAIError(w http.ResponseWriter) {
+	log.Printf("[proxy] %s", emptyUpstreamMessage)
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(http.StatusBadGateway)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{
+			"message": emptyUpstreamMessage,
+			"type":    "upstream_error",
+			"code":    "EMPTY_UPSTREAM_RESPONSE",
+		},
+	})
+}
+
 // writeUpstreamAnthropicError renders an Anthropic-shaped error envelope for
 // /v1/messages.
 func writeUpstreamAnthropicError(w http.ResponseWriter, status *executor.TrailerStatus) {
@@ -88,6 +115,19 @@ func writeUpstreamAnthropicError(w http.ResponseWriter, status *executor.Trailer
 	}
 }
 
+func writeEmptyUpstreamAnthropicError(w http.ResponseWriter) {
+	log.Printf("[proxy] %s", emptyUpstreamMessage)
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(http.StatusBadGateway)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"type": "error",
+		"error": map[string]any{
+			"type":    "upstream_error",
+			"message": emptyUpstreamMessage,
+		},
+	})
+}
+
 // writeUpstreamGeminiError renders a Gemini-style error envelope for
 // /v1beta/models/{model}:generateContent.
 func writeUpstreamGeminiError(w http.ResponseWriter, status *executor.TrailerStatus) {
@@ -105,6 +145,19 @@ func writeUpstreamGeminiError(w http.ResponseWriter, status *executor.TrailerSta
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		log.Printf("[proxy] failed to encode upstream error: %v", err)
 	}
+}
+
+func writeEmptyUpstreamGeminiError(w http.ResponseWriter) {
+	log.Printf("[proxy] %s", emptyUpstreamMessage)
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(http.StatusBadGateway)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{
+			"code":    http.StatusBadGateway,
+			"message": emptyUpstreamMessage,
+			"status":  "EMPTY_UPSTREAM_RESPONSE",
+		},
+	})
 }
 
 func errMessage(status *executor.TrailerStatus) string {
