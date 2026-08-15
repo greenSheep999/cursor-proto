@@ -3,6 +3,7 @@ package translator
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -47,7 +48,7 @@ type AnthropicStreamWriter struct {
 func NewAnthropicStreamWriter(model string) *AnthropicStreamWriter {
 	return &AnthropicStreamWriter{
 		Model: model,
-		ID:    "msg_" + uuid.NewString(),
+		ID:    "msg_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
 	}
 }
 

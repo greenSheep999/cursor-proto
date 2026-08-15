@@ -61,6 +61,17 @@ func TestAnthropicStreamShape(t *testing.T) {
 	}
 }
 
+func TestAnthropicStreamMessageIDUsesClaudeShape(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-opus-5")
+
+	if !strings.HasPrefix(w.ID, "msg_") {
+		t.Fatalf("message id %q must start with msg_", w.ID)
+	}
+	if strings.Contains(w.ID, "-") {
+		t.Fatalf("message id %q must not contain hyphens", w.ID)
+	}
+}
+
 func TestNonStreamingAccumulator(t *testing.T) {
 	a := NonStreamingAccumulator{Model: "composer-2.5"}
 	a.Consume(&Event{Kind: EventTextDelta, Text: "Hello, "})
