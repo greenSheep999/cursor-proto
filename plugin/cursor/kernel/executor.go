@@ -22,6 +22,7 @@ package kernel
 // Messages for `format=claude`.
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -186,6 +187,9 @@ type chatShape struct {
 	Tools        []executor.ToolDefinition
 	Stream       bool
 	IncludeUsage bool // OpenAI stream_options.include_usage
+	Effort       string
+	Thinking     bool
+	JSONSchema   json.RawMessage
 }
 
 // parseOpenAIPayload converts an OpenAI Chat Completion request body
@@ -319,8 +323,15 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
 		} `json:"messages"`
-		Stream bool `json:"stream"`
-		Tools  []struct {
+		Stream   bool `json:"stream"`
+		Thinking *struct {
+			Type string `json:"type"`
+		} `json:"thinking"`
+		OutputConfig *struct {
+			Effort string          `json:"effort"`
+			Format json.RawMessage `json:"format"`
+		} `json:"output_config"`
+		Tools []struct {
 			Name        string         `json:"name"`
 			Description string         `json:"description"`
 			InputSchema map[string]any `json:"input_schema"`
@@ -345,6 +356,14 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 		SystemPrompt: systemPrompt,
 		UserMessage:  flattenClaudeContent(req.Messages[lastUserIdx].Content),
 		Stream:       req.Stream,
+	}
+	if req.Thinking != nil {
+		shape.Thinking = strings.EqualFold(strings.TrimSpace(req.Thinking.Type), "adaptive") ||
+			strings.EqualFold(strings.TrimSpace(req.Thinking.Type), "enabled")
+	}
+	if req.OutputConfig != nil {
+		shape.Effort = strings.ToLower(strings.TrimSpace(req.OutputConfig.Effort))
+		shape.JSONSchema = extractJSONSchema(req.OutputConfig.Format)
 	}
 	for _, m := range req.Messages[:lastUserIdx] {
 		if m.Role != "user" && m.Role != "assistant" {
@@ -441,14 +460,22 @@ func flattenClaudeContent(raw json.RawMessage) string {
 // (we present as an API caller, not an IDE) and AutoStopOnTurnEnd on
 // (close the SSE stream as soon as a turn ends so we do not park).
 func buildChatRequest(shape chatShape, headers map[string][]string) *executor.ChatRequest {
+	systemPrompt := shape.SystemPrompt
+	if len(shape.JSONSchema) > 0 {
+		if systemPrompt != "" {
+			systemPrompt += "\n\n"
+		}
+		systemPrompt += "Return only valid JSON matching this JSON Schema. Do not use Markdown fences or add explanatory text:\n" + string(shape.JSONSchema)
+	}
 	req := &executor.ChatRequest{
-		Model:              shape.Model,
+		Model:              resolveCursorModelVariant(shape.Model, shape.Effort, shape.Thinking),
 		UserMessage:        shape.UserMessage,
-		SystemPrompt:       shape.SystemPrompt,
+		SystemPrompt:       systemPrompt,
 		History:            shape.History,
+		Mode:               executor.APIConversationMode(len(shape.Tools) > 0),
 		PureMode:           true,
 		AutoStopOnTurnEnd:  true,
-		AutoStopOnToolCall: len(shape.Tools) > 0,
+		AutoStopOnToolCall: true,
 		Tools:              shape.Tools,
 	}
 	if headers != nil {
@@ -457,6 +484,74 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		}
 	}
 	return req
+}
+
+func extractJSONSchema(format json.RawMessage) json.RawMessage {
+	if len(format) == 0 {
+		return nil
+	}
+	var parsed struct {
+		Type   string          `json:"type"`
+		Schema json.RawMessage `json:"schema"`
+	}
+	if err := json.Unmarshal(format, &parsed); err != nil || !strings.EqualFold(parsed.Type, "json_schema") || len(parsed.Schema) == 0 {
+		return nil
+	}
+	buf := bytes.Buffer{}
+	if err := json.Compact(&buf, parsed.Schema); err == nil {
+		return json.RawMessage(append([]byte(nil), buf.Bytes()...))
+	}
+	return append(json.RawMessage(nil), parsed.Schema...)
+}
+
+func resolveCursorModelVariant(model, effort string, thinking bool) string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return model
+	}
+	fast := strings.HasSuffix(model, "-fast")
+	core := strings.TrimSuffix(model, "-fast")
+	tiers := []string{"low", "medium", "high", "xhigh", "max"}
+	base, currentTier := core, ""
+	for _, tier := range tiers {
+		if strings.HasSuffix(core, "-thinking-"+tier) {
+			base = strings.TrimSuffix(core, "-thinking-"+tier)
+			currentTier = tier
+			break
+		}
+		if strings.HasSuffix(core, "-"+tier) {
+			base = strings.TrimSuffix(core, "-"+tier)
+			currentTier = tier
+			break
+		}
+	}
+	requestedTier := normalizeCursorEffort(effort)
+	if requestedTier == "" {
+		requestedTier = currentTier
+	}
+	if requestedTier == "" {
+		requestedTier = "medium"
+	}
+	if !thinking && normalizeCursorEffort(effort) == "" {
+		return model
+	}
+	resolved := base + "-" + requestedTier
+	if thinking {
+		resolved = base + "-thinking-" + requestedTier
+	}
+	if fast {
+		resolved += "-fast"
+	}
+	return resolved
+}
+
+func normalizeCursorEffort(effort string) string {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "low", "medium", "high", "xhigh", "max":
+		return strings.ToLower(strings.TrimSpace(effort))
+	default:
+		return ""
+	}
 }
 
 // firstHeader mirrors http.Header.Get without depending on net/http

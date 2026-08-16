@@ -43,6 +43,7 @@ type AnthropicStreamWriter struct {
 	// toolBlocks maps tool_call_id -> block index for its content_block.
 	toolBlocks  map[string]int
 	sawToolCall bool
+	text        strings.Builder
 }
 
 func NewAnthropicStreamWriter(model string) *AnthropicStreamWriter {
@@ -62,6 +63,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 	var buf []byte
 	switch ev.Kind {
 	case EventTextDelta:
+		w.text.WriteString(ev.Text)
 		if !w.sentStart {
 			w.sentStart = true
 			buf = append(buf, w.frame("message_start", map[string]any{
@@ -284,10 +286,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		if ev.Usage != nil {
 			usage = BuildAnthropicUsage(ev.Usage)
 		}
-		stopReason := "end_turn"
-		if w.sawToolCall {
-			stopReason = "tool_use"
-		}
+		stopReason := AnthropicStopReason(w.text.String(), w.sawToolCall)
 		// Callers can force a specific stop_reason (e.g. "error" when the
 		// upstream trailer surfaced a grpc-status != 0 after we'd already
 		// written the SSE headers). Otherwise fall through to the

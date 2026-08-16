@@ -61,6 +61,21 @@ func TestAnthropicStreamShape(t *testing.T) {
 	}
 }
 
+func TestAnthropicStreamInfersRefusalStopReason(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-fable-5")
+	w.Encode(&Event{Kind: EventTextDelta, Text: "我不能满足这个请求。"})
+	end := string(w.Encode(&Event{Kind: EventTurnEnded}))
+	if !strings.Contains(end, `"stop_reason":"refusal"`) {
+		t.Fatalf("refusal response kept generic stop reason: %s", end)
+	}
+}
+
+func TestIsRefusalTextDoesNotMatchOrdinaryNegation(t *testing.T) {
+	if IsRefusalText("这并不意味着我不能帮助你完成正常任务。") {
+		t.Fatal("ordinary explanatory text must not be classified as refusal")
+	}
+}
+
 func TestAnthropicStreamMessageIDUsesClaudeShape(t *testing.T) {
 	w := NewAnthropicStreamWriter("claude-opus-5")
 

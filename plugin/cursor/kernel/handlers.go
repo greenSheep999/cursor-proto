@@ -18,7 +18,7 @@ func registerResult() string {
 		"schema_version": 1,
 		"metadata": map[string]any{
 			"Name":             "cursor",
-			"Version":          "0.5.2",
+			"Version":          "0.5.3",
 			"Author":           "router-for-me",
 			"GitHubRepository": "https://github.com/router-for-me/cursor-proto",
 			"Logo":             CursorLogoDataURI(),

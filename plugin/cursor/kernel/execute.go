@@ -225,10 +225,7 @@ func buildClaudeNonStreaming(model string, events <-chan executor.ChatEvent) ([]
 	for _, tu := range toolUses {
 		content = append(content, tu)
 	}
-	stopReason := "end_turn"
-	if len(toolUses) > 0 {
-		stopReason = "tool_use"
-	}
+	stopReason := translator.AnthropicStopReason(assistantText, len(toolUses) > 0)
 	resp := map[string]any{
 		"id":            "msg_" + auth.GenerateSessionID(),
 		"type":          "message",
@@ -473,7 +470,15 @@ func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errO
 					return
 				}
 			}
-		case translator.EventThinkingDelta, translator.EventHeartbeat:
+		case translator.EventThinkingDelta:
+			sawOutput = true
+			if payload := tr.Encode(trEv); len(payload) > 0 {
+				if err := emit(streamID, payload); err != nil {
+					*errOut = err.Error()
+					return
+				}
+			}
+		case translator.EventHeartbeat:
 			if err := emitStreamKeepalive(streamID, "claude"); err != nil {
 				*errOut = err.Error()
 				return

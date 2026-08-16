@@ -119,6 +119,19 @@ func buildHeartbeatEvent() executor.ChatEvent {
 	return executor.ChatEvent{Server: msg}
 }
 
+func buildThinkingDeltaEvent(text string) executor.ChatEvent {
+	msg := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ThinkingDelta{
+					ThinkingDelta: &cursorpb.AgentV1_ThinkingDeltaUpdate{Text: text},
+				},
+			},
+		},
+	}
+	return executor.ChatEvent{Server: msg}
+}
+
 // buildFakeExecutorRequest hand-marshals the executorRequest JSON with
 // the given payload and format. StorageJSON is a fake but well-formed
 // AuthFile so the executor code that touches it does not panic; tests
@@ -386,6 +399,7 @@ func TestExecuteStream_OpenAI_DeduplicatesFinalAssistantBlob(t *testing.T) {
 func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testing.T) {
 	runner := &fakeRunner{events: []executor.ChatEvent{
 		buildHeartbeatEvent(),
+		buildThinkingDeltaEvent("reasoning"),
 		buildTextDeltaEvent("Hi"),
 		buildAssistantBlobEvent("Hi"),
 		buildTurnEndedEvent(4, 1),
@@ -430,6 +444,9 @@ func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testi
 	mu.Unlock()
 	if !strings.Contains(joined, `event: ping`) || !strings.Contains(joined, `{"type":"ping"}`) {
 		t.Fatalf("heartbeat was not forwarded as an Anthropic ping: %s", joined)
+	}
+	if !strings.Contains(joined, `"type":"thinking_delta"`) || !strings.Contains(joined, `"thinking":"reasoning"`) {
+		t.Fatalf("thinking delta was not forwarded as Anthropic thinking: %s", joined)
 	}
 	if got := strings.Count(joined, `"text":"Hi"`); got != 1 {
 		t.Fatalf("assistant text emitted %d times, want once: %s", got, joined)
@@ -545,5 +562,27 @@ func TestParseClaudePayload_ArrayContent(t *testing.T) {
 	}
 	if shape.UserMessage != "hi" {
 		t.Errorf("user = %q", shape.UserMessage)
+	}
+}
+
+func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing.T) {
+	shape, err := parseClaudePayload([]byte(`{
+		"model":"claude-opus-4-8-medium",
+		"thinking":{"type":"adaptive","display":"summarized"},
+		"output_config":{"effort":"xhigh","format":{"type":"json_schema","schema":{"type":"object","properties":{"result":{"type":"integer"}},"required":["result"]}}},
+		"messages":[{"role":"user","content":"calculate"}]
+	}`))
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	req := buildChatRequest(shape, nil)
+	if req.Model != "claude-opus-4-8-thinking-xhigh" {
+		t.Fatalf("resolved model = %q", req.Model)
+	}
+	if req.Mode != executor.APIConversationMode(false) {
+		t.Fatalf("mode = %d, want API ask mode", req.Mode)
+	}
+	if !strings.Contains(req.SystemPrompt, `"required":["result"]`) {
+		t.Fatalf("structured output schema missing from prompt: %q", req.SystemPrompt)
 	}
 }
