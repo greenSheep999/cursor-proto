@@ -91,6 +91,9 @@ func TestNew_Http1_1_DisablesH2(t *testing.T) {
 	if len(tr.TLSNextProto) != 0 {
 		t.Errorf("Http1_1 Transport TLSNextProto not empty: %d entries", len(tr.TLSNextProto))
 	}
+	if tr.TLSClientConfig == nil || len(tr.TLSClientConfig.NextProtos) != 1 || tr.TLSClientConfig.NextProtos[0] != "http/1.1" {
+		t.Fatalf("Http1_1 ALPN = %#v, want only http/1.1", tr.TLSClientConfig)
+	}
 }
 
 func TestNew_Http1_0_DisablesKeepalive(t *testing.T) {

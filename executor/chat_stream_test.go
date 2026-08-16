@@ -2,13 +2,17 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/router-for-me/cursor-proto/auth"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
 
@@ -117,6 +121,43 @@ func TestBuildInteractionResponseApproved_WebSearch(t *testing.T) {
 	want := []byte{0x32, 0x06, 0x08, 0x2a, 0x12, 0x02, 0x0a, 0x00}
 	if !bytes.Equal(got, want) {
 		t.Fatalf("approved response = %x, want %x", got, want)
+	}
+}
+
+func TestBidiAppendUsesConnectEnvelope(t *testing.T) {
+	t.Helper()
+	type capturedRequest struct {
+		contentType string
+		body        []byte
+	}
+	captured := make(chan capturedRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		captured <- capturedRequest{contentType: r.Header.Get("content-type"), body: body}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(&auth.Account{AccessToken: "test-token"})
+	client.API2 = server.URL
+	if err := client.bidiAppend(context.Background(), "request-id", 1, []byte{0x32, 0x00}); err != nil {
+		t.Fatalf("bidiAppend: %v", err)
+	}
+
+	request := <-captured
+	if request.contentType != "application/grpc-web+proto" {
+		t.Fatalf("content-type = %q, want application/grpc-web+proto", request.contentType)
+	}
+	payload, trailer, rest, ok := splitConnectFrame(request.body)
+	if !ok || trailer || len(rest) != 0 {
+		t.Fatalf("BidiAppend body is not one Connect data frame: ok=%v trailer=%v rest=%d body=%x", ok, trailer, len(rest), request.body)
+	}
+	var appendRequest cursorpb.AiserverV1_BidiAppendRequest
+	if err := proto.Unmarshal(payload, &appendRequest); err != nil {
+		t.Fatalf("unmarshal framed BidiAppendRequest: %v", err)
+	}
+	if appendRequest.GetRequestId().GetRequestId() != "request-id" || appendRequest.GetAppendSeqno() != 1 {
+		t.Fatalf("unexpected BidiAppend request: %v", &appendRequest)
 	}
 }
 

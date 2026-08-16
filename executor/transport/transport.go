@@ -146,6 +146,12 @@ func NewWithProxy(v Version, proxyURL string) *http.Transport {
 		//     that the h2_bundle.go init() sets up.
 		base.ForceAttemptHTTP2 = false
 		base.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+		if base.TLSClientConfig == nil {
+			base.TLSClientConfig = &tls.Config{}
+		} else {
+			base.TLSClientConfig = base.TLSClientConfig.Clone()
+		}
+		base.TLSClientConfig.NextProtos = []string{"http/1.1"}
 		if v == Http1_0 {
 			// HTTP/1.0 doesn't keep-alive by default. Turning
 			// keepalive off in the Transport too is belt-and-braces —

@@ -33,6 +33,7 @@ import (
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
+	"github.com/router-for-me/cursor-proto/executor/transport"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 	"github.com/router-for-me/cursor-proto/translator"
@@ -110,7 +111,7 @@ func (c *clientCache) buildClient(storage []byte) (*executor.Client, error) {
 		}
 	}
 	acc.FillSessionDefaults(time.Now())
-	c2 := executor.NewClient(acc)
+	c2 := executor.NewClient(acc, executor.WithHTTPVersion(transport.Http1_1))
 	c2.API3 = c2.API2
 	return c2, nil
 }
@@ -533,8 +534,10 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		}
 		systemPrompt += "Return only valid JSON matching this JSON Schema. Do not use Markdown fences or add explanatory text:\n" + string(shape.JSONSchema)
 	}
+	model := resolveCursorModelVariant(shape.Model, shape.Effort, shape.Thinking)
+	model = resolveCursorServerToolVariant(model, shape.WebSearch || shape.WebFetch)
 	req := &executor.ChatRequest{
-		Model:              resolveCursorModelVariant(shape.Model, shape.Effort, shape.Thinking),
+		Model:              model,
 		UserMessage:        shape.UserMessage,
 		SystemPrompt:       systemPrompt,
 		History:            shape.History,
@@ -553,6 +556,48 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		}
 	}
 	return req
+}
+
+type cursorServerToolProfile struct {
+	Tier string
+}
+
+var cursorServerToolProfiles = map[string]cursorServerToolProfile{
+	"claude-opus-4-8": {Tier: "low"},
+}
+
+func resolveCursorServerToolVariant(model string, serverTools bool) string {
+	if !serverTools {
+		return model
+	}
+	fast := strings.HasSuffix(model, "-fast")
+	core := strings.TrimSuffix(model, "-fast")
+	tiers := []string{"low", "medium", "high", "xhigh", "max"}
+	base := core
+	thinking := false
+	for _, tier := range tiers {
+		if strings.HasSuffix(core, "-thinking-"+tier) {
+			base = strings.TrimSuffix(core, "-thinking-"+tier)
+			thinking = true
+			break
+		}
+		if strings.HasSuffix(core, "-"+tier) {
+			base = strings.TrimSuffix(core, "-"+tier)
+			break
+		}
+	}
+	profile, ok := cursorServerToolProfiles[base]
+	if !ok || profile.Tier == "" {
+		return model
+	}
+	resolved := base + "-" + profile.Tier
+	if thinking {
+		resolved = base + "-thinking-" + profile.Tier
+	}
+	if fast {
+		resolved += "-fast"
+	}
+	return resolved
 }
 
 func extractClaudeAttachments(raw json.RawMessage) []executor.Attachment {

@@ -9,10 +9,11 @@ import (
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
+	"github.com/router-for-me/cursor-proto/executor/transport"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-const pluginVersion = "0.6.3"
+const pluginVersion = "0.6.4"
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {
@@ -104,7 +105,7 @@ type authModelRequest struct {
 }
 
 var listModelsForAuth = func(acc *auth.Account) ([]string, error) {
-	resp, err := executor.NewClient(acc).ListModels()
+	resp, err := executor.NewClient(acc, executor.WithHTTPVersion(transport.Http1_1)).ListModels()
 	if err != nil {
 		return nil, err
 	}

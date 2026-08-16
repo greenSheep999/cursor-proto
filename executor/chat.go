@@ -463,13 +463,12 @@ func bytesContains(haystack, needle []byte) bool {
 // bidiAppend sends one AgentClientMessage (or any data blob) to BidiAppend.
 // The request-id + seq no. glues it to the concurrent RunSSE.
 //
-// BidiAppend is a Connect *unary* RPC (server_streaming is only the RunSSE half):
-// the request body is the raw protobuf-serialised message (no 5-byte envelope
-// framing) and the content-type is `application/proto`. This matches
-// mitmproxy captures from 2026-07-09 which showed no envelope prefix and the
-// content-type `application/proto` for CppAppend / FileSync / etc.
+// BidiAppend uses Cursor's grpc-web compatible Connect framing. In particular,
+// follow-up messages such as InteractionResponse approvals must carry the
+// 5-byte data envelope; the service may acknowledge a bare unary protobuf with
+// HTTP 200 while silently ignoring it, leaving WebSearch streams on heartbeats.
 func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, payload []byte) error {
-	body, err := proto.Marshal(&cursorpb.AiserverV1_BidiAppendRequest{
+	appendRequest, err := proto.Marshal(&cursorpb.AiserverV1_BidiAppendRequest{
 		Data:        hexEncode(payload), // legacy field, CursorGateway still populates this
 		DataBinary:  payload,            // 3.10 preferred wire form
 		RequestId:   &cursorpb.AiserverV1_BidiRequestId{RequestId: requestID},
@@ -479,12 +478,13 @@ func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, pa
 		return fmt.Errorf("marshal BidiAppendRequest: %w", err)
 	}
 
+	body := addConnectEnvelope(appendRequest, false)
 	url := fmt.Sprintf("%s/aiserver.v1.BidiService/BidiAppend", c.API2)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("content-type", "application/proto")
+	req.Header.Set("content-type", "application/grpc-web+proto")
 	ApplyCommonHeaders(req, c.CurrentAccount(), auth.GenerateRequestID())
 
 	cli := c.NewUnaryClient(30 * time.Second)

@@ -756,6 +756,26 @@ func TestParseClaudePayload_UsesNativeWebSearch(t *testing.T) {
 	}
 }
 
+func TestBuildChatRequest_UsesStableServerToolVariant(t *testing.T) {
+	req := buildChatRequest(chatShape{
+		Model:     "claude-opus-4-8-medium",
+		WebSearch: true,
+	}, nil)
+	if req.Model != "claude-opus-4-8-low" {
+		t.Fatalf("server-tool model = %q, want claude-opus-4-8-low", req.Model)
+	}
+
+	regular := buildChatRequest(chatShape{Model: "claude-opus-4-8-medium"}, nil)
+	if regular.Model != "claude-opus-4-8-medium" {
+		t.Fatalf("regular model = %q, want unchanged", regular.Model)
+	}
+
+	other := buildChatRequest(chatShape{Model: "claude-fable-5-medium", WebSearch: true}, nil)
+	if other.Model != "claude-fable-5-medium" {
+		t.Fatalf("unprofiled server-tool model = %q, want unchanged", other.Model)
+	}
+}
+
 func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing.T) {
 	shape, err := parseClaudePayload([]byte(`{
 		"model":"claude-opus-4-8-medium",
