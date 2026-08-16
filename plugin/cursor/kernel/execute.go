@@ -456,6 +456,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 	textState := assistantStreamState{}
 	sawOutput := false
 	signatureSent := false
+	streamStarted := false
 	var pendingText strings.Builder
 	var lastUsage *translator.Usage
 	flushPendingText := func() bool {
@@ -471,6 +472,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			*errOut = err.Error()
 			return false
 		}
+		streamStarted = true
 		return true
 	}
 	for ev := range events {
@@ -484,9 +486,13 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 					sawOutput = true
 					if expectThinkingSignature && !signatureSent {
 						pendingText.WriteString(delta)
-					} else if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
-						*errOut = err.Error()
-						return
+					} else {
+						payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})
+						if err := emit(streamID, payload); err != nil {
+							*errOut = err.Error()
+							return
+						}
+						streamStarted = true
 					}
 				}
 			}
@@ -497,6 +503,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 						*errOut = err.Error()
 						return
 					}
+					streamStarted = true
 				}
 				if !flushPendingText() {
 					return
@@ -514,9 +521,13 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				sawOutput = true
 				if expectThinkingSignature && !signatureSent {
 					pendingText.WriteString(delta)
-				} else if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
-					*errOut = err.Error()
-					return
+				} else {
+					payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+						return
+					}
+					streamStarted = true
 				}
 			}
 		case translator.EventThinkingDelta:
@@ -526,8 +537,12 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 					*errOut = err.Error()
 					return
 				}
+				streamStarted = true
 			}
 		case translator.EventHeartbeat:
+			if !streamStarted {
+				continue
+			}
 			if err := emitStreamKeepalive(streamID, "claude"); err != nil {
 				*errOut = err.Error()
 				return
@@ -539,6 +554,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 					*errOut = err.Error()
 					return
 				}
+				streamStarted = true
 			}
 		case translator.EventTurnEnded:
 			lastUsage = trEv.Usage

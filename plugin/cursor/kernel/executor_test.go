@@ -484,6 +484,7 @@ func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testi
 	runner := &fakeRunner{events: []executor.ChatEvent{
 		buildHeartbeatEvent(),
 		buildThinkingDeltaEvent("reasoning"),
+		buildHeartbeatEvent(),
 		buildTextDeltaEvent("Hi"),
 		buildAssistantBlobEvent("Hi"),
 		buildTurnEndedEvent(4, 1),
@@ -528,6 +529,9 @@ func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testi
 	mu.Unlock()
 	if !strings.Contains(joined, `event: ping`) || !strings.Contains(joined, `{"type":"ping"}`) {
 		t.Fatalf("heartbeat was not forwarded as an Anthropic ping: %s", joined)
+	}
+	if messageStartAt, pingAt := strings.Index(joined, `event: message_start`), strings.Index(joined, `event: ping`); messageStartAt < 0 || pingAt < 0 || messageStartAt > pingAt {
+		t.Fatalf("Anthropic stream emitted ping before message_start: %s", joined)
 	}
 	if !strings.Contains(joined, `"type":"thinking_delta"`) || !strings.Contains(joined, `"thinking":"reasoning"`) {
 		t.Fatalf("thinking delta was not forwarded as Anthropic thinking: %s", joined)
