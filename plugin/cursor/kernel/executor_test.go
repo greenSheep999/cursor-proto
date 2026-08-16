@@ -760,6 +760,9 @@ func TestParseClaudePayload_UsesNativeWebSearch(t *testing.T) {
 	if req.PureMode {
 		t.Fatal("WebSearch PureMode = true, want IDE request context")
 	}
+	if req.WorkspacePath != "/Users/Shared/Cursor" {
+		t.Fatalf("WebSearch workspace = %q, want macOS IDE path", req.WorkspacePath)
+	}
 }
 
 func TestBuildChatRequest_UsesStableServerToolVariant(t *testing.T) {
