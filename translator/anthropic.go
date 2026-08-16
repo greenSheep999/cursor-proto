@@ -303,6 +303,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		if !ok {
 			return nil
 		}
+		delete(w.toolBlocks, ev.ToolCallID)
 		return w.frame("content_block_stop", map[string]any{
 			"type":  "content_block_stop",
 			"index": toolIdx,

@@ -72,6 +72,9 @@ func TestAnthropicToolUseShape(t *testing.T) {
 	if !strings.Contains(end, `"stop_reason":"tool_use"`) {
 		t.Errorf("turn_ended after tool call should stop_reason=tool_use:\n%s", end)
 	}
+	if strings.Contains(end, `"type":"content_block_stop"`) {
+		t.Errorf("completed tool block must not be closed twice:\n%s", end)
+	}
 }
 
 func TestExtractToolArgsFromStartRoundTrip(t *testing.T) {

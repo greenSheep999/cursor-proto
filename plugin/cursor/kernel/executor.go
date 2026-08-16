@@ -23,9 +23,14 @@ package kernel
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"strings"
 	"sync"
 	"time"
@@ -242,6 +247,7 @@ type chatShape struct {
 	Effort       string
 	Thinking     bool
 	JSONSchema   json.RawMessage
+	Attachments  []executor.Attachment
 }
 
 // parseOpenAIPayload converts an OpenAI Chat Completion request body
@@ -408,6 +414,7 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 		SystemPrompt: systemPrompt,
 		UserMessage:  flattenClaudeContent(req.Messages[lastUserIdx].Content),
 		Stream:       req.Stream,
+		Attachments:  extractClaudeAttachments(req.Messages[lastUserIdx].Content),
 	}
 	if req.Thinking != nil {
 		shape.Thinking = strings.EqualFold(strings.TrimSpace(req.Thinking.Type), "adaptive") ||
@@ -529,6 +536,7 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		AutoStopOnTurnEnd:  true,
 		AutoStopOnToolCall: true,
 		Tools:              shape.Tools,
+		Attachments:        shape.Attachments,
 	}
 	if headers != nil {
 		if convID := firstHeader(headers, "X-Conversation-Id"); convID != "" {
@@ -536,6 +544,98 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		}
 	}
 	return req
+}
+
+func extractClaudeAttachments(raw json.RawMessage) []executor.Attachment {
+	if len(raw) == 0 {
+		return nil
+	}
+	var blocks []struct {
+		Type   string `json:"type"`
+		Source struct {
+			Type      string `json:"type"`
+			MediaType string `json:"media_type"`
+			Data      string `json:"data"`
+		} `json:"source"`
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return nil
+	}
+	attachments := make([]executor.Attachment, 0, len(blocks))
+	for index, block := range blocks {
+		if block.Type != "image" && block.Type != "document" {
+			continue
+		}
+		if block.Source.Type != "base64" || block.Source.Data == "" {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(block.Source.Data)
+		if err != nil {
+			data, err = base64.RawStdEncoding.DecodeString(block.Source.Data)
+		}
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		filename := strings.TrimSpace(block.Title)
+		if filename == "" {
+			filename = fmt.Sprintf("%s-%d%s", block.Type, index+1, attachmentExtension(block.Source.MediaType, block.Type))
+		}
+		attachments = append(attachments, executor.Attachment{
+			Kind:     block.Type,
+			Filename: filename,
+			MimeType: block.Source.MediaType,
+			Data:     data,
+		})
+		if block.Type == "image" {
+			width, height := imageDimensions(block.Source.MediaType, data)
+			attachments[len(attachments)-1].Width = width
+			attachments[len(attachments)-1].Height = height
+		}
+	}
+	return attachments
+}
+
+func imageDimensions(mimeType string, data []byte) (int32, int32) {
+	var (
+		config image.Config
+		err    error
+	)
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/png":
+		config, err = png.DecodeConfig(bytes.NewReader(data))
+	case "image/jpeg":
+		config, err = jpeg.DecodeConfig(bytes.NewReader(data))
+	case "image/gif":
+		config, err = gif.DecodeConfig(bytes.NewReader(data))
+	default:
+		return 0, 0
+	}
+	if err != nil || config.Width <= 0 || config.Height <= 0 {
+		return 0, 0
+	}
+	return int32(config.Width), int32(config.Height)
+}
+
+func attachmentExtension(mimeType, kind string) string {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	case "application/pdf":
+		return ".pdf"
+	case "text/plain":
+		return ".txt"
+	}
+	if kind == "image" {
+		return ".img"
+	}
+	return ".bin"
 }
 
 func extractJSONSchema(format json.RawMessage) json.RawMessage {

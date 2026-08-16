@@ -3,6 +3,7 @@ package executor
 import (
 	"os"
 
+	"github.com/router-for-me/cursor-proto/auth"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
 
@@ -64,6 +65,9 @@ func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string) (*curs
 		MessageId: messageID,
 		Mode:      agentMode,
 	}
+	if selectedContext := buildSelectedContext(req.Attachments); selectedContext != nil {
+		userMsg.SelectedContext = selectedContext
+	}
 	umAction := &cursorpb.AgentV1_UserMessageAction{
 		UserMessage:    userMsg,
 		RequestContext: reqCtx,
@@ -119,6 +123,51 @@ func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string) (*curs
 	// callers should splice the system prompt into UserMessage themselves
 	// (RunChat does this automatically).
 	return arr, nil
+}
+
+func buildSelectedContext(attachments []Attachment) *cursorpb.AgentV1_SelectedContext {
+	if len(attachments) == 0 {
+		return nil
+	}
+	selected := &cursorpb.AgentV1_SelectedContext{}
+	for _, attachment := range attachments {
+		if len(attachment.Data) == 0 {
+			continue
+		}
+		switch attachment.Kind {
+		case "image":
+			var dimension *cursorpb.AgentV1_SelectedImage_Dimension
+			if attachment.Width > 0 && attachment.Height > 0 {
+				dimension = &cursorpb.AgentV1_SelectedImage_Dimension{
+					Width:  attachment.Width,
+					Height: attachment.Height,
+				}
+			}
+			selected.SelectedImages = append(selected.SelectedImages, &cursorpb.AgentV1_SelectedImage{
+				Uuid:      auth.GenerateSessionID(),
+				Path:      attachment.Filename,
+				MimeType:  attachment.MimeType,
+				Dimension: dimension,
+				DataOrBlobId: &cursorpb.AgentV1_SelectedImage_Data{
+					Data: append([]byte(nil), attachment.Data...),
+				},
+			})
+		case "document":
+			selected.SelectedDocuments = append(selected.SelectedDocuments, &cursorpb.AgentV1_SelectedDocument{
+				Uuid:     auth.GenerateSessionID(),
+				Filename: attachment.Filename,
+				MimeType: attachment.MimeType,
+				Path:     attachment.Filename,
+				DataOrBlobId: &cursorpb.AgentV1_SelectedDocument_Data{
+					Data: append([]byte(nil), attachment.Data...),
+				},
+			})
+		}
+	}
+	if len(selected.SelectedImages) == 0 && len(selected.SelectedDocuments) == 0 {
+		return nil
+	}
+	return selected
 }
 
 // buildConversationHistory turns the caller-supplied prior turns into a

@@ -23,6 +23,15 @@ type HistoryTurn struct {
 	Content string
 }
 
+type Attachment struct {
+	Kind     string
+	Filename string
+	MimeType string
+	Data     []byte
+	Width    int32
+	Height   int32
+}
+
 // ChatRequest carries the minimum parameters needed to start an agent run.
 type ChatRequest struct {
 	Model          string // e.g. "composer-2.5"
@@ -87,6 +96,8 @@ type ChatRequest struct {
 	// registration) and RequestContext.tools (model-visible catalog). See
 	// docs/phase-7a-mcp.md for the wire-format decisions.
 	Tools []ToolDefinition
+
+	Attachments []Attachment
 
 	// OmitSplicedHistory disables the in-band `<prior_conversation>` block
 	// that RunChat normally injects when History is non-empty. Combined with

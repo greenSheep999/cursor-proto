@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -702,6 +703,43 @@ func TestParseClaudePayload_ArrayContent(t *testing.T) {
 	}
 	if shape.UserMessage != "hi" {
 		t.Errorf("user = %q", shape.UserMessage)
+	}
+}
+
+func TestParseClaudePayload_PreservesImageAndDocumentAttachments(t *testing.T) {
+	shape, err := parseClaudePayload([]byte(`{
+		"model":"claude-opus-4-8",
+		"messages":[{"role":"user","content":[
+			{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1hZ2U="}},
+			{"type":"document","title":"report.pdf","source":{"type":"base64","media_type":"application/pdf","data":"cGRm"}},
+			{"type":"text","text":"inspect both"}
+		]}]
+	}`))
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if shape.UserMessage != "inspect both" {
+		t.Fatalf("UserMessage = %q, want inspect both", shape.UserMessage)
+	}
+	if len(shape.Attachments) != 2 {
+		t.Fatalf("attachments = %d, want 2", len(shape.Attachments))
+	}
+	if got := shape.Attachments[0]; got.Kind != "image" || got.MimeType != "image/png" || string(got.Data) != "image" {
+		t.Fatalf("image attachment = %+v", got)
+	}
+	if got := shape.Attachments[1]; got.Kind != "document" || got.Filename != "report.pdf" || string(got.Data) != "pdf" {
+		t.Fatalf("document attachment = %+v", got)
+	}
+}
+
+func TestImageDimensions(t *testing.T) {
+	data, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	width, height := imageDimensions("image/png", data)
+	if width != 1 || height != 1 {
+		t.Fatalf("dimensions = %dx%d, want 1x1", width, height)
 	}
 }
 

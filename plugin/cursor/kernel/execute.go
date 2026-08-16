@@ -234,7 +234,7 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	}
 	stopReason := translator.AnthropicStopReason(assistantText, len(toolUses) > 0)
 	resp := map[string]any{
-		"id":            "msg_" + auth.GenerateSessionID(),
+		"id":            "msg_" + strings.ReplaceAll(auth.GenerateSessionID(), "-", ""),
 		"type":          "message",
 		"role":          "assistant",
 		"model":         model,
