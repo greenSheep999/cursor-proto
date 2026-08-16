@@ -363,9 +363,9 @@ func (w *AnthropicStreamWriter) frame(event string, data map[string]any) []byte 
 // BuildAnthropicUsage renders a translator.Usage as an Anthropic-shaped
 // `usage` object.
 //
-// Anthropic's `input_tokens` counter reports the number of NON-cached input
-// tokens (that's how they price the reads separately). Cursor's TurnEnded
-// reports the pre-subtraction total, so we subtract cache_read_tokens before
+// Anthropic's `input_tokens` counter reports the number of input tokens that
+// were neither read from nor written to the prompt cache. Cursor's TurnEnded
+// reports the pre-subtraction total, so remove both cache counters before
 // exposing it. Never fall below 0.
 //
 // cache_read_input_tokens / cache_creation_input_tokens are always emitted
@@ -379,7 +379,7 @@ func BuildAnthropicUsage(u *Usage) map[string]any {
 			"cache_creation_input_tokens": 0,
 		}
 	}
-	input := u.InputTokens - u.CacheReadTokens
+	input := u.InputTokens - u.CacheReadTokens - u.CacheWriteTokens
 	if input < 0 {
 		input = 0
 	}

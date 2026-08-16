@@ -461,12 +461,6 @@ func flattenClaudeContent(raw json.RawMessage) string {
 // (close the SSE stream as soon as a turn ends so we do not park).
 func buildChatRequest(shape chatShape, headers map[string][]string) *executor.ChatRequest {
 	systemPrompt := shape.SystemPrompt
-	if len(shape.Tools) == 0 {
-		if systemPrompt != "" {
-			systemPrompt += "\n\n"
-		}
-		systemPrompt += "No tools are available for this request. Answer directly from the provided context and your own reasoning. Do not invoke Cursor IDE-native tools, shell commands, file operations, web search, or any undeclared tool."
-	}
 	if len(shape.JSONSchema) > 0 {
 		if systemPrompt != "" {
 			systemPrompt += "\n\n"

@@ -658,8 +658,8 @@ func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing
 	if req.Mode != executor.APIConversationMode(false) {
 		t.Fatalf("mode = %d, want API ask mode", req.Mode)
 	}
-	if !strings.Contains(req.SystemPrompt, "No tools are available") {
-		t.Fatalf("no-tool API guard missing from prompt: %q", req.SystemPrompt)
+	if strings.Contains(req.SystemPrompt, "No tools are available") {
+		t.Fatalf("no-tool API guard polluted the caller system prompt: %q", req.SystemPrompt)
 	}
 	if !strings.Contains(req.SystemPrompt, `"required":["result"]`) {
 		t.Fatalf("structured output schema missing from prompt: %q", req.SystemPrompt)

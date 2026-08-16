@@ -258,6 +258,24 @@ func TestAnthropicNonStreamingCacheUsage(t *testing.T) {
 	}
 }
 
+func TestAnthropicUsageExcludesCacheCreationFromInput(t *testing.T) {
+	got := BuildAnthropicUsage(&Usage{
+		InputTokens:      100,
+		OutputTokens:     20,
+		CacheReadTokens:  30,
+		CacheWriteTokens: 50,
+	})
+	if input, _ := got["input_tokens"].(int64); input != 20 {
+		t.Fatalf("input_tokens = %d, want 20 after cache read/write subtraction", input)
+	}
+	if read, _ := got["cache_read_input_tokens"].(int64); read != 30 {
+		t.Fatalf("cache_read_input_tokens = %d, want 30", read)
+	}
+	if write, _ := got["cache_creation_input_tokens"].(int64); write != 50 {
+		t.Fatalf("cache_creation_input_tokens = %d, want 50", write)
+	}
+}
+
 // TestAnthropicStreamingMessageDeltaCache verifies the message_delta event
 // on the streaming Anthropic path carries cache_read_input_tokens and
 // cache_creation_input_tokens alongside input/output.
