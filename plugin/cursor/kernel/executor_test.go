@@ -86,6 +86,39 @@ func buildTurnEndedEvent(inTok, outTok int64) executor.ChatEvent {
 	return executor.ChatEvent{Server: msg}
 }
 
+func buildAssistantBlobEvent(text string) executor.ChatEvent {
+	blob, _ := json.Marshal(map[string]any{
+		"role": "assistant",
+		"content": []map[string]any{{
+			"type": "text",
+			"text": text,
+		}},
+	})
+	msg := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_KvServerMessage{
+			KvServerMessage: &cursorpb.AgentV1_KvServerMessage{
+				Message: &cursorpb.AgentV1_KvServerMessage_SetBlobArgs{
+					SetBlobArgs: &cursorpb.AgentV1_SetBlobArgs{BlobData: blob},
+				},
+			},
+		},
+	}
+	return executor.ChatEvent{Server: msg}
+}
+
+func buildHeartbeatEvent() executor.ChatEvent {
+	msg := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_Heartbeat{
+					Heartbeat: &cursorpb.AgentV1_HeartbeatUpdate{},
+				},
+			},
+		},
+	}
+	return executor.ChatEvent{Server: msg}
+}
+
 // buildFakeExecutorRequest hand-marshals the executorRequest JSON with
 // the given payload and format. StorageJSON is a fake but well-formed
 // AuthFile so the executor code that touches it does not panic; tests
@@ -301,6 +334,108 @@ func TestExecuteStream_OpenAI(t *testing.T) {
 	}
 }
 
+func TestExecuteStream_OpenAI_DeduplicatesFinalAssistantBlob(t *testing.T) {
+	runner := &fakeRunner{events: []executor.ChatEvent{
+		buildTextDeltaEvent("Hi"),
+		buildAssistantBlobEvent("Hi"),
+		buildTurnEndedEvent(4, 1),
+	}}
+
+	var (
+		mu      sync.Mutex
+		emitted [][]byte
+		done    = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return runner, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"composer-2.5","messages":[{"role":"user","content":"hi"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "openai", payload, true, "dedupe-openai"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream never closed")
+	}
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if got := strings.Count(joined, `"content":"Hi"`); got != 1 {
+		t.Fatalf("assistant text emitted %d times, want once: %s", got, joined)
+	}
+}
+
+func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testing.T) {
+	runner := &fakeRunner{events: []executor.ChatEvent{
+		buildHeartbeatEvent(),
+		buildTextDeltaEvent("Hi"),
+		buildAssistantBlobEvent("Hi"),
+		buildTurnEndedEvent(4, 1),
+	}}
+
+	var (
+		mu      sync.Mutex
+		emitted [][]byte
+		done    = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return runner, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "dedupe-claude"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream never closed")
+	}
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if !strings.Contains(joined, `event: ping`) || !strings.Contains(joined, `{"type":"ping"}`) {
+		t.Fatalf("heartbeat was not forwarded as an Anthropic ping: %s", joined)
+	}
+	if got := strings.Count(joined, `"text":"Hi"`); got != 1 {
+		t.Fatalf("assistant text emitted %d times, want once: %s", got, joined)
+	}
+}
+
 func byteSlicesToStrings(chunks [][]byte) []string {
 	out := make([]string, 0, len(chunks))
 	for _, c := range chunks {
@@ -361,6 +496,36 @@ func TestParseOpenAIPayload_NoUser(t *testing.T) {
 	_, err := parseOpenAIPayload([]byte(`{"model":"x","messages":[{"role":"system","content":"s"}]}`))
 	if err == nil {
 		t.Fatal("expected error for missing user message")
+	}
+}
+
+func TestParseClaudePayload_PreservesToolUseAndToolResultHistory(t *testing.T) {
+	payload := []byte(`{
+		"model":"claude-opus-5",
+		"messages":[
+			{"role":"user","content":"Check Shanghai weather."},
+			{"role":"assistant","content":[{"type":"tool_use","id":"toolu_123","name":"get_weather","input":{"city":"Shanghai"}}]},
+			{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"Sunny, 28 C."}]},
+			{"role":"user","content":"Summarize the result."}
+		]
+	}`)
+
+	shape, err := parseClaudePayload(payload)
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if len(shape.History) != 3 {
+		t.Fatalf("history length = %d, want 3: %#v", len(shape.History), shape.History)
+	}
+	if !strings.Contains(shape.History[1].Content, `"type":"tool_use"`) ||
+		!strings.Contains(shape.History[1].Content, `"name":"get_weather"`) ||
+		!strings.Contains(shape.History[1].Content, `"city":"Shanghai"`) {
+		t.Fatalf("assistant tool_use was not preserved: %q", shape.History[1].Content)
+	}
+	if !strings.Contains(shape.History[2].Content, `"type":"tool_result"`) ||
+		!strings.Contains(shape.History[2].Content, `"tool_use_id":"toolu_123"`) ||
+		!strings.Contains(shape.History[2].Content, `Sunny, 28 C.`) {
+		t.Fatalf("user tool_result was not preserved: %q", shape.History[2].Content)
 	}
 }
 

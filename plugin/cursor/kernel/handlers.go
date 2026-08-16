@@ -13,17 +13,12 @@ import (
 )
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
-// The capability set reflects what's actually implemented in this pass:
-// auth parsing + refresh, executor identifier, and static models. Streaming
-// execute + token counting are still stubbed out (dispatch returns
-// "not_implemented"); when they land, add "executor_input_formats" and
-// "executor_output_formats" to this document.
 func registerResult() string {
 	body := map[string]any{
 		"schema_version": 1,
 		"metadata": map[string]any{
 			"Name":             "cursor",
-			"Version":          "0.1.0",
+			"Version":          "0.5.2",
 			"Author":           "router-for-me",
 			"GitHubRepository": "https://github.com/router-for-me/cursor-proto",
 			"Logo":             CursorLogoDataURI(),

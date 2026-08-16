@@ -336,6 +336,14 @@ func emit(streamID string, payload []byte) error {
 	return errCall
 }
 
+func emitStreamKeepalive(streamID, format string) error {
+	payload := []byte(": ping\n\n")
+	if format == "claude" {
+		payload = []byte("event: ping\ndata: {\"type\":\"ping\"}\n\n")
+	}
+	return emit(streamID, payload)
+}
+
 // streamOpenAI mirrors streamOpenAI in cmd/cursor-proxy but emits each
 // SSE frame through the host stream bridge.
 //
@@ -347,9 +355,8 @@ func emit(streamID string, payload []byte) error {
 func streamOpenAI(streamID, model string, includeUsage bool, events <-chan executor.ChatEvent, errOut *string) {
 	tr := translator.NewOpenAIStreamWriter(model)
 	tr.IncludeUsage = includeUsage
-	assistantSent := ""
+	textState := assistantStreamState{}
 	sawTurnEnd := false
-	sawBlob := false
 	sawOutput := false
 	var lastUsage *translator.Usage
 	for ev := range events {
@@ -357,10 +364,8 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			sawBlob = true
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := textState.consumeSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				sawOutput = true
 				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
@@ -375,15 +380,17 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
-			// Only forward text deltas when Cursor never emitted a
-			// KV blob for this turn. Doing both would double-encode
-			// the assistant text.
-			if !sawBlob && trEv.Text != "" {
+			if delta := textState.consumeDelta(trEv.Text); delta != "" {
 				sawOutput = true
-				if err := emit(streamID, tr.Encode(trEv)); err != nil {
+				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
 					return
 				}
+			}
+		case translator.EventThinkingDelta, translator.EventHeartbeat:
+			if err := emitStreamKeepalive(streamID, "openai"); err != nil {
+				*errOut = err.Error()
+				return
 			}
 		case translator.EventToolCallStarted, translator.EventToolCallDelta:
 			sawOutput = true
@@ -435,8 +442,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 // the KV-blob vs text-delta fallback rationale.
 func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errOut *string) {
 	tr := translator.NewAnthropicStreamWriter(model)
-	assistantSent := ""
-	sawBlob := false
+	textState := assistantStreamState{}
 	sawOutput := false
 	var lastUsage *translator.Usage
 	for ev := range events {
@@ -444,10 +450,8 @@ func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errO
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			sawBlob = true
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := textState.consumeSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				sawOutput = true
 				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
@@ -462,12 +466,17 @@ func streamClaude(streamID, model string, events <-chan executor.ChatEvent, errO
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
-			if !sawBlob && trEv.Text != "" {
+			if delta := textState.consumeDelta(trEv.Text); delta != "" {
 				sawOutput = true
-				if err := emit(streamID, tr.Encode(trEv)); err != nil {
+				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
 					return
 				}
+			}
+		case translator.EventThinkingDelta, translator.EventHeartbeat:
+			if err := emitStreamKeepalive(streamID, "claude"); err != nil {
+				*errOut = err.Error()
+				return
 			}
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
 			sawOutput = true

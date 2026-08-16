@@ -396,9 +396,8 @@ func flattenClaudeSystem(raw json.RawMessage) string {
 }
 
 // flattenClaudeContent handles the string / array-of-block content
-// field for one Anthropic message. Non-text blocks (images,
-// tool_use, tool_result) are dropped because Cursor's `UserMessage`
-// is a single string.
+// field for one Anthropic message. Tool round-trip blocks are retained
+// as compact JSON so the in-band history carries tool calls and results.
 func flattenClaudeContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -414,17 +413,25 @@ func flattenClaudeContent(raw json.RawMessage) string {
 	var out strings.Builder
 	for _, block := range blocks {
 		bType, _ := block["type"].(string)
-		if bType != "" && bType != "text" {
+		var content string
+		switch bType {
+		case "", "text":
+			content, _ = block["text"].(string)
+		case "tool_use", "tool_result":
+			encoded, err := json.Marshal(block)
+			if err == nil {
+				content = string(encoded)
+			}
+		default:
 			continue
 		}
-		text, _ := block["text"].(string)
-		if text == "" {
+		if content == "" {
 			continue
 		}
 		if out.Len() > 0 {
 			out.WriteByte('\n')
 		}
-		out.WriteString(text)
+		out.WriteString(content)
 	}
 	return out.String()
 }
@@ -519,10 +526,47 @@ func diffSuffix(sent, full string) string {
 	if sent == "" {
 		return full
 	}
-	if len(full) > len(sent) && full[:len(sent)] == sent {
+	if full == sent || strings.HasPrefix(sent, full) {
+		return ""
+	}
+	if strings.HasPrefix(full, sent) {
 		return full[len(sent):]
 	}
+	maxOverlap := len(sent)
+	if len(full) < maxOverlap {
+		maxOverlap = len(full)
+	}
+	for overlap := maxOverlap; overlap > 0; overlap-- {
+		if strings.HasSuffix(sent, full[:overlap]) {
+			return full[overlap:]
+		}
+	}
 	return full
+}
+
+type assistantStreamState struct {
+	emitted     string
+	sawSnapshot bool
+}
+
+func (s *assistantStreamState) consumeDelta(delta string) string {
+	if delta == "" || s.sawSnapshot {
+		return ""
+	}
+	s.emitted += delta
+	return delta
+}
+
+func (s *assistantStreamState) consumeSnapshot(full string) string {
+	if full == "" {
+		return ""
+	}
+	s.sawSnapshot = true
+	delta := diffSuffix(s.emitted, full)
+	if delta != "" {
+		s.emitted += delta
+	}
+	return delta
 }
 
 // countTokens uses the char heuristic (ASCII bytes / 4 + CJK bytes /

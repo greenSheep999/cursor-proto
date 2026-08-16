@@ -250,7 +250,7 @@ tags win — please update this document.
 |-------------|--------------------|------------------------|---------|--------------------|
 | 3.10        | `cursor3.10/v0.1.6` (also legacy `v0.1.0`) | `release/cursor-3.10` | maintained (security patches only) | Cursor 3.10.20     |
 | 3.11        | `cursor3.11/v0.3.8` | `release/cursor-3.11` | maintained | Cursor 3.11.19     |
-| 3.15        | `cursor3.15/v0.5.0` | `main`                | current | Cursor 3.15.19     |
+| 3.15        | `cursor3.15/v0.5.2` | `main`                | current | Cursor 3.15.19     |
 
 Note: `cursor3.11/v0.3.0` is the first release with **agent mode**
 (the /v1/agents/* endpoint tree backed by @cursor/sdk). Wire mode
