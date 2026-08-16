@@ -175,6 +175,48 @@ func buildFakeExecutorRequest(t *testing.T, format string, payload []byte, strea
 	return buf
 }
 
+func TestExecuteRejectsAccountExcludedModelBeforeUpstream(t *testing.T) {
+	runnerCalled := false
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) {
+			runnerCalled = true
+			return &fakeRunner{}, "unit@example.com", nil
+		},
+		nil,
+	)()
+
+	req := executorRequest{
+		AuthID:       "native-only",
+		AuthProvider: "cursor",
+		Model:        "claude-opus-5",
+		Format:       "claude",
+		Payload:      []byte(`{"model":"claude-opus-5","messages":[{"role":"user","content":"hi"}]}`),
+		StorageJSON:  []byte(`{"type":"cursor","access_token":"AT","email":"native@example.com","excluded_models":["CLAUDE-*"]}`),
+	}
+	rawRequest, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	raw, rc := dispatch("executor.execute", rawRequest)
+	if rc != 0 {
+		t.Fatalf("rc = %d, want 0. envelope=%s", rc, string(raw))
+	}
+	var env envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+	if env.OK || env.Error == nil {
+		t.Fatalf("expected model exclusion error, got %s", string(raw))
+	}
+	if env.Error.Code != "model_excluded" || !env.Error.Retryable {
+		t.Fatalf("unexpected error: %+v", env.Error)
+	}
+	if runnerCalled {
+		t.Fatal("excluded model reached upstream runner")
+	}
+}
+
 // TestExecute_OpenAI_NonStreaming exercises handleExecutorExecute end
 // to end with a scripted RunChat and asserts the OpenAI response body
 // carries the assistant text and a stop finish_reason.

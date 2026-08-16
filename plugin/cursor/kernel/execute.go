@@ -70,6 +70,13 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	if strings.TrimSpace(shape.Model) == "" {
 		return errorEnvelope("bad_payload", "model is required", false), 0
 	}
+	excluded, errExcluded := storageExcludesModel(req.StorageJSON, shape.Model)
+	if errExcluded != nil {
+		return errorEnvelope("bad_auth", errExcluded.Error(), true), 0
+	}
+	if excluded {
+		return errorEnvelope("model_excluded", fmt.Sprintf("model %s is excluded for this cursor account", shape.Model), true), 0
+	}
 
 	runner, _, errClient := runnerFactory(req.AuthID, req.StorageJSON)
 	if errClient != nil {
@@ -263,6 +270,13 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 	}
 	if strings.TrimSpace(shape.Model) == "" {
 		return errorEnvelope("bad_payload", "model is required", false), 0
+	}
+	excluded, errExcluded := storageExcludesModel(req.StorageJSON, shape.Model)
+	if errExcluded != nil {
+		return errorEnvelope("bad_auth", errExcluded.Error(), true), 0
+	}
+	if excluded {
+		return errorEnvelope("model_excluded", fmt.Sprintf("model %s is excluded for this cursor account", shape.Model), true), 0
 	}
 
 	runner, _, errClient := runnerFactory(req.AuthID, req.StorageJSON)

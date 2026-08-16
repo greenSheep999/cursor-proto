@@ -129,6 +129,57 @@ func accessTokenFromStorage(storage []byte) string {
 	return probe.AccessToken
 }
 
+func storageExcludesModel(storage []byte, model string) (bool, error) {
+	file, err := cpaformat.Unmarshal(storage)
+	if err != nil {
+		return false, fmt.Errorf("parse storage: %w", err)
+	}
+	model = strings.ToLower(strings.TrimSpace(model))
+	for _, pattern := range file.ExcludedModels {
+		if wildcardModelMatch(strings.ToLower(strings.TrimSpace(pattern)), model) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func wildcardModelMatch(pattern, model string) bool {
+	if pattern == "" {
+		return false
+	}
+	if pattern == "*" {
+		return true
+	}
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == model
+	}
+	if parts[0] != "" {
+		if !strings.HasPrefix(model, parts[0]) {
+			return false
+		}
+		model = model[len(parts[0]):]
+	}
+	if parts[len(parts)-1] != "" {
+		suffix := parts[len(parts)-1]
+		if !strings.HasSuffix(model, suffix) {
+			return false
+		}
+		model = model[:len(model)-len(suffix)]
+	}
+	for _, part := range parts[1 : len(parts)-1] {
+		if part == "" {
+			continue
+		}
+		index := strings.Index(model, part)
+		if index < 0 {
+			return false
+		}
+		model = model[index+len(part):]
+	}
+	return true
+}
+
 // executorRequest mirrors the ABI shape of pluginapi.ExecutorRequest.
 // See docs/phase-8b-abi.md for the full field-by-field breakdown.
 // Only the fields the executor actually consumes are declared;
