@@ -32,6 +32,7 @@ import (
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
+	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 	"github.com/router-for-me/cursor-proto/translator"
 )
@@ -618,6 +619,21 @@ func firstHeader(h map[string][]string, name string) string {
 		}
 	}
 	return ""
+}
+
+func translatePluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition) *translator.Event {
+	event := translator.FromServerMessage(server)
+	if event == nil || len(tools) == 0 {
+		return event
+	}
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if name := strings.TrimSpace(tool.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	translator.ApplyClientToolAlias(event, names)
+	return event
 }
 
 // normaliseFormat maps a wire format string to one we handle. Empty

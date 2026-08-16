@@ -92,7 +92,7 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	}
 
 	format := normaliseFormat(req.Format, req.SourceFormat)
-	body, errCollect := collectNonStreaming(format, shape.Model, events)
+	body, errCollect := collectNonStreaming(format, shape.Model, shape.Tools, events)
 	if errCollect != nil {
 		return errorEnvelope("upstream_error", errCollect.Error(), true), 0
 	}
@@ -107,12 +107,12 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 
 // collectNonStreaming iterates the RunChat channel and produces a
 // full response body in the requested output format.
-func collectNonStreaming(format, model string, events <-chan executor.ChatEvent) ([]byte, error) {
+func collectNonStreaming(format, model string, tools []executor.ToolDefinition, events <-chan executor.ChatEvent) ([]byte, error) {
 	switch format {
 	case "claude":
-		return buildClaudeNonStreaming(model, events)
+		return buildClaudeNonStreaming(model, tools, events)
 	default:
-		return buildOpenAINonStreaming(model, events)
+		return buildOpenAINonStreaming(model, tools, events)
 	}
 }
 
@@ -140,7 +140,7 @@ func isEmptyPluginUpstreamResponse(hasOutput bool, usage *translator.Usage) bool
 // arrive (e.g. legacy stream shape or when a KV blob never gets
 // flushed), we accumulate the deltas so the final response is still
 // populated.
-func buildOpenAINonStreaming(model string, events <-chan executor.ChatEvent) ([]byte, error) {
+func buildOpenAINonStreaming(model string, tools []executor.ToolDefinition, events <-chan executor.ChatEvent) ([]byte, error) {
 	acc := translator.NonStreamingAccumulator{Model: model}
 	sawBlob := false
 	deltaText := ""
@@ -153,7 +153,7 @@ func buildOpenAINonStreaming(model string, events <-chan executor.ChatEvent) ([]
 			sawBlob = true
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translatePluginEvent(ev.Server, tools)
 		if trEv == nil {
 			continue
 		}
@@ -179,7 +179,7 @@ func buildOpenAINonStreaming(model string, events <-chan executor.ChatEvent) ([]
 // buildClaudeNonStreaming mirrors nonStreamAnthropic in cmd/cursor-proxy.
 // Falls back to accumulating text deltas when Cursor never emits a
 // KV blob (see buildOpenAINonStreaming for the rationale).
-func buildClaudeNonStreaming(model string, events <-chan executor.ChatEvent) ([]byte, error) {
+func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, events <-chan executor.ChatEvent) ([]byte, error) {
 	assistantText := ""
 	sawBlob := false
 	deltaText := ""
@@ -194,7 +194,7 @@ func buildClaudeNonStreaming(model string, events <-chan executor.ChatEvent) ([]
 			sawBlob = true
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translatePluginEvent(ev.Server, tools)
 		if trEv == nil {
 			continue
 		}
@@ -297,7 +297,7 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 	format := normaliseFormat(req.Format, req.SourceFormat)
 	headers := map[string][]string{"Content-Type": {"text/event-stream"}}
 
-	go streamEvents(ctx, cancel, req.StreamID, format, shape.Model, shape.IncludeUsage, shape.Thinking, events)
+	go streamEvents(ctx, cancel, req.StreamID, format, shape.Model, shape.IncludeUsage, shape.Thinking, shape.Tools, events)
 
 	// Async streaming: return synchronously with empty chunks. The
 	// host will read chunks off the stream bridge as we emit them.
@@ -313,7 +313,7 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 // streamEvents runs in a background goroutine for the lifetime of one
 // executor.execute_stream call. It pumps Cursor events into the host
 // stream bridge and always closes the stream on exit.
-func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, format, model string, includeUsage, expectThinkingSignature bool, events <-chan executor.ChatEvent) {
+func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, format, model string, includeUsage, expectThinkingSignature bool, tools []executor.ToolDefinition, events <-chan executor.ChatEvent) {
 	defer cancel()
 
 	var streamErr string
@@ -327,9 +327,9 @@ func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, form
 
 	switch format {
 	case "claude":
-		streamClaude(streamID, model, expectThinkingSignature, events, &streamErr)
+		streamClaude(streamID, model, expectThinkingSignature, tools, events, &streamErr)
 	default:
-		streamOpenAI(streamID, model, includeUsage, events, &streamErr)
+		streamOpenAI(streamID, model, includeUsage, tools, events, &streamErr)
 	}
 	_ = ctx // kept for future context-aware emit
 }
@@ -363,7 +363,7 @@ func emitStreamKeepalive(streamID, format string) error {
 // updates. We prefer KV blobs (they're the canonical wire shape) but
 // fall through to text deltas when the server does not send blobs
 // (e.g. legacy stream shape).
-func streamOpenAI(streamID, model string, includeUsage bool, events <-chan executor.ChatEvent, errOut *string) {
+func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.ToolDefinition, events <-chan executor.ChatEvent, errOut *string) {
 	tr := translator.NewOpenAIStreamWriter(model)
 	tr.IncludeUsage = includeUsage
 	textState := assistantStreamState{}
@@ -385,7 +385,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translatePluginEvent(ev.Server, tools)
 		if trEv == nil {
 			continue
 		}
@@ -451,7 +451,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, events <-chan execu
 // streamClaude mirrors streamAnthropic in cmd/cursor-proxy but emits
 // SSE frames through the host stream bridge. See streamOpenAI for
 // the KV-blob vs text-delta fallback rationale.
-func streamClaude(streamID, model string, expectThinkingSignature bool, events <-chan executor.ChatEvent, errOut *string) {
+func streamClaude(streamID, model string, expectThinkingSignature bool, tools []executor.ToolDefinition, events <-chan executor.ChatEvent, errOut *string) {
 	tr := translator.NewAnthropicStreamWriter(model)
 	textState := assistantStreamState{}
 	sawOutput := false
@@ -504,7 +504,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, events <
 			}
 			continue
 		}
-		trEv := translator.FromServerMessage(ev.Server)
+		trEv := translatePluginEvent(ev.Server, tools)
 		if trEv == nil {
 			continue
 		}

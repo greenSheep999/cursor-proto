@@ -139,6 +139,28 @@ func buildHeartbeatEvent() executor.ChatEvent {
 	return executor.ChatEvent{Server: msg}
 }
 
+func TestTranslatePluginEventRestoresDeclaredToolCase(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_ExecServerMessage{
+			ExecServerMessage: &cursorpb.AgentV1_ExecServerMessage{
+				Message: &cursorpb.AgentV1_ExecServerMessage_McpArgs{
+					McpArgs: &cursorpb.AgentV1_McpArgs{
+						ToolName:   "mcp_bash",
+						ToolCallId: "toolu_1",
+					},
+				},
+			},
+		},
+	}
+	event := translatePluginEvent(server, []executor.ToolDefinition{{Name: "Bash"}})
+	if event == nil {
+		t.Fatal("expected tool event")
+	}
+	if event.ToolName != "Bash" {
+		t.Fatalf("tool name = %q, want client-declared Bash", event.ToolName)
+	}
+}
+
 func buildThinkingDeltaEvent(text string) executor.ChatEvent {
 	msg := &cursorpb.AgentV1_AgentServerMessage{
 		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
