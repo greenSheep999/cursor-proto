@@ -76,6 +76,12 @@ func TestIsRefusalTextDoesNotMatchOrdinaryNegation(t *testing.T) {
 	}
 }
 
+func TestIsRefusalTextRecognizesChineseUnablePhrase(t *testing.T) {
+	if !IsRefusalText("我没办法照做，请见谅。") {
+		t.Fatal("direct Chinese inability phrase must be classified as refusal")
+	}
+}
+
 func TestAnthropicStreamMessageIDUsesClaudeShape(t *testing.T) {
 	w := NewAnthropicStreamWriter("claude-opus-5")
 

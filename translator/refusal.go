@@ -8,7 +8,7 @@ import (
 var refusalPrefixes = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)^(?:sorry[,.!:\s]+|apologies[,.!:\s]+|i(?:'m| am) sorry[,.!:\s]+)*(?:i\s+)?(?:cannot|can't|won't|will not|am unable to|must decline|refuse)`),
 	regexp.MustCompile(`(?i)^(?:i\s+)?(?:can't|cannot|won't)\s+(?:do|provide|share|reveal|output|disclose)\b`),
-	regexp.MustCompile(`^(?:抱歉|对不起|很抱歉)?[，,:：。.!！?？\s]*(?:我)?(?:不能|无法|没法|不会|不可以|拒绝)`),
+	regexp.MustCompile(`^(?:抱歉|对不起|很抱歉)?[，,:：。.!！?？\s]*(?:我)?(?:不能|无法|没办法|没法|不会|不可以|拒绝)`),
 }
 
 // IsRefusalText recognizes a direct refusal at the beginning of a response.
