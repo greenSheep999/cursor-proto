@@ -15,6 +15,7 @@ import (
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor/transport"
+	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -56,6 +57,11 @@ type Client struct {
 	HTTPVersion transport.Version
 	ProxyURL    string
 	HTTP        *http.Client
+
+	modelCatalogMu       sync.RWMutex
+	modelCatalog         *cursorpb.AiserverV1_AvailableModelsResponse
+	modelCatalogIdentity string
+	modelCatalogAt       time.Time
 }
 
 // Option configures a Client at construction time. Use these instead of
@@ -218,7 +224,8 @@ func addConnectEnvelope(data []byte, compressed bool) []byte {
 
 // splitConnectFrame reads one Connect frame from `buf`. Returns the frame's
 // payload, remaining bytes after the frame, and whether a full frame was
-// present. If flags & 0x80 != 0, it's a trailer frame (grpc-status/message).
+// present. Both gRPC-web trailers (0x80) and Connect end-stream frames (0x02)
+// terminate the stream and must be parsed as status rather than protobuf data.
 func splitConnectFrame(buf []byte) (payload []byte, isTrailer bool, rest []byte, ok bool) {
 	if len(buf) < 5 {
 		return nil, false, buf, false
@@ -231,6 +238,6 @@ func splitConnectFrame(buf []byte) (payload []byte, isTrailer bool, rest []byte,
 	end := 5 + int(length)
 	payload = buf[5:end]
 	rest = buf[end:]
-	isTrailer = (flags & 0x80) != 0
+	isTrailer = (flags&0x80) != 0 || (flags&0x02) != 0
 	return payload, isTrailer, rest, true
 }

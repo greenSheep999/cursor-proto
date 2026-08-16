@@ -55,6 +55,7 @@ type responsesRequest struct {
 	Instructions string          `json:"instructions"`
 	Input        json.RawMessage `json:"input"`
 	Tools        []responsesTool `json:"tools"`
+	Text         json.RawMessage `json:"text"`
 	Stream       bool            `json:"stream"`
 }
 
@@ -107,6 +108,7 @@ func responsesHandler(c chatRunner, cacheStore *simcache.Store) http.HandlerFunc
 			http.Error(w, "no user input", 400)
 			return
 		}
+		systemPrompt = appendResponsesStructuredOutputInstruction(systemPrompt, req.Text)
 
 		prefix := prefixForSimCache("openai-responses", req.Model, tools, strings.TrimSpace(systemPrompt), history)
 		decision := decideSimCache(cacheStore, prefix)
@@ -302,7 +304,7 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 	// HTTP error instead.
 	initFrames := tr.InitialFrames()
 
-	assistantSent := ""
+	var assistantText assistantTextTracker
 	sawTurnEnd := false
 	wroteTurnEnd := false
 	sawOutput := false
@@ -319,9 +321,8 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := assistantText.acceptSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				sawOutput = true
 				writeSSE(initFrames)
 				initFrames = nil
@@ -335,6 +336,7 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			trEv.Text = assistantText.acceptDelta(trEv.Text)
 			if trEv.Text != "" {
 				sawOutput = true
 				writeSSE(initFrames)
@@ -381,7 +383,7 @@ func streamResponses(w http.ResponseWriter, model string, events <-chan executor
 
 func nonStreamResponses(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	acc := translator.ResponsesNonStreamingAccumulator{Model: model}
-	assistantSent := ""
+	var assistantText assistantTextTracker
 	var trailerErr *executor.TrailerStatus
 	for ev := range events {
 		if ev.Trailer {
@@ -394,9 +396,8 @@ func nonStreamResponses(w http.ResponseWriter, model string, events <-chan execu
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := assistantText.acceptSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				acc.Consume(&translator.Event{Kind: translator.EventTextDelta, Text: delta})
 			}
 			continue
@@ -404,6 +405,9 @@ func nonStreamResponses(w http.ResponseWriter, model string, events <-chan execu
 		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
+		}
+		if trEv.Kind == translator.EventTextDelta {
+			trEv.Text = assistantText.acceptDelta(trEv.Text)
 		}
 		acc.Consume(trEv)
 	}

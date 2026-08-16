@@ -9,9 +9,8 @@ import (
 )
 
 // FromAccount folds a cursor-proto *auth.Account into the CPA on-disk
-// shape. Fields that are not persisted (SessionID, ConfigVersion,
-// ClientKey, ChecksumSession) are intentionally dropped: the plugin
-// regenerates them at load time.
+// shape. ChecksumSession is intentionally omitted because it is derived from
+// the persisted checksum identity and session start time.
 //
 // The caller can set the optional operator knobs (Prefix, ProxyURL,
 // Priority, Note, Disabled, ExcludedModels, DisableCooling,
@@ -26,25 +25,34 @@ func FromAccount(a *auth.Account) (*AuthFile, error) {
 
 	out := &AuthFile{
 		CursorTokenStorage: CursorTokenStorage{
-			Type:             ProviderType,
-			AccessToken:      a.AccessToken,
-			RefreshToken:     a.RefreshToken,
-			Email:            a.Email,
-			UserID:           a.UserID,
-			AuthID:           a.AuthID,
-			AuthKind:         a.AuthType,
-			MachineID:        a.MachineID,
-			MacMachineID:     a.MacMachineID,
-			ClientOS:         a.ClientOS,
-			ClientOSVersion:  a.ClientOSVersion,
-			ClientArch:       a.ClientArch,
-			ClientShell:      a.ClientShell,
-			WorkspacePath:    a.WorkspacePath,
-			IssuedAt:         FormatTime(a.IssuedAt),
-			LastRefresh:      FormatTime(a.IssuedAt),
-			Expired:          FormatTime(a.ExpiresAt),
-			Refreshable:      a.Refreshable,
-			RefreshLeadNanos: int64(a.RefreshLead),
+			Type:              ProviderType,
+			AccessToken:       a.AccessToken,
+			RefreshToken:      a.RefreshToken,
+			Email:             a.Email,
+			UserID:            a.UserID,
+			AuthID:            a.AuthID,
+			AuthKind:          a.AuthType,
+			TeamID:            a.TeamID,
+			PrivacyMode:       a.PrivacyMode,
+			InternalUser:      a.InternalUser,
+			MachineID:         a.MachineID,
+			MacMachineID:      a.MacMachineID,
+			ChecksumMachineID: a.ChecksumMachineID,
+			SessionID:         a.SessionID,
+			ConfigVersion:     a.ConfigVersion,
+			ClientKey:         a.ClientKey,
+			ClientOS:          a.ClientOS,
+			ClientOSVersion:   a.ClientOSVersion,
+			ClientArch:        a.ClientArch,
+			ClientType:        a.ClientType,
+			ClientLayout:      a.ClientLayout,
+			ClientShell:       a.ClientShell,
+			WorkspacePath:     a.WorkspacePath,
+			IssuedAt:          FormatTime(a.IssuedAt),
+			LastRefresh:       FormatTime(a.IssuedAt),
+			Expired:           FormatTime(a.ExpiresAt),
+			Refreshable:       a.Refreshable,
+			RefreshLeadNanos:  int64(a.RefreshLead),
 		},
 		ProxyURL: a.ProxyURL,
 	}
@@ -52,9 +60,8 @@ func FromAccount(a *auth.Account) (*AuthFile, error) {
 }
 
 // ToAccount rebuilds a cursor-proto *auth.Account from the on-disk auth
-// file. Session-scoped fields (SessionID, ConfigVersion, ClientKey,
-// ChecksumSession) are left blank so callers can regenerate them via
-// Account.FillSessionDefaults after loading.
+// file. ChecksumSession remains blank so Account.FillSessionDefaults can
+// derive it from the persisted checksum identity.
 func (a *AuthFile) ToAccount() (*auth.Account, error) {
 	if a == nil {
 		return nil, fmt.Errorf("nil auth file")
@@ -71,24 +78,33 @@ func (a *AuthFile) ToAccount() (*auth.Account, error) {
 		return nil, fmt.Errorf("parse expired: %w", errExpires)
 	}
 	acc := &auth.Account{
-		Email:           a.Email,
-		UserID:          a.UserID,
-		AccessToken:     a.AccessToken,
-		RefreshToken:    a.RefreshToken,
-		AuthID:          a.AuthID,
-		AuthType:        a.AuthKind,
-		IssuedAt:        issued,
-		ExpiresAt:       expires,
-		MachineID:       a.MachineID,
-		MacMachineID:    a.MacMachineID,
-		ClientOS:        a.ClientOS,
-		ClientOSVersion: a.ClientOSVersion,
-		ClientArch:      a.ClientArch,
-		ClientShell:     a.ClientShell,
-		WorkspacePath:   a.WorkspacePath,
-		ProxyURL:        a.ProxyURL,
-		Refreshable:     a.Refreshable,
-		RefreshLead:     time.Duration(a.RefreshLeadNanos),
+		Email:             a.Email,
+		UserID:            a.UserID,
+		AccessToken:       a.AccessToken,
+		RefreshToken:      a.RefreshToken,
+		AuthID:            a.AuthID,
+		AuthType:          a.AuthKind,
+		TeamID:            a.TeamID,
+		PrivacyMode:       a.PrivacyMode,
+		InternalUser:      a.InternalUser,
+		IssuedAt:          issued,
+		ExpiresAt:         expires,
+		MachineID:         a.MachineID,
+		MacMachineID:      a.MacMachineID,
+		ChecksumMachineID: a.ChecksumMachineID,
+		SessionID:         a.SessionID,
+		ConfigVersion:     a.ConfigVersion,
+		ClientKey:         a.ClientKey,
+		ClientOS:          a.ClientOS,
+		ClientOSVersion:   a.ClientOSVersion,
+		ClientArch:        a.ClientArch,
+		ClientType:        a.ClientType,
+		ClientLayout:      a.ClientLayout,
+		ClientShell:       a.ClientShell,
+		WorkspacePath:     a.WorkspacePath,
+		ProxyURL:          a.ProxyURL,
+		Refreshable:       a.Refreshable,
+		RefreshLead:       time.Duration(a.RefreshLeadNanos),
 	}
 	return acc, nil
 }

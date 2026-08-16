@@ -124,6 +124,19 @@ func TestBuildInteractionResponseApproved_WebSearch(t *testing.T) {
 	}
 }
 
+func TestBuildInteractionResponseApproved_WebSearchOmitsZeroID(t *testing.T) {
+	query := &cursorpb.AgentV1_InteractionQuery{
+		Query: &cursorpb.AgentV1_InteractionQuery_WebSearchRequestQuery{
+			WebSearchRequestQuery: &cursorpb.AgentV1_WebSearchRequestQuery{},
+		},
+	}
+	got := buildInteractionResponseApproved(query)
+	want := []byte{0x32, 0x04, 0x12, 0x02, 0x0a, 0x00}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("approved response = %x, want %x", got, want)
+	}
+}
+
 func TestBidiAppendUsesConnectEnvelope(t *testing.T) {
 	t.Helper()
 	type capturedRequest struct {
@@ -158,6 +171,12 @@ func TestBidiAppendUsesConnectEnvelope(t *testing.T) {
 	}
 	if appendRequest.GetRequestId().GetRequestId() != "request-id" || appendRequest.GetAppendSeqno() != 1 {
 		t.Fatalf("unexpected BidiAppend request: %v", &appendRequest)
+	}
+	if appendRequest.GetData() != "" {
+		t.Fatalf("data field = %q, want empty when data_binary is used", appendRequest.GetData())
+	}
+	if !bytes.Equal(appendRequest.GetDataBinary(), []byte{0x32, 0x00}) {
+		t.Fatalf("data_binary = %x, want 3200", appendRequest.GetDataBinary())
 	}
 }
 

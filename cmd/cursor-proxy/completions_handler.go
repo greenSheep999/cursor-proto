@@ -114,7 +114,7 @@ func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan 
 
 	id := "cmpl-" + uuid.NewString()
 	created := time.Now().Unix()
-	assistantSent := ""
+	var assistantText assistantTextTracker
 	sawFinish := false
 	sawAnyOutput := false
 	var lastUsage *translator.Usage
@@ -131,9 +131,8 @@ func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan 
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := assistantText.acceptSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				commit()
 				writeLegacyChunk(w, flusher, id, created, model, delta, "")
 				sawAnyOutput = true
@@ -146,6 +145,7 @@ func streamLegacyCompletions(w http.ResponseWriter, model string, events <-chan 
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			trEv.Text = assistantText.acceptDelta(trEv.Text)
 			if trEv.Text != "" {
 				commit()
 				writeLegacyChunk(w, flusher, id, created, model, trEv.Text, "")

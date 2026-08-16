@@ -47,9 +47,7 @@ const DefaultAuthDirEnv = "CLIPROXY_AUTH_DIR"
 // Every field the runtime Cursor client (cursor-proto's auth + executor
 // packages) needs to make an authenticated request must be persisted
 // here so the plugin can rebuild an *auth.Account from StorageJSON
-// alone. The exact shape mirrors auth.Account in this repo, minus the
-// non-persistent session fields that FillSessionDefaults regenerates
-// on load.
+// alone. The exact shape mirrors auth.Account in this repo.
 //
 // JSON key naming follows CPA's other provider token storages
 // (access_token / refresh_token / expired / last_refresh / email /
@@ -79,12 +77,21 @@ type CursorTokenStorage struct {
 	// AuthKind classifies the identity provider that fronts Cursor's
 	// login flow (e.g. "Auth_0", "workos"). Copied from pr.Type.
 	AuthKind string `json:"auth_kind,omitempty"`
+	TeamID   string `json:"team_id,omitempty"`
+
+	PrivacyMode  int  `json:"privacy_mode,omitempty"`
+	InternalUser bool `json:"internal_user,omitempty"`
 
 	// MachineID and MacMachineID pin the device identifiers so requests
 	// coming from CPA look like the same physical device to Cursor.
 	// If empty, the plugin regenerates them at load time.
-	MachineID    string `json:"machine_id,omitempty"`
-	MacMachineID string `json:"mac_machine_id,omitempty"`
+	MachineID         string `json:"machine_id,omitempty"`
+	MacMachineID      string `json:"mac_machine_id,omitempty"`
+	ChecksumMachineID string `json:"checksum_machine_id,omitempty"`
+
+	SessionID     string `json:"session_id,omitempty"`
+	ConfigVersion string `json:"config_version,omitempty"`
+	ClientKey     string `json:"client_key,omitempty"`
 
 	// Client platform fields describe the Cursor IDE environment presented to
 	// upstream. They are optional for backward compatibility; the executor
@@ -92,6 +99,8 @@ type CursorTokenStorage struct {
 	ClientOS        string `json:"client_os,omitempty"`
 	ClientOSVersion string `json:"client_os_version,omitempty"`
 	ClientArch      string `json:"client_arch,omitempty"`
+	ClientType      string `json:"client_type,omitempty"`
+	ClientLayout    string `json:"client_layout,omitempty"`
 	ClientShell     string `json:"client_shell,omitempty"`
 	WorkspacePath   string `json:"workspace_path,omitempty"`
 

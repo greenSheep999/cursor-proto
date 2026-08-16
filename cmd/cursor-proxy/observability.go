@@ -68,10 +68,9 @@ type Capabilities struct {
 	// / cache_creation_input_tokens support on requests and responses.
 	PromptCaching CapPromptCaching `json:"prompt_caching"`
 
-	// ServerTools: whether Anthropic-native server-side tools
-	// (web_search_20250305 etc.) are honored. Always false — Cursor
-	// upstream doesn't run them; proxy returns HTTP 400 instead of
-	// silently dropping.
+	// ServerTools: whether supported Anthropic server-side tools are mapped
+	// onto Cursor's native agent tools. WebSearch and WebFetch are supported;
+	// unrelated Anthropic-hosted tools still return a clear HTTP 400.
 	ServerTools bool `json:"server_tools"`
 
 	// MCPTools: whether tool names using the mcp__server__tool
@@ -185,7 +184,7 @@ func currentCapabilities() Capabilities {
 		ToolUseJSONInput:      true,
 		MultiTurnToolLoop:     true,
 		Thinking:              true,
-		ServerTools:           false,
+		ServerTools:           true,
 		MCPTools:              true,
 		EffortMapping:         true,
 		AnthropicModelAliases: true,

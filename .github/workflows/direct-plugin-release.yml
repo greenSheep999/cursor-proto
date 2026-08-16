@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Existing public release tag to receive cursor.so
         required: true
-        default: cursor3.15/v0.4.0
+        default: cursor3.16/v0.7.0
         type: string
 
 permissions:

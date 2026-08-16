@@ -59,3 +59,16 @@ func TestParseTrailer_OK(t *testing.T) {
 		t.Fatalf("Err() = %v, want nil for OK", got.Err())
 	}
 }
+
+func TestParseTrailer_ConnectEndStreamRegionGate(t *testing.T) {
+	raw := []byte(`{"error":{"code":"resource_exhausted","message":"Error","details":[{"debug":{"error":"ERROR_UNSUPPORTED_REGION"}}]}}`)
+	got := ParseTrailer(raw)
+	if got == nil || got.Code != 8 || got.Message != "ERROR_UNSUPPORTED_REGION" {
+		t.Fatalf("ParseTrailer(connect end-stream) = %#v, want decoded region error", got)
+	}
+	frame := append([]byte{0x02, 0, 0, 0, byte(len(raw))}, raw...)
+	payload, trailer, rest, ok := splitConnectFrame(frame)
+	if !ok || !trailer || len(rest) != 0 || string(payload) != string(raw) {
+		t.Fatalf("splitConnectFrame end-stream: ok=%v trailer=%v rest=%d payload=%q", ok, trailer, len(rest), payload)
+	}
+}

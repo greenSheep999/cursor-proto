@@ -13,6 +13,9 @@ func TestApplyCommonHeadersUsesAccountPlatform(t *testing.T) {
 		ClientOS:        "win32",
 		ClientOSVersion: "10.0.22631",
 		ClientArch:      "x64",
+		ClientType:      "glass",
+		ClientLayout:    "glass",
+		InternalUser:    true,
 	}
 	req := httptest.NewRequest("POST", "https://api3.cursor.sh/test", nil)
 
@@ -22,10 +25,38 @@ func TestApplyCommonHeadersUsesAccountPlatform(t *testing.T) {
 		"x-cursor-client-os":         "win32",
 		"x-cursor-client-os-version": "10.0.22631",
 		"x-cursor-client-arch":       "x64",
+		"x-cursor-client-type":       "glass",
+		"x-cursor-client-layout":     "glass",
 	} {
 		if got := req.Header.Get(header); got != want {
 			t.Errorf("%s = %q, want %q", header, got, want)
 		}
+	}
+}
+
+func TestApplyCommonHeadersDefaultsToCapturedIDESurface(t *testing.T) {
+	req := httptest.NewRequest("POST", "https://api2.cursor.sh/test", nil)
+	ApplyCommonHeaders(req, &auth.Account{AccessToken: "token", PrivacyMode: 1}, "request-id")
+	if got := req.Header.Get("x-cursor-client-type"); got != "ide" {
+		t.Fatalf("client type = %q, want ide", got)
+	}
+	if got := req.Header.Get("x-cursor-client-layout"); got != "unifiedAgent" {
+		t.Fatalf("client layout = %q, want unifiedAgent", got)
+	}
+	if got := req.Header.Get("x-ghost-mode"); got != "true" {
+		t.Fatalf("ghost mode = %q, want true", got)
+	}
+	if got := req.Header.Get("x-cursor-client-commit"); got != "" {
+		t.Fatalf("normal-user commit header = %q, want omitted", got)
+	}
+	if got := req.Header.Get("x-cursor-client-os-version"); got != "" {
+		t.Fatalf("normal-user os-version header = %q, want omitted", got)
+	}
+	if got := req.Header.Get("x-amzn-trace-id"); got != "Root=request-id" {
+		t.Fatalf("amzn trace = %q, want Root=request-id", got)
+	}
+	if got := req.Header.Get("traceparent"); len(got) != 55 || got[:3] != "00-" {
+		t.Fatalf("traceparent = %q, want W3C trace id", got)
 	}
 }
 

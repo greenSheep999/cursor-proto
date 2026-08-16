@@ -36,8 +36,8 @@ different questions:
 
 | Question | String | Where it lives | Example |
 |---|---|---|---|
-| Which Cursor family does this binary target? | **Cursor line** (`major.minor`) | Tag prefix, artifact filename, cursor2api's `cursor_version_lock` field | `3.15` |
-| Which exact Cursor build does it impersonate on the wire? | **Impersonated version** (`major.minor.patch`) | `x-cursor-client-version` header, `CursorClientVersion` constant | `3.15.19` |
+| Which Cursor family does this binary target? | **Cursor line** (`major.minor`) | Tag prefix, artifact filename, cursor2api's `cursor_version_lock` field | `3.16` |
+| Which exact Cursor build does it impersonate on the wire? | **Impersonated version** (`major.minor.patch`) | `x-cursor-client-version` header, `CursorClientVersion` constant | `3.16.17` |
 | Which `cursor-proto` release is this binary? | **Proto version** (`v<semver>`) | Git tag suffix, `main.ProtoVersion` ldflag | `v0.4.0` |
 
 **Why the tag stops at major.minor**: cursor2api's licence payload
@@ -72,11 +72,11 @@ Response shape (stable, additive):
 
 ```json
 {
-  "cursor_line":           "3.15",
-  "impersonated_version":  "3.15.19",
-  "impersonated_commit":   "de07bee81cefe43461ebf4f40c3d2d78d15052a0",
-  "release_hash":          "de07bee81cefe43461ebf4f40c3d2d78d15052aa",
-  "proto_version":         "cursor3.15/v0.4.0"
+  "cursor_line":           "3.16",
+  "impersonated_version":  "3.16.17",
+  "impersonated_commit":   "6b2afae0257df2bb5e1835f15165dc2f0de056b0",
+  "release_hash":          "6b2afae0257df2bb5e1835f15165dc2f0de056b2",
+  "proto_version":         "cursor3.16/v0.7.0"
 }
 ```
 
@@ -98,6 +98,7 @@ cursor3.10/v0.1.1    # patch on the 3.10 line — bug fix, new flag, whatever
 cursor3.11/v0.2.0    # first release impersonating Cursor 3.11.x
 cursor3.11/v0.2.1    # patch on the 3.11 line
 cursor3.15/v0.4.0    # first release impersonating Cursor 3.15.x
+cursor3.16/v0.7.0    # first release impersonating Cursor 3.16.x
 ```
 
 **Rules**:
@@ -119,7 +120,7 @@ cursor3.15/v0.4.0    # first release impersonating Cursor 3.15.x
 ## Branch model
 
 - `main` — always tracks the **latest supported Cursor version**. Right
-  now that's `cursor3.15`; before that it was `cursor3.11`.
+  now that's `cursor3.16`; before that it was `cursor3.15`.
 - `release/cursor-3.10`, `release/cursor-3.11`, … — long-lived
   maintenance branches, one per Cursor version we still ship. Only
   accepts bug fixes and safety patches; never rebased.
@@ -136,7 +137,7 @@ cursor3.15/v0.4.0    # first release impersonating Cursor 3.15.x
 4. On `main`, do the version bump: update `executor/headers.go`
    constants, `auth/machineid.go` release hash, regenerate protobuf,
    commit.
-5. Tag the first new-line release on `main`: `git tag cursor3.15/v0.4.0 && git push --tags`.
+5. Tag the first new-line release on `main`: `git tag cursor3.16/v0.7.0 && git push --tags`.
 
 **Patching an older line**:
 
@@ -183,6 +184,8 @@ Tag scheme (per Cursor version):
 - `cursor3.11-latest` — latest release on the 3.11 line
 - `cursor3.15-v0.4.0` — exact release
 - `cursor3.15-latest` — latest release on the 3.15 line
+- `cursor3.16-v0.7.0` — exact release
+- `cursor3.16-latest` — latest release on the 3.16 line
 - `latest` — alias for the **current `main`** line's latest (moves when
   we cut a new Cursor version on `main`). **Do not pin to this in
   production**; use `cursor<X.Y>-latest` or a pinned semver.
@@ -201,6 +204,7 @@ env:
   CURSOR_PROTO_TAG_3_10: cursor3.10/v0.1.1
   CURSOR_PROTO_TAG_3_11: cursor3.11/v0.2.0
   CURSOR_PROTO_TAG_3_15: cursor3.15/v0.4.0
+  CURSOR_PROTO_TAG_3_16: cursor3.16/v0.7.0
 ```
 
 Download the matching artifact:
@@ -225,6 +229,7 @@ gate's `cursor_version_lock` field.
 - `cursor_version_lock: "3.10"` — spawn `cursor-proxy-cursor3.10-*`
 - `cursor_version_lock: "3.11"` — spawn `cursor-proxy-cursor3.11-*`
 - `cursor_version_lock: "3.15"` — spawn `cursor-proxy-cursor3.15-*`
+- `cursor_version_lock: "3.16"` — spawn `cursor-proxy-cursor3.16-*`
 - `cursor_version_lock: null` — spawn the latest Cursor line bundled
   in this desktop app build (typically the highest `cursor<X.Y>` we
   ship)
@@ -250,7 +255,8 @@ tags win — please update this document.
 |-------------|--------------------|------------------------|---------|--------------------|
 | 3.10        | `cursor3.10/v0.1.6` (also legacy `v0.1.0`) | `release/cursor-3.10` | maintained (security patches only) | Cursor 3.10.20     |
 | 3.11        | `cursor3.11/v0.3.8` | `release/cursor-3.11` | maintained | Cursor 3.11.19     |
-| 3.15        | `cursor3.15/v0.6.7` | `main`                | current | Cursor 3.15.19     |
+| 3.15        | `cursor3.15/v0.6.7` | `release/cursor-3.15` | maintained | Cursor 3.15.19     |
+| 3.16        | `cursor3.16/v0.7.0` | `main`                | current | Cursor 3.16.17     |
 
 Note: `cursor3.11/v0.3.0` is the first release with **agent mode**
 (the /v1/agents/* endpoint tree backed by @cursor/sdk). Wire mode
@@ -258,8 +264,8 @@ consumers who don't need agents can keep using `cursor3.11/v0.2.7`
 and skip the ~80 MB Node.js runtime — see docs/sdk-integration.md
 for the trade-off. Agent mode is NOT back-ported to the 3.10 line.
 
-`main` currently tracks the 3.15 line. The 3.11 line is maintained on
-`release/cursor-3.11`.
+`main` currently tracks the 3.16 line. Older supported lines are maintained
+on their matching `release/cursor-<X.Y>` branches.
 
 ---
 

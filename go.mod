@@ -8,3 +8,5 @@ require (
 	golang.org/x/net v0.57.0
 	google.golang.org/protobuf v1.36.11
 )
+
+require github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728

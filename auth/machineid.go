@@ -29,6 +29,11 @@ const (
 	KnownReleaseHash_3_10_20 = "4071c661bcb367c518becc7b3d4d57cbd69d2291d8b302c558d79080f8fd4f75"
 	KnownReleaseHash_3_11_19 = "bf249e6efb5b097f23d7e21d7283429f0760b74a"
 	KnownReleaseHash_3_15_19 = "de07bee81cefe43461ebf4f40c3d2d78d15052aa"
+	KnownReleaseHash_3_16_17 = "6b2afae0257df2bb5e1835f15165dc2f0de056b2"
+	// KnownChecksumMachineID_3_16_17 is the machineId value observed in the
+	// 3.16.17 IDE's request-header builder. It intentionally differs from both
+	// the 3.16 release hash and the host's stable device MachineID.
+	KnownChecksumMachineID_3_16_17 = KnownReleaseHash_3_10_20
 )
 
 // KnownReleaseHashFor returns the releaseHash for a specific Cursor
@@ -43,6 +48,8 @@ func KnownReleaseHashFor(version string) string {
 		return KnownReleaseHash_3_11_19
 	case "3.15.19":
 		return KnownReleaseHash_3_15_19
+	case "3.16.17":
+		return KnownReleaseHash_3_16_17
 	default:
 		return ""
 	}

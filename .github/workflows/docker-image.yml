@@ -33,7 +33,7 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/cursor-proxy
   # Primary Cursor line — the one bare `latest` follows on tag pushes.
   # Bump this in the same commit that promotes a new primary line.
-  LATEST_CURSOR_LINE: cursor3.11
+  LATEST_CURSOR_LINE: cursor3.16
 
 permissions:
   contents: read

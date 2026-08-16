@@ -31,7 +31,7 @@ func TestNonStreamAnthropicRejectsEmptyZeroUsageUpstream(t *testing.T) {
 	close(events)
 
 	rec := httptest.NewRecorder()
-	nonStreamAnthropic(rec, "claude-test", events, simCacheDecision{}, nil)
+	nonStreamAnthropic(rec, "claude-test", events, simCacheDecision{}, nil, false)
 
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502 (body=%s)", rec.Code, rec.Body.String())
@@ -55,7 +55,7 @@ func TestAllProtocolSurfacesRejectEmptyZeroUsageUpstream(t *testing.T) {
 		{
 			name: "anthropic-stream",
 			run: func(w http.ResponseWriter, events <-chan executor.ChatEvent) {
-				streamAnthropic(w, "claude-test", events, simCacheDecision{}, nil)
+				streamAnthropic(w, "claude-test", events, simCacheDecision{}, nil, false)
 			},
 		},
 		{

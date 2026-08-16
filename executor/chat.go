@@ -97,6 +97,9 @@ type ChatRequest struct {
 
 	WebSearch bool
 	WebFetch  bool
+	// ModelParameters selects a live catalog variant without hard-coding its
+	// generated slug. Explicit variant IDs still take precedence.
+	ModelParameters map[string]string
 
 	Attachments []Attachment
 
@@ -121,6 +124,9 @@ type ChatRequest struct {
 	// SendToInteractionListener toggles UserMessageAction.send_to_interaction_listener
 	// (field 3). Nil leaves the field unset. Exposed for research probes.
 	SendToInteractionListener *bool
+
+	resolvedModel *cursorpb.AgentV1_RequestedModel
+	runID         string
 }
 
 // ChatEvent is one decoded server-side envelope from the SSE stream.
@@ -151,6 +157,14 @@ type ChatEvent struct {
 // Cursor pairs the two via the shared request-id string.
 func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEvent, error) {
 	acc := c.CurrentAccount()
+	requestID, runID, agentClientMsg, err := c.prepareChatRequest(req, acc)
+	if err != nil {
+		return nil, err
+	}
+	return c.runChatHTTP1SSE(ctx, req, acc, requestID, runID, agentClientMsg)
+}
+
+func (c *Client) prepareChatRequest(req *ChatRequest, acc *auth.Account) (string, string, []byte, error) {
 	// Historical bug (verified fixed 2026-07-19): this used to set
 	// `req.Mode = 3` when unset, on the assumption that "3 = agent". The
 	// proto enum actually maps 3 to AGENT_MODE_PLAN, so every default call
@@ -164,10 +178,20 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 		req.Model = "claude-4.5-sonnet"
 	}
 	requestID := auth.GenerateRequestID()
+	runID := auth.GenerateRequestID()
+	req.runID = runID
 	if req.ConversationID == "" {
 		req.ConversationID = auth.GenerateSessionID()
 	}
 	messageID := auth.GenerateRequestID()
+
+	resolvedModel, resolved, err := c.resolveRequestedModel(req.Model, req.ModelParameters)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if resolved {
+		req.resolvedModel = resolvedModel
+	}
 
 	// If the caller supplied a SystemPrompt, prepend it to the user turn.
 	// Cursor's backend rejects custom_system_prompt outright; splicing works
@@ -191,53 +215,43 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 		req.UserMessage = spliceHistory(req.History, req.UserMessage)
 	}
 
-	// Build the full AgentRunRequest. The BidiAppend payload wraps it as
-	// field 1 of a manually-built "AgentClientMessage" (Cursor doesn't ship a
-	// dedicated proto message for this outer envelope; per CursorGateway's
-	// reverse-engineering the wrapper is just `{ field 1: AgentRunRequest }`).
+	// Build the full AgentRunRequest and wrap it as AgentClientMessage.run_request.
 	agentRun, err := c.buildAgentRunRequest(req, messageID, acc)
 	if err != nil {
-		return nil, err
+		return "", "", nil, err
 	}
 	agentRunBytes, err := proto.Marshal(agentRun)
 	if err != nil {
-		return nil, fmt.Errorf("marshal AgentRunRequest: %w", err)
+		return "", "", nil, fmt.Errorf("marshal AgentRunRequest: %w", err)
 	}
 	agentClientMsg := appendMessageField(nil, 1, agentRunBytes)
+	return requestID, runID, agentClientMsg, nil
+}
 
-	// Build the RunSSE body: envelope + BidiRequestId proto.
-	bidiRequestID := &cursorpb.AiserverV1_BidiRequestId{RequestId: requestID}
-	bidiRequestIDBytes, err := proto.Marshal(bidiRequestID)
+func (c *Client) runChatHTTP1SSE(ctx context.Context, req *ChatRequest, acc *auth.Account, requestID, runID string, agentClientMsg []byte) (<-chan ChatEvent, error) {
+	bidiRequestIDBytes, err := proto.Marshal(&cursorpb.AiserverV1_BidiRequestId{RequestId: requestID})
 	if err != nil {
 		return nil, fmt.Errorf("marshal BidiRequestId: %w", err)
 	}
-	sseBody := addConnectEnvelope(bidiRequestIDBytes, false)
-
-	// Kick off the SSE request first (does not block on body; we'll read below).
 	sseURL := fmt.Sprintf("%s/agent.v1.AgentService/RunSSE", c.API3)
-	sseReq, err := http.NewRequestWithContext(ctx, "POST", sseURL, bytes.NewReader(sseBody))
+	sseReq, err := http.NewRequestWithContext(ctx, http.MethodPost, sseURL, bytes.NewReader(addConnectEnvelope(bidiRequestIDBytes, false)))
 	if err != nil {
 		return nil, err
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
 	ApplyCommonHeaders(sseReq, acc, requestID)
+	sseReq.Header.Set("x-original-request-id", runID)
 
-	// Use a client without a body timeout — the stream can be long.
-	// c.NewStreamClient() honors -http-version so operators can force
-	// HTTP/1.1 when a middlebox mangles h2 SSE frames.
-	sseClient := c.NewStreamClient()
-	sseResp, err := sseClient.Do(sseReq)
+	sseResp, err := c.NewStreamClient().Do(sseReq)
 	if err != nil {
 		return nil, fmt.Errorf("RunSSE dial: %w", err)
 	}
-	if sseResp.StatusCode != 200 {
+	if sseResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(sseResp.Body, 64<<10))
 		sseResp.Body.Close()
 		return nil, fmt.Errorf("RunSSE http %d: %s", sseResp.StatusCode, string(body))
 	}
-
-	// Send the first BidiAppend carrying the AgentClientMessage.
-	if err := c.bidiAppendForAccount(ctx, acc, requestID, 0, agentClientMsg); err != nil {
+	if err := c.bidiAppendForAccount(ctx, acc, requestID, runID, 0, agentClientMsg); err != nil {
 		sseResp.Body.Close()
 		return nil, fmt.Errorf("BidiAppend seed: %w", err)
 	}
@@ -249,7 +263,7 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 		if len(payload) == 0 {
 			return nil
 		}
-		err := c.bidiAppendForAccount(ctx, acc, requestID, appendSeqno, payload)
+		err := c.bidiAppendForAccount(ctx, acc, requestID, runID, appendSeqno, payload)
 		appendSeqno++
 		return err
 	}
@@ -323,6 +337,9 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 					msg := &cursorpb.AgentV1_AgentServerMessage{}
 					if e := proto.Unmarshal(payload, msg); e == nil {
 						ev.Server = msg
+					}
+					if ev.Server != nil {
+						msg = ev.Server
 						if query := msg.GetInteractionQuery(); query != nil && approveInteraction != nil {
 							if query.GetWebSearchRequestQuery() != nil || query.GetWebFetchRequestQuery() != nil {
 								if err := approveInteraction(query); err != nil {
@@ -406,7 +423,10 @@ func buildInteractionResponseApproved(query *cursorpb.AgentV1_InteractionQuery) 
 		return nil
 	}
 	approved := appendMessageField(nil, 1, nil)
-	interaction := appendVarintField(nil, 1, uint64(query.GetId()))
+	var interaction []byte
+	if query.GetId() != 0 {
+		interaction = appendVarintField(interaction, 1, uint64(query.GetId()))
+	}
 	interaction = appendMessageField(interaction, responseField, approved)
 	return appendMessageField(nil, 6, interaction)
 }
@@ -469,13 +489,12 @@ func bytesContains(haystack, needle []byte) bool {
 // 5-byte data envelope; the service may acknowledge a bare unary protobuf with
 // HTTP 200 while silently ignoring it, leaving WebSearch streams on heartbeats.
 func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, payload []byte) error {
-	return c.bidiAppendForAccount(ctx, c.CurrentAccount(), requestID, seq, payload)
+	return c.bidiAppendForAccount(ctx, c.CurrentAccount(), requestID, requestID, seq, payload)
 }
 
-func (c *Client) bidiAppendForAccount(ctx context.Context, acc *auth.Account, requestID string, seq int64, payload []byte) error {
+func (c *Client) bidiAppendForAccount(ctx context.Context, acc *auth.Account, requestID, originalRequestID string, seq int64, payload []byte) error {
 	appendRequest, err := proto.Marshal(&cursorpb.AiserverV1_BidiAppendRequest{
-		Data:        hexEncode(payload), // legacy field, CursorGateway still populates this
-		DataBinary:  payload,            // 3.10 preferred wire form
+		DataBinary:  append([]byte(nil), payload...),
 		RequestId:   &cursorpb.AiserverV1_BidiRequestId{RequestId: requestID},
 		AppendSeqno: seq,
 	})
@@ -490,7 +509,8 @@ func (c *Client) bidiAppendForAccount(ctx context.Context, acc *auth.Account, re
 		return err
 	}
 	req.Header.Set("content-type", "application/grpc-web+proto")
-	ApplyCommonHeaders(req, acc, auth.GenerateRequestID())
+	ApplyCommonHeaders(req, acc, requestID)
+	req.Header.Set("x-original-request-id", originalRequestID)
 
 	cli := c.NewUnaryClient(30 * time.Second)
 	resp, err := cli.Do(req)

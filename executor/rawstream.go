@@ -9,7 +9,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/router-for-me/cursor-proto/auth"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
 
@@ -22,34 +21,10 @@ import (
 // dump captures without duplicating the RunSSE / BidiAppend orchestration.
 func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadCloser, error) {
 	acc := c.CurrentAccount()
-	// Do NOT default Mode to 3 here — 3 is PLAN in Cursor's proto, not
-	// AGENT. See chat.go RunChat comment for full context. Leave the field
-	// at 0; downstream request builders normalise UNSPECIFIED to AGENT.
-	if req.Model == "" {
-		req.Model = "claude-4.5-sonnet"
-	}
-	requestID := auth.GenerateRequestID()
-	if req.ConversationID == "" {
-		req.ConversationID = auth.GenerateSessionID()
-	}
-	messageID := auth.GenerateRequestID()
-
-	if req.SystemPrompt != "" {
-		req.UserMessage = spliceSystemPrompt(req.SystemPrompt, req.UserMessage)
-	}
-	if len(req.History) > 0 && !req.OmitSplicedHistory {
-		req.UserMessage = spliceHistory(req.History, req.UserMessage)
-	}
-
-	agentRun, err := c.buildAgentRunRequest(req, messageID, acc)
+	requestID, runID, agentClientMsg, err := c.prepareChatRequest(req, acc)
 	if err != nil {
 		return nil, err
 	}
-	agentRunBytes, err := proto.Marshal(agentRun)
-	if err != nil {
-		return nil, fmt.Errorf("marshal AgentRunRequest: %w", err)
-	}
-	agentClientMsg := appendMessageField(nil, 1, agentRunBytes)
 
 	bidiRequestID := &cursorpb.AiserverV1_BidiRequestId{RequestId: requestID}
 	bidiRequestIDBytes, err := proto.Marshal(bidiRequestID)
@@ -65,6 +40,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
 	ApplyCommonHeaders(sseReq, acc, requestID)
+	sseReq.Header.Set("x-original-request-id", runID)
 
 	sseClient := c.NewStreamClient()
 	sseResp, err := sseClient.Do(sseReq)
@@ -77,7 +53,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 		return nil, fmt.Errorf("RunSSE http %d: %s", sseResp.StatusCode, string(body))
 	}
 
-	if err := c.bidiAppendForAccount(ctx, acc, requestID, 0, agentClientMsg); err != nil {
+	if err := c.bidiAppendForAccount(ctx, acc, requestID, runID, 0, agentClientMsg); err != nil {
 		sseResp.Body.Close()
 		return nil, fmt.Errorf("BidiAppend seed: %w", err)
 	}

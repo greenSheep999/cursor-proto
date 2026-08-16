@@ -287,7 +287,7 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 	}
 
 	tr := translator.NewGeminiStreamWriter(model)
-	assistantSent := ""
+	var assistantText assistantTextTracker
 	sawTurnEnd := false
 	wroteTurnEnd := false
 	sawOutput := false
@@ -304,9 +304,8 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := assistantText.acceptSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				sawOutput = true
 				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
@@ -318,6 +317,7 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			trEv.Text = assistantText.acceptDelta(trEv.Text)
 			if trEv.Text != "" {
 				sawOutput = true
 			}
@@ -355,7 +355,7 @@ func streamGemini(w http.ResponseWriter, model string, events <-chan executor.Ch
 
 func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
 	acc := translator.GeminiNonStreamingAccumulator{Model: model}
-	assistantSent := ""
+	var assistantText assistantTextTracker
 	var trailerErr *executor.TrailerStatus
 	for ev := range events {
 		if ev.Trailer {
@@ -368,9 +368,8 @@ func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := assistantText.acceptSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				acc.Consume(&translator.Event{Kind: translator.EventTextDelta, Text: delta})
 			}
 			continue
@@ -378,6 +377,9 @@ func nonStreamGemini(w http.ResponseWriter, model string, events <-chan executor
 		trEv := translateEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
+		}
+		if trEv.Kind == translator.EventTextDelta {
+			trEv.Text = assistantText.acceptDelta(trEv.Text)
 		}
 		acc.Consume(trEv)
 	}

@@ -23,6 +23,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -45,11 +46,12 @@ import (
 // ---------- OpenAI schemas ----------
 
 type openaiChatRequest struct {
-	Model         string               `json:"model"`
-	Messages      []openaiMessage      `json:"messages"`
-	Stream        bool                 `json:"stream"`
-	Tools         []openaiTool         `json:"tools"`
-	StreamOptions *openaiStreamOptions `json:"stream_options"`
+	Model          string               `json:"model"`
+	Messages       []openaiMessage      `json:"messages"`
+	Stream         bool                 `json:"stream"`
+	Tools          []openaiTool         `json:"tools"`
+	ResponseFormat json.RawMessage      `json:"response_format"`
+	StreamOptions  *openaiStreamOptions `json:"stream_options"`
 }
 
 // openaiStreamOptions mirrors OpenAI's `stream_options` object. Today only
@@ -273,10 +275,7 @@ func main() {
 		ideReloader = makeIDEAccountReloader(dbPath, startMTime)
 	}
 
-	c := executor.NewClient(acc,
-		executor.WithHTTPVersion(httpVer),
-		executor.WithProxyURL(strings.TrimSpace(*upstreamProxy)),
-	)
+	c := newWireClient(acc, httpVer, *upstreamProxy)
 	c.API3 = c.API2 // chat also lives on api2
 	if ideReloader != nil {
 		c.AccountReloader = ideReloader
@@ -365,6 +364,14 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }
 
+func newWireClient(acc *auth.Account, httpVersion transport.Version, upstreamProxy string) *executor.Client {
+	options := []executor.Option{executor.WithHTTPVersion(httpVersion)}
+	if proxyURL := strings.TrimSpace(upstreamProxy); proxyURL != "" {
+		options = append(options, executor.WithProxyURL(proxyURL))
+	}
+	return executor.NewClient(acc, options...)
+}
+
 // ---------- /v1/models ----------
 
 func modelsHandler(c *executor.Client) http.HandlerFunc {
@@ -416,6 +423,7 @@ func openaiChatHandler(c *executor.Client, cacheStore *simcache.Store) http.Hand
 			}
 			convTurns = append(convTurns, m)
 		}
+		systemPrompt = appendStructuredOutputInstruction(systemPrompt, req.ResponseFormat)
 
 		lastUserIdx := -1
 		for i := len(convTurns) - 1; i >= 0; i-- {
@@ -495,18 +503,22 @@ func convertOpenAITools(in []openaiTool) []executor.ToolDefinition {
 	return out
 }
 
-// convertAnthropicTools converts Anthropic-style `tools[]` into
-// executor.ToolDefinition. Returns the converted list plus, if any
-// server-side tools were rejected, a description of the first offender so
-// the handler can return a helpful 400 instead of dropping tools silently.
-func convertAnthropicTools(in []anthropicTool) (out []executor.ToolDefinition, unsupportedType string) {
+// convertAnthropicTools converts Anthropic-style `tools[]` into Cursor tool
+// definitions and native server-tool flags. Cursor has its own WebSearch and
+// WebFetch implementations, so matching Anthropic tools are translated.
+func convertAnthropicTools(in []anthropicTool) (out []executor.ToolDefinition, webSearch, webFetch bool, unsupportedType string) {
 	if len(in) == 0 {
-		return nil, ""
+		return nil, false, false, ""
 	}
 	out = make([]executor.ToolDefinition, 0, len(in))
 	for _, t := range in {
 		if isAnthropicServerTool(t) {
-			if unsupportedType == "" {
+			switch {
+			case strings.HasPrefix(t.Type, "web_search_"):
+				webSearch = true
+			case strings.HasPrefix(t.Type, "web_fetch_"):
+				webFetch = true
+			case unsupportedType == "":
 				unsupportedType = t.Type
 			}
 			continue
@@ -520,7 +532,7 @@ func convertAnthropicTools(in []anthropicTool) (out []executor.ToolDefinition, u
 			InputSchema: t.InputSchema,
 		})
 	}
-	return out, unsupportedType
+	return out, webSearch, webFetch, unsupportedType
 }
 
 func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, includeUsage bool, decision simCacheDecision, clientToolNames []string) {
@@ -551,7 +563,7 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 
 	tr := translator.NewOpenAIStreamWriter(model)
 	tr.IncludeUsage = includeUsage
-	assistantSent := ""
+	var assistantText assistantTextTracker
 	sawTurnEnd := false
 	wroteTurnEnd := false
 	sawOutput := false
@@ -568,9 +580,8 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 			continue
 		}
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			delta := diffSuffix(assistantSent, blob.AssistantText)
+			delta := assistantText.acceptSnapshot(blob.AssistantText)
 			if delta != "" {
-				assistantSent = blob.AssistantText
 				sawOutput = true
 				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
 			}
@@ -582,6 +593,7 @@ func streamOpenAI(w http.ResponseWriter, model string, events <-chan executor.Ch
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			trEv.Text = assistantText.acceptDelta(trEv.Text)
 			if trEv.Text != "" {
 				sawOutput = true
 			}
@@ -690,6 +702,35 @@ func diffSuffix(sent, full string) string {
 	return full
 }
 
+type assistantTextTracker struct {
+	text string
+}
+
+func (t *assistantTextTracker) acceptDelta(delta string) string {
+	if delta == "" {
+		return ""
+	}
+	t.text += delta
+	return delta
+}
+
+func (t *assistantTextTracker) acceptSnapshot(full string) string {
+	if full == "" || full == t.text || strings.HasPrefix(t.text, full) {
+		return ""
+	}
+	if strings.HasSuffix(t.text, full) {
+		t.text = full
+		return ""
+	}
+	if strings.HasPrefix(full, t.text) {
+		delta := full[len(t.text):]
+		t.text = full
+		return delta
+	}
+	t.text = full
+	return full
+}
+
 // ---------- /v1/messages (Anthropic) ----------
 
 func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) http.HandlerFunc {
@@ -716,7 +757,8 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 			http.Error(w, "no user message", 400)
 			return
 		}
-		userText := flattenAnthropicContent(req.Messages[lastUserIdx].Content)
+		userText, attachments := flattenAnthropicContentWithAttachments(req.Messages[lastUserIdx].Content)
+		userText, attachments = prepareDocumentAttachments(userText, attachments)
 		history := make([]executor.HistoryTurn, 0, lastUserIdx)
 		for _, m := range req.Messages[:lastUserIdx] {
 			if m.Role != "user" && m.Role != "assistant" {
@@ -732,7 +774,7 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 		// with a 400 instead of silently dropping them — clients rely on
 		// tool_use blocks that Cursor's upstream will never emit for
 		// these, and the mismatch used to hang the stream.
-		tools, unsupportedTool := convertAnthropicTools(req.Tools)
+		tools, webSearch, webFetch, unsupportedTool := convertAnthropicTools(req.Tools)
 		if unsupportedTool != "" {
 			writeAnthropicError(w, http.StatusBadRequest,
 				"invalid_request_error",
@@ -757,17 +799,34 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 			effort = "high"
 		}
 		modelForCursor := canonicalizeAnthropicModel(req.Model, effort)
+		modelParameters := make(map[string]string)
+		if effort != "" {
+			modelParameters["effort"] = effort
+		}
+		if req.Thinking != nil && req.Thinking.BudgetTokens > 0 {
+			modelParameters["thinking"] = "true"
+		}
+		var sendToInteractionListener *bool
+		if webSearch || webFetch {
+			enabled := true
+			sendToInteractionListener = &enabled
+		}
 
 		events, err := c.RunChat(r.Context(), &executor.ChatRequest{
-			Model:              modelForCursor,
-			UserMessage:        userText,
-			SystemPrompt:       systemPrompt,
-			History:            history,
-			ConversationID:     r.Header.Get("x-conversation-id"),
-			PureMode:           true,
-			AutoStopOnTurnEnd:  true,
-			AutoStopOnToolCall: len(tools) > 0,
-			Tools:              tools,
+			Model:                     modelForCursor,
+			UserMessage:               userText,
+			SystemPrompt:              systemPrompt,
+			History:                   history,
+			ConversationID:            r.Header.Get("x-conversation-id"),
+			PureMode:                  true,
+			AutoStopOnTurnEnd:         true,
+			AutoStopOnToolCall:        len(tools) > 0,
+			Tools:                     tools,
+			Attachments:               attachments,
+			WebSearch:                 webSearch,
+			WebFetch:                  webFetch,
+			SendToInteractionListener: sendToInteractionListener,
+			ModelParameters:           modelParameters,
 		})
 		if err != nil {
 			http.Error(w, err.Error(), 502)
@@ -776,10 +835,10 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 
 		if req.Stream {
 			w.Header().Set("x-cursor-cache-source", decision.headerBeforeStream())
-			streamAnthropic(w, req.Model, events, decision, clientToolNames)
+			streamAnthropic(w, req.Model, events, decision, clientToolNames, req.Thinking != nil)
 			return
 		}
-		nonStreamAnthropic(w, req.Model, events, decision, clientToolNames)
+		nonStreamAnthropic(w, req.Model, events, decision, clientToolNames, req.Thinking != nil)
 	}
 }
 
@@ -819,7 +878,7 @@ func canonicalizeAnthropicModel(model, effort string) string {
 	return m
 }
 
-func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
+func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string, expectThinking bool) {
 	flusher, _ := w.(http.Flusher)
 	headersWritten := false
 	commit := func() {
@@ -843,7 +902,8 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 	}
 
 	tr := translator.NewAnthropicStreamWriter(model)
-	assistantSent := ""
+	var assistantText assistantTextTracker
+	var thoughtText, signature string
 	sawOutput := false
 	var lastUsage *translator.Usage
 	var trailerErr *executor.TrailerStatus
@@ -857,12 +917,21 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 		if ev.Server == nil {
 			continue
 		}
-		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			delta := diffSuffix(assistantSent, blob.AssistantText)
-			if delta != "" {
-				assistantSent = blob.AssistantText
-				sawOutput = true
-				writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
+		if blob := translator.FromKvBlob(ev.Server); blob != nil {
+			if expectThinking {
+				if blob.ThoughtText != "" {
+					thoughtText = blob.ThoughtText
+				}
+				if blob.Signature != "" {
+					signature = blob.Signature
+				}
+			}
+			if blob.AssistantText != "" {
+				delta := assistantText.acceptSnapshot(blob.AssistantText)
+				if delta != "" && !expectThinking {
+					sawOutput = true
+					writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta}))
+				}
 			}
 			continue
 		}
@@ -872,15 +941,31 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
+			trEv.Text = assistantText.acceptDelta(trEv.Text)
 			if trEv.Text != "" {
 				sawOutput = true
 			}
-			writeSSE(tr.Encode(trEv))
+			if !expectThinking {
+				writeSSE(tr.Encode(trEv))
+			}
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
 			sawOutput = true
 			writeSSE(tr.Encode(trEv))
 		case translator.EventTurnEnded:
 			lastUsage = trEv.Usage
+		}
+	}
+	if expectThinking {
+		if thoughtText != "" {
+			sawOutput = true
+			writeSSE(tr.Encode(&translator.Event{Kind: translator.EventThinkingDelta, Text: thoughtText}))
+		}
+		if signature != "" {
+			writeSSE(tr.Encode(&translator.Event{Kind: translator.EventSignatureDelta, Text: signature}))
+		}
+		if assistantText.text != "" {
+			sawOutput = true
+			writeSSE(tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: assistantText.text}))
 		}
 	}
 	if !headersWritten && trailerErr != nil {
@@ -906,11 +991,13 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 	writeSSE(tr.Encode(end))
 }
 
-func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string) {
-	assistantText := ""
+func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan executor.ChatEvent, decision simCacheDecision, clientToolNames []string, expectThinking bool) {
+	var assistantText assistantTextTracker
+	var thoughtText, signature string
 	var usage *translator.Usage
 	var toolUses []map[string]any
 	var trailerErr *executor.TrailerStatus
+eventLoop:
 	for ev := range events {
 		if ev.Trailer {
 			if ev.Status != nil && !ev.Status.OK() {
@@ -921,8 +1008,18 @@ func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan execu
 		if ev.Server == nil {
 			continue
 		}
-		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			assistantText = blob.AssistantText
+		if blob := translator.FromKvBlob(ev.Server); blob != nil {
+			if expectThinking {
+				if blob.ThoughtText != "" {
+					thoughtText = blob.ThoughtText
+				}
+				if blob.Signature != "" {
+					signature = blob.Signature
+				}
+			}
+			if blob.AssistantText != "" {
+				assistantText.acceptSnapshot(blob.AssistantText)
+			}
 			continue
 		}
 		trEv := translateEvent(ev.Server, clientToolNames)
@@ -931,7 +1028,7 @@ func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan execu
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
-			assistantText += trEv.Text
+			assistantText.acceptDelta(trEv.Text)
 		case translator.EventToolCallStarted:
 			var input any = map[string]any{}
 			if trEv.ToolArgsDelta != "" {
@@ -948,19 +1045,29 @@ func nonStreamAnthropic(w http.ResponseWriter, model string, events <-chan execu
 			})
 		case translator.EventTurnEnded:
 			usage = trEv.Usage
+			if assistantText.text != "" || len(toolUses) > 0 {
+				break eventLoop
+			}
 		}
 	}
-	if trailerErr != nil && assistantText == "" && len(toolUses) == 0 {
+	if trailerErr != nil && assistantText.text == "" && len(toolUses) == 0 {
 		writeUpstreamAnthropicError(w, trailerErr)
 		return
 	}
-	if isEmptyUpstreamResponse(assistantText != "" || len(toolUses) > 0, usage) {
+	if isEmptyUpstreamResponse(assistantText.text != "" || len(toolUses) > 0, usage) {
 		writeEmptyUpstreamAnthropicError(w)
 		return
 	}
 	content := []map[string]any{}
-	if assistantText != "" {
-		content = append(content, map[string]any{"type": "text", "text": assistantText})
+	if expectThinking && thoughtText != "" {
+		thinking := map[string]any{"type": "thinking", "thinking": thoughtText}
+		if signature != "" {
+			thinking["signature"] = signature
+		}
+		content = append(content, thinking)
+	}
+	if assistantText.text != "" {
+		content = append(content, map[string]any{"type": "text", "text": assistantText.text})
 	}
 	for _, tu := range toolUses {
 		content = append(content, tu)
@@ -1030,11 +1137,17 @@ func flattenAnthropicSystem(s any) string {
 // a proper fix (native tool_use / tool_result in the Cursor wire) would
 // require expanding executor to carry structured tool history.
 func flattenAnthropicContent(c any) string {
+	text, _ := flattenAnthropicContentWithAttachments(c)
+	return text
+}
+
+func flattenAnthropicContentWithAttachments(c any) (string, []executor.Attachment) {
 	switch v := c.(type) {
 	case string:
-		return v
+		return v, nil
 	case []any:
 		parts := make([]string, 0, len(v))
+		attachments := make([]executor.Attachment, 0)
 		for _, block := range v {
 			b, _ := block.(map[string]any)
 			if b == nil {
@@ -1079,11 +1192,52 @@ func flattenAnthropicContent(c any) string {
 					tag = "tool_result_error"
 				}
 				parts = append(parts, fmt.Sprintf("[%s tool_use_id=%s: %s]", tag, id, contentStr))
+			case "image", "document":
+				attachment, ok := anthropicAttachmentFromBlock(bt, b)
+				if ok {
+					attachments = append(attachments, attachment)
+				}
 			}
 		}
-		return strings.Join(parts, "\n")
+		return strings.Join(parts, "\n"), attachments
 	}
-	return ""
+	return "", nil
+}
+
+func anthropicAttachmentFromBlock(kind string, block map[string]any) (executor.Attachment, bool) {
+	source, _ := block["source"].(map[string]any)
+	if source == nil {
+		return executor.Attachment{}, false
+	}
+	mediaType, _ := source["media_type"].(string)
+	data, _ := source["data"].(string)
+	if data == "" {
+		return executor.Attachment{}, false
+	}
+	var decoded []byte
+	switch sourceType, _ := source["type"].(string); sourceType {
+	case "base64":
+		var err error
+		decoded, err = base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return executor.Attachment{}, false
+		}
+	case "text":
+		decoded = []byte(data)
+	default:
+		return executor.Attachment{}, false
+	}
+	filename := ""
+	for _, key := range []string{"filename", "title", "name"} {
+		if value, _ := block[key].(string); value != "" {
+			filename = value
+			break
+		}
+	}
+	if filename == "" && kind == "document" {
+		filename = "document.pdf"
+	}
+	return executor.Attachment{Kind: kind, Filename: filename, MimeType: mediaType, Data: decoded}, true
 }
 
 // ---------- auth loading ----------

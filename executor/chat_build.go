@@ -95,25 +95,30 @@ func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string, accoun
 			UserMessageAction: umAction,
 		},
 	}
-	model := &cursorpb.AgentV1_ModelDetails{ModelId: req.Model}
-
 	trueVal := true
 	// Reuse agentMode (already defaulted to AGENT for the UNSPECIFIED case
 	// above) so ConversationStateStructure stays in sync with UserMessage.
 	convState := &cursorpb.AgentV1_ConversationStateStructure{Mode: &agentMode}
 
 	arr := &cursorpb.AgentV1_AgentRunRequest{
-		ConversationState:          convState,
-		Action:                     action,
-		ModelDetails:               model,
-		ConversationId:             ptr(req.ConversationID),
-		ClientSupportsInlineImages: &trueVal,
-		ClientSupportsSendToUser:   &trueVal,
+		ConversationState:                   convState,
+		Action:                              action,
+		ConversationId:                      ptr(req.ConversationID),
+		ClientSupportsInlineImages:          &trueVal,
+		ClientSupportsSendToUser:            &trueVal,
+		ClientSupportsPromptContextUsageRpc: &trueVal,
+		ClientSupportsRoutedModelUpdate:     &trueVal,
+	}
+	if req.runID != "" {
+		arr.RunId = &req.runID
+	}
+	if req.resolvedModel != nil {
+		arr.RequestedModel = req.resolvedModel
+	} else {
+		arr.ModelDetails = &cursorpb.AgentV1_ModelDetails{ModelId: req.Model}
 	}
 	if req.Harness != "" {
 		arr.Harness = &req.Harness
-	} else if !req.PureMode {
-		arr.Harness = ptr("cursor-ide")
 	}
 
 	// AgentRunRequest.mcp_tools wraps the same McpToolDefinition list — this

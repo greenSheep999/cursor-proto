@@ -138,12 +138,8 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 
 	case EventThinkingDelta:
 		// Anthropic Extended Thinking: emit a `thinking` content block
-		// with `thinking_delta` fragments. Cursor doesn't ship the
-		// signed cryptographic `signature` field the official API
-		// includes, so downstream clients that require it (e.g. the
-		// beta thinking passthrough loop) will treat the block as an
-		// unsigned thinking preview — sufficient for UI display, not
-		// for re-submission back to Anthropic.
+		// with `thinking_delta` fragments. Provider-issued signatures are
+		// emitted separately as EventSignatureDelta and are never synthesized.
 		buf = append(buf, w.startFrame()...)
 		// Close any non-thinking block that's open.
 		if w.blockOpen && w.blockType != "thinking" {

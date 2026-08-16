@@ -79,6 +79,18 @@ func turnEndedEvent(inputTokens, outputTokens, cacheReadTokens int64) executor.C
 	return executor.ChatEvent{Server: msg}
 }
 
+func textDeltaEvent(text string) executor.ChatEvent {
+	return executor.ChatEvent{Server: &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_TextDelta{
+					TextDelta: &cursorpb.AgentV1_TextDeltaUpdate{Text: text},
+				},
+			},
+		},
+	}}
+}
+
 func TestResponsesHandler_NonStreaming(t *testing.T) {
 	fake := &fakeChatRunner{events: []executor.ChatEvent{
 		// Cursor emits KV blobs with the full accumulated assistant text;
@@ -125,6 +137,47 @@ func TestResponsesHandler_NonStreaming(t *testing.T) {
 	}
 	if len(fake.lastReq.History) != 0 {
 		t.Fatalf("History should be empty, got %+v", fake.lastReq.History)
+	}
+}
+
+func TestResponsesHandler_NonStreamingDeduplicatesDeltaAndSnapshot(t *testing.T) {
+	fake := &fakeChatRunner{events: []executor.ChatEvent{
+		textDeltaEvent("DUP_OK"),
+		assistantBlobEvent("DUP_OK"),
+		turnEndedEvent(10, 3, 0),
+	}}
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"m","input":"reply"}`))
+	rec := httptest.NewRecorder()
+
+	responsesHandler(fake, nil)(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Output []struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := response.Output[0].Content[0].Text; got != "DUP_OK" {
+		t.Fatalf("text = %q, want DUP_OK", got)
+	}
+}
+
+func TestAssistantTextTrackerIgnoresSnapshotAlreadyEmittedAsSuffix(t *testing.T) {
+	var tracker assistantTextTracker
+	tracker.acceptDelta("I'll search first. ")
+	tracker.acceptDelta("The answer is 42.")
+	if got := tracker.acceptSnapshot("The answer is 42."); got != "" {
+		t.Fatalf("suffix snapshot delta = %q, want empty", got)
+	}
+	if tracker.text != "The answer is 42." {
+		t.Fatalf("authoritative snapshot text = %q", tracker.text)
 	}
 }
 

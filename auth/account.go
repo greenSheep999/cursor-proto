@@ -24,6 +24,9 @@ type Account struct {
 	RefreshToken string    `json:"refresh_token,omitempty"`
 	AuthID       string    `json:"auth_id,omitempty"`   // full auth0|user_... string
 	AuthType     string    `json:"auth_type,omitempty"` // "Auth_0" | "workos" | ...
+	TeamID       string    `json:"team_id,omitempty"`
+	PrivacyMode  int       `json:"privacy_mode,omitempty"`
+	InternalUser bool      `json:"internal_user,omitempty"`
 	IssuedAt     time.Time `json:"issued_at"`
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 
@@ -32,6 +35,10 @@ type Account struct {
 	// appear as the same "device" to Cursor).
 	MachineID    string `json:"machine_id,omitempty"`
 	MacMachineID string `json:"mac_machine_id,omitempty"`
+	// ChecksumMachineID is the abuse-service identity used inside
+	// x-cursor-checksum. Cursor 3.16 keeps this separate from the persisted
+	// device MachineID; IDE captures use the bundled 3.10 release identity.
+	ChecksumMachineID string `json:"checksum_machine_id,omitempty"`
 
 	// Client platform fields keep the IDE fingerprint internally consistent
 	// when an account is used on a host other than the machine that created it.
@@ -39,6 +46,8 @@ type Account struct {
 	ClientOS        string `json:"client_os,omitempty"`
 	ClientOSVersion string `json:"client_os_version,omitempty"`
 	ClientArch      string `json:"client_arch,omitempty"`
+	ClientType      string `json:"client_type,omitempty"`
+	ClientLayout    string `json:"client_layout,omitempty"`
 	ClientShell     string `json:"client_shell,omitempty"`
 	WorkspacePath   string `json:"workspace_path,omitempty"`
 
@@ -57,9 +66,9 @@ type Account struct {
 	RefreshLead time.Duration `json:"refresh_lead,omitempty"`
 
 	// Session identifiers – regenerated on load if empty.
-	SessionID       string `json:"-"`
-	ConfigVersion   string `json:"-"`
-	ClientKey       string `json:"-"`
+	SessionID       string `json:"session_id,omitempty"`
+	ConfigVersion   string `json:"config_version,omitempty"`
+	ClientKey       string `json:"client_key,omitempty"`
 	ChecksumSession string `json:"-"` // pre-computed x-cursor-checksum value
 }
 
@@ -124,9 +133,9 @@ func (a *Account) FillSessionDefaults(now time.Time) {
 		a.ClientKey = GenerateClientKey()
 	}
 	if a.ChecksumSession == "" {
-		mid := a.MachineID
+		mid := a.ChecksumMachineID
 		if mid == "" {
-			mid = KnownReleaseHash_3_10_20
+			mid = KnownChecksumMachineID_3_16_17
 		}
 		a.ChecksumSession = GenerateChecksum(now, mid, a.MacMachineID)
 	}

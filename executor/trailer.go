@@ -2,6 +2,7 @@ package executor
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -62,6 +63,9 @@ func ParseTrailer(raw []byte) *TrailerStatus {
 		return nil
 	}
 	t := &TrailerStatus{}
+	if raw[0] == '{' {
+		return parseConnectEndStream(raw)
+	}
 	text := string(raw)
 	// grpc-web trailer separator is CRLF, but some servers omit CR. Accept both.
 	text = strings.ReplaceAll(text, "\r\n", "\n")
@@ -90,6 +94,50 @@ func ParseTrailer(raw []byte) *TrailerStatus {
 		}
 	}
 	return t
+}
+
+func parseConnectEndStream(raw []byte) *TrailerStatus {
+	var envelope struct {
+		Error *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Details []struct {
+				Debug struct {
+					Error string `json:"error"`
+				} `json:"debug"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Error == nil {
+		return &TrailerStatus{Code: 13, Message: string(raw)}
+	}
+	status := &TrailerStatus{Code: connectCodeNumber(envelope.Error.Code), Message: envelope.Error.Message}
+	if len(envelope.Error.Details) > 0 && envelope.Error.Details[0].Debug.Error != "" &&
+		(status.Message == "" || strings.EqualFold(status.Message, "error")) {
+		status.Message = envelope.Error.Details[0].Debug.Error
+	}
+	return status
+}
+
+func connectCodeNumber(code string) int {
+	switch strings.ToLower(code) {
+	case "ok", "":
+		return 0
+	case "resource_exhausted":
+		return 8
+	case "unauthenticated":
+		return 16
+	case "permission_denied":
+		return 7
+	case "unavailable":
+		return 14
+	case "deadline_exceeded":
+		return 4
+	case "invalid_argument":
+		return 3
+	default:
+		return 13
+	}
 }
 
 // decodeStatusDetails parses one gRPC status-details-bin blob. The wire format

@@ -148,7 +148,9 @@ type knobs struct {
 
 func (k knobs) apply(out *cpaformat.AuthFile) {
 	out.Prefix = k.prefix
-	out.ProxyURL = k.proxyURL
+	if k.proxyURL != "" {
+		out.ProxyURL = k.proxyURL
+	}
 	out.Priority = k.priority
 	out.Note = k.note
 	out.Disabled = k.disabled
