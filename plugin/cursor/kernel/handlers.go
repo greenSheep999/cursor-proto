@@ -12,13 +12,15 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
+const pluginVersion = "0.5.6"
+
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {
 	body := map[string]any{
 		"schema_version": 1,
 		"metadata": map[string]any{
 			"Name":             "cursor",
-			"Version":          "0.5.5",
+			"Version":          pluginVersion,
 			"Author":           "router-for-me",
 			"GitHubRepository": "https://github.com/router-for-me/cursor-proto",
 			"Logo":             CursorLogoDataURI(),
