@@ -185,6 +185,8 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	deltaText := ""
 	var usage *translator.Usage
 	var toolUses []map[string]any
+	var serverToolUses []map[string]any
+	webSearchRequests := 0
 	for ev := range events {
 		if ev.Server == nil {
 			continue
@@ -215,6 +217,34 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 				"name":  trEv.ToolName,
 				"input": input,
 			})
+		case translator.EventServerToolStarted:
+			var input any = map[string]any{}
+			if trEv.ToolArgsDelta != "" {
+				_ = json.Unmarshal([]byte(trEv.ToolArgsDelta), &input)
+			}
+			serverToolUses = append(serverToolUses, map[string]any{
+				"type":  "server_tool_use",
+				"id":    trEv.ToolCallID,
+				"name":  trEv.ToolName,
+				"input": input,
+			})
+		case translator.EventWebSearchResult:
+			results := make([]map[string]any, 0, len(trEv.WebResults))
+			for _, result := range trEv.WebResults {
+				results = append(results, map[string]any{
+					"type":              "web_search_result",
+					"url":               result.URL,
+					"title":             result.Title,
+					"encrypted_content": result.Chunk,
+					"page_age":          nil,
+				})
+			}
+			serverToolUses = append(serverToolUses, map[string]any{
+				"type":        "web_search_tool_result",
+				"tool_use_id": trEv.ToolCallID,
+				"content":     results,
+			})
+			webSearchRequests++
 		case translator.EventTurnEnded:
 			usage = trEv.Usage
 		}
@@ -222,7 +252,7 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	if !sawBlob && deltaText != "" {
 		assistantText = deltaText
 	}
-	if isEmptyPluginUpstreamResponse(assistantText != "" || len(toolUses) > 0, usage) {
+	if isEmptyPluginUpstreamResponse(assistantText != "" || len(toolUses) > 0 || len(serverToolUses) > 0, usage) {
 		return nil, errEmptyUpstreamResponse
 	}
 	content := []map[string]any{}
@@ -232,9 +262,10 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	for _, tu := range toolUses {
 		content = append(content, tu)
 	}
+	content = append(content, serverToolUses...)
 	stopReason := translator.AnthropicStopReason(assistantText, len(toolUses) > 0)
 	resp := map[string]any{
-		"id":            "msg_" + strings.ReplaceAll(auth.GenerateSessionID(), "-", ""),
+		"id":            translator.NewAnthropicMessageID(),
 		"type":          "message",
 		"role":          "assistant",
 		"model":         model,
@@ -243,7 +274,11 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 		"stop_sequence": nil,
 	}
 	if usage != nil {
-		resp["usage"] = translator.BuildAnthropicUsage(usage)
+		responseUsage := translator.BuildAnthropicUsage(usage)
+		if webSearchRequests > 0 {
+			responseUsage["server_tool_use"] = map[string]int{"web_search_requests": webSearchRequests}
+		}
+		resp["usage"] = responseUsage
 	}
 	buf, _ := json.Marshal(resp)
 	return buf, nil
@@ -547,7 +582,8 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				*errOut = err.Error()
 				return
 			}
-		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
+		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted,
+			translator.EventServerToolStarted, translator.EventWebSearchResult:
 			sawOutput = true
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {

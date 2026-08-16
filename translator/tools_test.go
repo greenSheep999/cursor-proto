@@ -96,3 +96,41 @@ func TestExtractToolArgsFromStartRoundTrip(t *testing.T) {
 		t.Fatalf("sanity: %s", string(b))
 	}
 }
+
+func TestAnthropicNativeWebSearchShape(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-opus-5")
+	start := string(w.Encode(&Event{
+		Kind:          EventServerToolStarted,
+		ToolCallID:    "srvtoolu_1",
+		ToolName:      "web_search",
+		ToolArgsDelta: `{"query":"Cursor official homepage"}`,
+	}))
+	for _, expected := range []string{`"type":"server_tool_use"`, `"name":"web_search"`, `"type":"input_json_delta"`} {
+		if !strings.Contains(start, expected) {
+			t.Fatalf("missing %s in native web search start: %s", expected, start)
+		}
+	}
+
+	result := string(w.Encode(&Event{
+		Kind:       EventWebSearchResult,
+		ToolCallID: "srvtoolu_1",
+		WebResults: []WebSearchResult{{
+			Title: "Cursor",
+			URL:   "https://cursor.com",
+			Chunk: "Cursor homepage",
+		}},
+	}))
+	for _, expected := range []string{`"type":"web_search_tool_result"`, `"type":"web_search_result"`, `"url":"https://cursor.com"`} {
+		if !strings.Contains(result, expected) {
+			t.Fatalf("missing %s in native web search result: %s", expected, result)
+		}
+	}
+
+	end := string(w.Encode(&Event{Kind: EventTurnEnded}))
+	if !strings.Contains(end, `"server_tool_use":{"web_search_requests":1}`) {
+		t.Fatalf("missing native web search usage: %s", end)
+	}
+	if !strings.Contains(end, `"stop_reason":"end_turn"`) {
+		t.Fatalf("completed native server tool must end the turn normally: %s", end)
+	}
+}

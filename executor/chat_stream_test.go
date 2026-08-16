@@ -94,7 +94,7 @@ func runReadSSE(body io.ReadCloser, autoStopOnToolCall bool) (<-chan int, int) {
 	events := make(chan ChatEvent, 16)
 	result := make(chan int, 1)
 	go func() {
-		readSSEStream(body, events, false, autoStopOnToolCall)
+		readSSEStream(body, events, false, autoStopOnToolCall, nil, false)
 	}()
 	go func() {
 		count := 0
@@ -104,6 +104,49 @@ func runReadSSE(body io.ReadCloser, autoStopOnToolCall bool) (<-chan int, int) {
 		result <- count
 	}()
 	return result, 0
+}
+
+func TestBuildInteractionResponseApproved_WebSearch(t *testing.T) {
+	query := &cursorpb.AgentV1_InteractionQuery{
+		Id: 42,
+		Query: &cursorpb.AgentV1_InteractionQuery_WebSearchRequestQuery{
+			WebSearchRequestQuery: &cursorpb.AgentV1_WebSearchRequestQuery{},
+		},
+	}
+	got := buildInteractionResponseApproved(query)
+	want := []byte{0x32, 0x06, 0x08, 0x2a, 0x12, 0x02, 0x0a, 0x00}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("approved response = %x, want %x", got, want)
+	}
+}
+
+func TestReadSSEStream_DoesNotStopForEnabledWebSearch(t *testing.T) {
+	msg := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallStarted{
+					ToolCallStarted: &cursorpb.AgentV1_ToolCallStartedUpdate{
+						ToolCall: &cursorpb.AgentV1_ToolCall{
+							Tool: &cursorpb.AgentV1_ToolCall_WebSearchToolCall{
+								WebSearchToolCall: &cursorpb.AgentV1_WebSearchToolCall{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	events := make(chan ChatEvent, 4)
+	done := make(chan struct{})
+	go func() {
+		readSSEStream(frameForTest(t, msg), events, false, true, nil, true)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("finite test body should finish without waiting for tool-call grace deadline")
+	}
 }
 
 // Historical: TestIsUserFacingToolCallStarted_* used to lock a

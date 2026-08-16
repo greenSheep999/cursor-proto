@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
 
 func TestOpenAIStreamShape(t *testing.T) {
@@ -85,11 +87,33 @@ func TestIsRefusalTextRecognizesChineseUnablePhrase(t *testing.T) {
 func TestAnthropicStreamMessageIDUsesClaudeShape(t *testing.T) {
 	w := NewAnthropicStreamWriter("claude-opus-5")
 
-	if !strings.HasPrefix(w.ID, "msg_") {
-		t.Fatalf("message id %q must start with msg_", w.ID)
+	if !strings.HasPrefix(w.ID, "msg_01") || len(w.ID) != len("msg_01")+22 {
+		t.Fatalf("message id %q must use Anthropic's msg_01 plus 22 character shape", w.ID)
 	}
 	if strings.Contains(w.ID, "-") {
 		t.Fatalf("message id %q must not contain hyphens", w.ID)
+	}
+}
+
+func TestNewAnthropicMessageIDUsesClaudeShape(t *testing.T) {
+	id := NewAnthropicMessageID()
+	if !strings.HasPrefix(id, "msg_01") || len(id) != len("msg_01")+22 {
+		t.Fatalf("message id %q must use Anthropic's msg_01 plus 22 character shape", id)
+	}
+}
+
+func TestAnthropicMessageStartIncludesStableUsageShape(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-opus-5")
+	frame := string(w.Encode(&Event{Kind: EventTextDelta, Text: "ok"}))
+	for _, field := range []string{
+		`"input_tokens":0`,
+		`"output_tokens":0`,
+		`"cache_creation_input_tokens":0`,
+		`"cache_read_input_tokens":0`,
+	} {
+		if !strings.Contains(frame, field) {
+			t.Fatalf("message_start missing %s:\n%s", field, frame)
+		}
 	}
 }
 
@@ -122,6 +146,67 @@ func TestNonStreamingAccumulator(t *testing.T) {
 func TestFromServerMessageNil(t *testing.T) {
 	if FromServerMessage(nil) != nil {
 		t.Error("nil input should map to nil event")
+	}
+}
+
+func TestFromServerMessageNativeWebSearch(t *testing.T) {
+	toolCall := &cursorpb.AgentV1_ToolCall{
+		Tool: &cursorpb.AgentV1_ToolCall_WebSearchToolCall{
+			WebSearchToolCall: &cursorpb.AgentV1_WebSearchToolCall{
+				Args: &cursorpb.AgentV1_WebSearchArgs{
+					SearchTerm: "Cursor official homepage",
+					ToolCallId: "srvtoolu_1",
+				},
+			},
+		},
+	}
+	started := FromServerMessage(&cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallStarted{
+					ToolCallStarted: &cursorpb.AgentV1_ToolCallStartedUpdate{
+						CallId:   "srvtoolu_1",
+						ToolCall: toolCall,
+					},
+				},
+			},
+		},
+	})
+	if started == nil || started.Kind != EventServerToolStarted || started.ToolName != "web_search" {
+		t.Fatalf("unexpected native web search start: %#v", started)
+	}
+	if started.ToolArgsDelta != `{"query":"Cursor official homepage"}` {
+		t.Fatalf("unexpected native web search args: %s", started.ToolArgsDelta)
+	}
+
+	toolCall.GetWebSearchToolCall().Result = &cursorpb.AgentV1_WebSearchResult{
+		Result: &cursorpb.AgentV1_WebSearchResult_Success{
+			Success: &cursorpb.AgentV1_WebSearchSuccess{
+				References: []*cursorpb.AgentV1_WebSearchReference{{
+					Title: "Cursor",
+					Url:   "https://cursor.com",
+					Chunk: "Cursor homepage",
+				}},
+			},
+		},
+	}
+	completed := FromServerMessage(&cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallCompleted{
+					ToolCallCompleted: &cursorpb.AgentV1_ToolCallCompletedUpdate{
+						CallId:   "srvtoolu_1",
+						ToolCall: toolCall,
+					},
+				},
+			},
+		},
+	})
+	if completed == nil || completed.Kind != EventWebSearchResult || len(completed.WebResults) != 1 {
+		t.Fatalf("unexpected native web search completion: %#v", completed)
+	}
+	if completed.WebResults[0].URL != "https://cursor.com" {
+		t.Fatalf("unexpected native web search reference: %#v", completed.WebResults[0])
 	}
 }
 

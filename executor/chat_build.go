@@ -32,6 +32,12 @@ func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string) (*curs
 		}
 	}
 	reqCtx := &cursorpb.AgentV1_RequestContext{Env: env}
+	if req.WebSearch {
+		reqCtx.WebSearchEnabled = ptr(true)
+	}
+	if req.WebFetch {
+		reqCtx.WebFetchEnabled = ptr(true)
+	}
 
 	// If the caller advertised MCP tools, attach them to the model-visible
 	// catalog (field 7 in RequestContext) and add a matching McpInstructions

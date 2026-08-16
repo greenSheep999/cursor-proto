@@ -95,6 +95,9 @@ type ChatRequest struct {
 	// docs/phase-7a-mcp.md for the wire-format decisions.
 	Tools []ToolDefinition
 
+	WebSearch bool
+	WebFetch  bool
+
 	Attachments []Attachment
 
 	// OmitSplicedHistory disables the in-band `<prior_conversation>` block
@@ -239,7 +242,17 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 	}
 
 	events := make(chan ChatEvent, 32)
-	go readSSEStream(sseResp.Body, events, req.AutoStopOnTurnEnd, req.AutoStopOnToolCall)
+	appendSeqno := int64(1)
+	approveInteraction := func(query *cursorpb.AgentV1_InteractionQuery) error {
+		payload := buildInteractionResponseApproved(query)
+		if len(payload) == 0 {
+			return nil
+		}
+		err := c.bidiAppend(ctx, requestID, appendSeqno, payload)
+		appendSeqno++
+		return err
+	}
+	go readSSEStream(sseResp.Body, events, req.AutoStopOnTurnEnd, req.AutoStopOnToolCall, approveInteraction, req.WebSearch || req.WebFetch)
 	return events, nil
 }
 
@@ -251,7 +264,7 @@ const postAssistantGrace = 1 * time.Second
 // arriving — protects against a server that never sends turn_ended.
 const heartbeatDeadline = 60 * time.Second
 
-func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, autoStopOnToolCall bool) {
+func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, autoStopOnToolCall bool, approveInteraction func(*cursorpb.AgentV1_InteractionQuery) error, keepServerToolsOpen bool) {
 	defer close(out)
 	defer body.Close()
 
@@ -309,6 +322,15 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 					msg := &cursorpb.AgentV1_AgentServerMessage{}
 					if e := proto.Unmarshal(payload, msg); e == nil {
 						ev.Server = msg
+						if query := msg.GetInteractionQuery(); query != nil && approveInteraction != nil {
+							if query.GetWebSearchRequestQuery() != nil || query.GetWebFetchRequestQuery() != nil {
+								if err := approveInteraction(query); err != nil {
+									ev.Status = &TrailerStatus{Code: 13, Message: err.Error()}
+									out <- ev
+									return
+								}
+							}
+						}
 						// Watch for terminal signals so we can close eagerly
 						// without waiting for the server's idle heartbeats.
 						if msg.GetInteractionUpdate().GetTurnEnded() != nil {
@@ -340,7 +362,8 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 						//      branch, so watching only path #1 left
 						//      OpenAI-compat callers hanging until the 60s
 						//      heartbeat deadline (see cursor3.11/v0.3.2).
-						if autoStopOnToolCall &&
+						serverToolCall := keepServerToolsOpen && isServerWebToolCall(msg)
+						if autoStopOnToolCall && !serverToolCall &&
 							(msg.GetExecServerMessage().GetMcpArgs() != nil ||
 								msg.GetInteractionUpdate().GetToolCallStarted() != nil) {
 							setDeadline(postAssistantGrace)
@@ -357,6 +380,34 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 			return
 		}
 	}
+}
+
+func isServerWebToolCall(msg *cursorpb.AgentV1_AgentServerMessage) bool {
+	started := msg.GetInteractionUpdate().GetToolCallStarted()
+	if started == nil || started.GetToolCall() == nil {
+		return false
+	}
+	toolCall := started.GetToolCall()
+	return toolCall.GetWebSearchToolCall() != nil || toolCall.GetWebFetchToolCall() != nil
+}
+
+func buildInteractionResponseApproved(query *cursorpb.AgentV1_InteractionQuery) []byte {
+	if query == nil {
+		return nil
+	}
+	responseField := 0
+	switch {
+	case query.GetWebSearchRequestQuery() != nil:
+		responseField = 2
+	case query.GetWebFetchRequestQuery() != nil:
+		responseField = 9
+	default:
+		return nil
+	}
+	approved := appendMessageField(nil, 1, nil)
+	interaction := appendVarintField(nil, 1, uint64(query.GetId()))
+	interaction = appendMessageField(interaction, responseField, approved)
+	return appendMessageField(nil, 6, interaction)
 }
 
 // sniffAssistantBlob returns true when the message is a KV SetBlobArgs whose
@@ -495,6 +546,11 @@ func appendMessageField(buf []byte, field int, msg []byte) []byte {
 func appendInt64Field(buf []byte, field int, v int64) []byte {
 	buf = appendTag(buf, field, 0) // wire type 0 = varint
 	return appendVarint(buf, uint64(v))
+}
+
+func appendVarintField(buf []byte, field int, v uint64) []byte {
+	buf = appendTag(buf, field, 0)
+	return appendVarint(buf, v)
 }
 
 func appendBytesField(buf []byte, field int, b []byte) []byte {

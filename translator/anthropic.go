@@ -1,11 +1,10 @@
 package translator
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // AnthropicStreamWriter serialises translator Events into Anthropic Messages
@@ -41,16 +40,56 @@ type AnthropicStreamWriter struct {
 	// close-and-reopen when the stream switches modalities mid-turn.
 	blockType string
 	// toolBlocks maps tool_call_id -> block index for its content_block.
-	toolBlocks  map[string]int
-	sawToolCall bool
-	text        strings.Builder
+	toolBlocks        map[string]int
+	sawToolCall       bool
+	serverToolBlocks  map[string]int
+	webSearchRequests int
+	text              strings.Builder
 }
 
 func NewAnthropicStreamWriter(model string) *AnthropicStreamWriter {
 	return &AnthropicStreamWriter{
 		Model: model,
-		ID:    "msg_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
+		ID:    NewAnthropicMessageID(),
 	}
+}
+
+const anthropicIDAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+func NewAnthropicMessageID() string {
+	random := make([]byte, 22)
+	if _, err := rand.Read(random); err != nil {
+		return "msg_01" + strings.Repeat("0", len(random))
+	}
+	for index := range random {
+		random[index] = anthropicIDAlphabet[int(random[index])%len(anthropicIDAlphabet)]
+	}
+	return "msg_01" + string(random)
+}
+
+func (w *AnthropicStreamWriter) startFrame() []byte {
+	if w.sentStart {
+		return nil
+	}
+	w.sentStart = true
+	return w.frame("message_start", map[string]any{
+		"type": "message_start",
+		"message": map[string]any{
+			"id":            w.ID,
+			"type":          "message",
+			"role":          "assistant",
+			"model":         w.Model,
+			"content":       []any{},
+			"stop_reason":   nil,
+			"stop_sequence": nil,
+			"usage": map[string]int{
+				"input_tokens":                0,
+				"output_tokens":               0,
+				"cache_creation_input_tokens": 0,
+				"cache_read_input_tokens":     0,
+			},
+		},
+	})
 }
 
 // Encode returns the SSE frame(s) for one Event, potentially emitting several
@@ -64,22 +103,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 	switch ev.Kind {
 	case EventTextDelta:
 		w.text.WriteString(ev.Text)
-		if !w.sentStart {
-			w.sentStart = true
-			buf = append(buf, w.frame("message_start", map[string]any{
-				"type": "message_start",
-				"message": map[string]any{
-					"id":            w.ID,
-					"type":          "message",
-					"role":          "assistant",
-					"model":         w.Model,
-					"content":       []any{},
-					"stop_reason":   nil,
-					"stop_sequence": nil,
-					"usage":         map[string]int{"input_tokens": 0, "output_tokens": 0},
-				},
-			})...)
-		}
+		buf = append(buf, w.startFrame()...)
 		// If a thinking block is currently open, close it before opening
 		// the text block — Anthropic streams one content block at a time.
 		if w.blockOpen && w.blockType != "text" {
@@ -120,22 +144,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		// beta thinking passthrough loop) will treat the block as an
 		// unsigned thinking preview — sufficient for UI display, not
 		// for re-submission back to Anthropic.
-		if !w.sentStart {
-			w.sentStart = true
-			buf = append(buf, w.frame("message_start", map[string]any{
-				"type": "message_start",
-				"message": map[string]any{
-					"id":            w.ID,
-					"type":          "message",
-					"role":          "assistant",
-					"model":         w.Model,
-					"content":       []any{},
-					"stop_reason":   nil,
-					"stop_sequence": nil,
-					"usage":         map[string]int{"input_tokens": 0, "output_tokens": 0},
-				},
-			})...)
-		}
+		buf = append(buf, w.startFrame()...)
 		// Close any non-thinking block that's open.
 		if w.blockOpen && w.blockType != "thinking" {
 			buf = append(buf, w.frame("content_block_stop", map[string]any{
@@ -171,22 +180,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		if ev.Text == "" {
 			return nil
 		}
-		if !w.sentStart {
-			w.sentStart = true
-			buf = append(buf, w.frame("message_start", map[string]any{
-				"type": "message_start",
-				"message": map[string]any{
-					"id":            w.ID,
-					"type":          "message",
-					"role":          "assistant",
-					"model":         w.Model,
-					"content":       []any{},
-					"stop_reason":   nil,
-					"stop_sequence": nil,
-					"usage":         map[string]int{"input_tokens": 0, "output_tokens": 0},
-				},
-			})...)
-		}
+		buf = append(buf, w.startFrame()...)
 		if w.blockOpen && w.blockType != "thinking" {
 			return nil
 		}
@@ -213,22 +207,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		return buf
 
 	case EventToolCallStarted:
-		if !w.sentStart {
-			w.sentStart = true
-			buf = append(buf, w.frame("message_start", map[string]any{
-				"type": "message_start",
-				"message": map[string]any{
-					"id":            w.ID,
-					"type":          "message",
-					"role":          "assistant",
-					"model":         w.Model,
-					"content":       []any{},
-					"stop_reason":   nil,
-					"stop_sequence": nil,
-					"usage":         map[string]int{"input_tokens": 0, "output_tokens": 0},
-				},
-			})...)
-		}
+		buf = append(buf, w.startFrame()...)
 		// Close any open text block before opening the tool_use block —
 		// Anthropic streams have one content block open at a time.
 		if w.blockOpen {
@@ -309,6 +288,91 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			"index": toolIdx,
 		})
 
+	case EventServerToolStarted:
+		buf = append(buf, w.startFrame()...)
+		if w.blockOpen {
+			buf = append(buf, w.frame("content_block_stop", map[string]any{
+				"type":  "content_block_stop",
+				"index": w.blockIndex,
+			})...)
+			w.blockOpen = false
+			w.blockIndex++
+		}
+		if w.serverToolBlocks == nil {
+			w.serverToolBlocks = map[string]int{}
+		}
+		if _, exists := w.serverToolBlocks[ev.ToolCallID]; exists {
+			return nil
+		}
+		toolIndex := w.blockIndex
+		w.serverToolBlocks[ev.ToolCallID] = toolIndex
+		w.blockIndex++
+		buf = append(buf, w.frame("content_block_start", map[string]any{
+			"type":  "content_block_start",
+			"index": toolIndex,
+			"content_block": map[string]any{
+				"type":  "server_tool_use",
+				"id":    ev.ToolCallID,
+				"name":  ev.ToolName,
+				"input": map[string]any{},
+			},
+		})...)
+		if ev.ToolArgsDelta != "" {
+			buf = append(buf, w.frame("content_block_delta", map[string]any{
+				"type":  "content_block_delta",
+				"index": toolIndex,
+				"delta": map[string]any{
+					"type":         "input_json_delta",
+					"partial_json": ev.ToolArgsDelta,
+				},
+			})...)
+		}
+		return buf
+
+	case EventWebSearchResult:
+		buf = append(buf, w.startFrame()...)
+		if toolIndex, ok := w.serverToolBlocks[ev.ToolCallID]; ok {
+			buf = append(buf, w.frame("content_block_stop", map[string]any{
+				"type":  "content_block_stop",
+				"index": toolIndex,
+			})...)
+			delete(w.serverToolBlocks, ev.ToolCallID)
+		}
+		content := make([]map[string]any, 0, len(ev.WebResults))
+		for _, result := range ev.WebResults {
+			content = append(content, map[string]any{
+				"type":              "web_search_result",
+				"url":               result.URL,
+				"title":             result.Title,
+				"encrypted_content": result.Chunk,
+				"page_age":          nil,
+			})
+		}
+		resultContent := any(content)
+		if ev.ToolError != "" {
+			resultContent = map[string]any{
+				"type":       "web_search_tool_result_error",
+				"error_code": "unavailable",
+			}
+		}
+		resultIndex := w.blockIndex
+		w.blockIndex++
+		buf = append(buf, w.frame("content_block_start", map[string]any{
+			"type":  "content_block_start",
+			"index": resultIndex,
+			"content_block": map[string]any{
+				"type":        "web_search_tool_result",
+				"tool_use_id": ev.ToolCallID,
+				"content":     resultContent,
+			},
+		})...)
+		buf = append(buf, w.frame("content_block_stop", map[string]any{
+			"type":  "content_block_stop",
+			"index": resultIndex,
+		})...)
+		w.webSearchRequests++
+		return buf
+
 	case EventTurnEnded:
 		if w.blockOpen {
 			buf = append(buf, w.frame("content_block_stop", map[string]any{
@@ -328,9 +392,19 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			})...)
 		}
 		w.toolBlocks = nil
+		for _, idx := range w.serverToolBlocks {
+			buf = append(buf, w.frame("content_block_stop", map[string]any{
+				"type":  "content_block_stop",
+				"index": idx,
+			})...)
+		}
+		w.serverToolBlocks = nil
 		usage := map[string]any{"output_tokens": 0}
 		if ev.Usage != nil {
 			usage = BuildAnthropicUsage(ev.Usage)
+		}
+		if w.webSearchRequests > 0 {
+			usage["server_tool_use"] = map[string]int{"web_search_requests": w.webSearchRequests}
 		}
 		stopReason := AnthropicStopReason(w.text.String(), w.sawToolCall)
 		// Callers can force a specific stop_reason (e.g. "error" when the

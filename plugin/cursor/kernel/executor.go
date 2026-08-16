@@ -244,6 +244,8 @@ type chatShape struct {
 	Thinking     bool
 	JSONSchema   json.RawMessage
 	Attachments  []executor.Attachment
+	WebSearch    bool
+	WebFetch     bool
 }
 
 // parseOpenAIPayload converts an OpenAI Chat Completion request body
@@ -386,6 +388,7 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 			Format json.RawMessage `json:"format"`
 		} `json:"output_config"`
 		Tools []struct {
+			Type        string         `json:"type"`
 			Name        string         `json:"name"`
 			Description string         `json:"description"`
 			InputSchema map[string]any `json:"input_schema"`
@@ -430,6 +433,14 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 		})
 	}
 	for _, t := range req.Tools {
+		switch strings.ToLower(strings.TrimSpace(t.Type)) {
+		case "web_search_20250305", "web_search_20260209":
+			shape.WebSearch = true
+			continue
+		case "web_fetch_20250910":
+			shape.WebFetch = true
+			continue
+		}
 		if strings.TrimSpace(t.Name) == "" {
 			continue
 		}
@@ -533,6 +544,8 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		AutoStopOnToolCall: true,
 		Tools:              shape.Tools,
 		Attachments:        shape.Attachments,
+		WebSearch:          shape.WebSearch,
+		WebFetch:           shape.WebFetch,
 	}
 	if headers != nil {
 		if convID := firstHeader(headers, "X-Conversation-Id"); convID != "" {

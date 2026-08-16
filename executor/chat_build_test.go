@@ -33,3 +33,20 @@ func TestBuildAgentRunRequest_Attachments(t *testing.T) {
 		t.Fatalf("selected document path = %q, want empty", path)
 	}
 }
+
+func TestBuildAgentRunRequest_EnablesNativeWebTools(t *testing.T) {
+	client := &Client{}
+	req, err := client.buildAgentRunRequest(&ChatRequest{
+		Model:       "claude-opus-5-medium",
+		UserMessage: "search",
+		WebSearch:   true,
+		WebFetch:    true,
+	}, "message-id")
+	if err != nil {
+		t.Fatalf("buildAgentRunRequest: %v", err)
+	}
+	ctx := req.GetAction().GetUserMessageAction().GetRequestContext()
+	if !ctx.GetWebSearchEnabled() || !ctx.GetWebFetchEnabled() {
+		t.Fatalf("native web flags not enabled: search=%v fetch=%v", ctx.GetWebSearchEnabled(), ctx.GetWebFetchEnabled())
+	}
+}

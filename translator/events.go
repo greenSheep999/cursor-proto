@@ -27,6 +27,8 @@ const (
 	EventToolCallStarted
 	EventToolCallDelta
 	EventToolCallCompleted
+	EventServerToolStarted
+	EventWebSearchResult
 	EventTurnEnded
 	EventStepStarted
 	EventStepCompleted
@@ -47,6 +49,8 @@ type Event struct {
 	ToolCallID    string
 	ToolName      string
 	ToolArgsDelta string
+	WebResults    []WebSearchResult
+	ToolError     string
 
 	// Usage is populated on EventTurnEnded.
 	Usage *Usage
@@ -57,6 +61,12 @@ type Event struct {
 	// paths to surface a trailer error as stop_reason="error" instead
 	// of a misleading end_turn.
 	StopReason string
+}
+
+type WebSearchResult struct {
+	Title string
+	URL   string
+	Chunk string
 }
 
 // Usage aggregates token counters.
@@ -116,6 +126,16 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 		if tc.GetMcpToolCall() != nil {
 			return nil
 		}
+		if webSearch := tc.GetWebSearchToolCall(); webSearch != nil {
+			callID := pickFirstNonEmpty(s.GetCallId(), webSearch.GetArgs().GetToolCallId())
+			args, _ := json.Marshal(map[string]string{"query": webSearch.GetArgs().GetSearchTerm()})
+			return &Event{
+				Kind:          EventServerToolStarted,
+				ToolCallID:    sanitizeToolCallID(callID),
+				ToolName:      "web_search",
+				ToolArgsDelta: string(args),
+			}
+		}
 		// Historical note: v0.3.3 briefly intercepted Composer's
 		// planning tools (create_plan / update_todos / read_todos /
 		// task) here and rendered them as assistant text, because
@@ -147,6 +167,33 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	}
 	if c := iu.GetToolCallCompleted(); c != nil {
 		tc := c.GetToolCall()
+		if tc != nil {
+			if webSearch := tc.GetWebSearchToolCall(); webSearch != nil {
+				callID := pickFirstNonEmpty(c.GetCallId(), webSearch.GetArgs().GetToolCallId())
+				event := &Event{
+					Kind:       EventWebSearchResult,
+					ToolCallID: sanitizeToolCallID(callID),
+					ToolName:   "web_search",
+				}
+				if result := webSearch.GetResult(); result != nil {
+					switch {
+					case result.GetSuccess() != nil:
+						for _, reference := range result.GetSuccess().GetReferences() {
+							event.WebResults = append(event.WebResults, WebSearchResult{
+								Title: reference.GetTitle(),
+								URL:   reference.GetUrl(),
+								Chunk: reference.GetChunk(),
+							})
+						}
+					case result.GetError() != nil:
+						event.ToolError = result.GetError().GetError()
+					case result.GetRejected() != nil:
+						event.ToolError = result.GetRejected().GetReason()
+					}
+				}
+				return event
+			}
+		}
 		// v0.3.3 filtered planning-tool completions here; reverted
 		// for the same reason as the tool_call_started branch —
 		// planning tools now flow through as real tool_calls, so

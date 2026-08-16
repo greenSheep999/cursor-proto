@@ -735,6 +735,27 @@ func TestParseClaudePayload_PreservesImageAndDocumentAttachments(t *testing.T) {
 	}
 }
 
+func TestParseClaudePayload_UsesNativeWebSearch(t *testing.T) {
+	shape, err := parseClaudePayload([]byte(`{
+		"model":"claude-opus-5",
+		"tools":[{"type":"web_search_20250305","name":"web_search","max_uses":1}],
+		"messages":[{"role":"user","content":"search"}]
+	}`))
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if !shape.WebSearch {
+		t.Fatal("WebSearch = false, want true")
+	}
+	if len(shape.Tools) != 0 {
+		t.Fatalf("server tool leaked into MCP tools: %+v", shape.Tools)
+	}
+	req := buildChatRequest(shape, nil)
+	if !req.WebSearch {
+		t.Fatal("ChatRequest.WebSearch = false, want true")
+	}
+}
+
 func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing.T) {
 	shape, err := parseClaudePayload([]byte(`{
 		"model":"claude-opus-4-8-medium",
