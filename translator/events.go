@@ -23,6 +23,7 @@ const (
 	EventUnknown EventKind = iota
 	EventTextDelta
 	EventThinkingDelta
+	EventSignatureDelta
 	EventToolCallStarted
 	EventToolCallDelta
 	EventToolCallCompleted

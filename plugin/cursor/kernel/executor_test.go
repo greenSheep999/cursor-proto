@@ -106,6 +106,26 @@ func buildAssistantBlobEvent(text string) executor.ChatEvent {
 	return executor.ChatEvent{Server: msg}
 }
 
+func buildSignedAssistantBlobEvent(thinking, signature, text string) executor.ChatEvent {
+	blob, _ := json.Marshal(map[string]any{
+		"role": "assistant",
+		"content": []map[string]any{
+			{"type": "reasoning", "text": thinking, "signature": signature},
+			{"type": "text", "text": text},
+		},
+	})
+	msg := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_KvServerMessage{
+			KvServerMessage: &cursorpb.AgentV1_KvServerMessage{
+				Message: &cursorpb.AgentV1_KvServerMessage_SetBlobArgs{
+					SetBlobArgs: &cursorpb.AgentV1_SetBlobArgs{BlobData: blob},
+				},
+			},
+		},
+	}
+	return executor.ChatEvent{Server: msg}
+}
+
 func buildHeartbeatEvent() executor.ChatEvent {
 	msg := &cursorpb.AgentV1_AgentServerMessage{
 		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
@@ -453,6 +473,62 @@ func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testi
 	}
 }
 
+func TestExecuteStream_Claude_OrdersRealSignatureBeforeBufferedText(t *testing.T) {
+	runner := &fakeRunner{events: []executor.ChatEvent{
+		buildThinkingDeltaEvent("reasoning"),
+		buildTextDeltaEvent("answer"),
+		buildSignedAssistantBlobEvent("reasoning", "c2lnbmF0dXJl", "answer"),
+		buildTurnEndedEvent(4, 2),
+	}}
+
+	var (
+		mu      sync.Mutex
+		emitted [][]byte
+		done    = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return runner, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-4-8-medium","thinking":{"type":"adaptive"},"messages":[{"role":"user","content":"hi"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "signed-thinking"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream never closed")
+	}
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	thinkingAt := strings.Index(joined, `"type":"thinking_delta"`)
+	signatureAt := strings.Index(joined, `"type":"signature_delta"`)
+	textAt := strings.Index(joined, `"type":"text_delta"`)
+	if thinkingAt < 0 || signatureAt < 0 || textAt < 0 || !(thinkingAt < signatureAt && signatureAt < textAt) {
+		t.Fatalf("invalid thinking/signature/text order: %s", joined)
+	}
+	if strings.Count(joined, `"text":"answer"`) != 1 {
+		t.Fatalf("buffered answer was duplicated: %s", joined)
+	}
+}
+
 func byteSlicesToStrings(chunks [][]byte) []string {
 	out := make([]string, 0, len(chunks))
 	for _, c := range chunks {
@@ -581,6 +657,9 @@ func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing
 	}
 	if req.Mode != executor.APIConversationMode(false) {
 		t.Fatalf("mode = %d, want API ask mode", req.Mode)
+	}
+	if !strings.Contains(req.SystemPrompt, "No tools are available") {
+		t.Fatalf("no-tool API guard missing from prompt: %q", req.SystemPrompt)
 	}
 	if !strings.Contains(req.SystemPrompt, `"required":["result"]`) {
 		t.Fatalf("structured output schema missing from prompt: %q", req.SystemPrompt)

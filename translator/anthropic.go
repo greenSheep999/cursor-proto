@@ -167,6 +167,51 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		})...)
 		return buf
 
+	case EventSignatureDelta:
+		if ev.Text == "" {
+			return nil
+		}
+		if !w.sentStart {
+			w.sentStart = true
+			buf = append(buf, w.frame("message_start", map[string]any{
+				"type": "message_start",
+				"message": map[string]any{
+					"id":            w.ID,
+					"type":          "message",
+					"role":          "assistant",
+					"model":         w.Model,
+					"content":       []any{},
+					"stop_reason":   nil,
+					"stop_sequence": nil,
+					"usage":         map[string]int{"input_tokens": 0, "output_tokens": 0},
+				},
+			})...)
+		}
+		if w.blockOpen && w.blockType != "thinking" {
+			return nil
+		}
+		if !w.blockOpen {
+			w.blockOpen = true
+			w.blockType = "thinking"
+			buf = append(buf, w.frame("content_block_start", map[string]any{
+				"type":  "content_block_start",
+				"index": w.blockIndex,
+				"content_block": map[string]any{
+					"type":     "thinking",
+					"thinking": "",
+				},
+			})...)
+		}
+		buf = append(buf, w.frame("content_block_delta", map[string]any{
+			"type":  "content_block_delta",
+			"index": w.blockIndex,
+			"delta": map[string]any{
+				"type":      "signature_delta",
+				"signature": ev.Text,
+			},
+		})...)
+		return buf
+
 	case EventToolCallStarted:
 		if !w.sentStart {
 			w.sentStart = true

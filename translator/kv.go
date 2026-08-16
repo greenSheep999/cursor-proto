@@ -18,6 +18,10 @@ type BlobEvent struct {
 	// ThoughtText is the model's internal reasoning shown when the blob is a
 	// bare short string (Cursor sometimes leaks these; may be discarded).
 	ThoughtText string
+	// Signature is Cursor's provider-issued reasoning signature from an
+	// assistant reasoning content block. It is safe to pass through verbatim
+	// as Anthropic signature_delta data; it must never be synthesized.
+	Signature string
 }
 
 // FromKvBlob attempts to extract an AssistantText / ThoughtText out of a
@@ -54,8 +58,8 @@ func FromKvBlob(m *cursorpb.AgentV1_AgentServerMessage) *BlobEvent {
 	}
 
 	// Try JSON parse first (this catches the assistant message blob).
-	if txt := extractAssistantTextFromJSON(data); txt != "" {
-		return &BlobEvent{AssistantText: txt}
+	if event := extractAssistantBlobFromJSON(data); event != nil {
+		return event
 	}
 	return nil
 }
@@ -63,6 +67,14 @@ func FromKvBlob(m *cursorpb.AgentV1_AgentServerMessage) *BlobEvent {
 // extractAssistantTextFromJSON parses `data` as an AI-SDK-style assistant
 // message and returns the concatenated `type: text` content.
 func extractAssistantTextFromJSON(data []byte) string {
+	event := extractAssistantBlobFromJSON(data)
+	if event == nil {
+		return ""
+	}
+	return event.AssistantText
+}
+
+func extractAssistantBlobFromJSON(data []byte) *BlobEvent {
 	// Blobs may have leading garbage bytes; find the first '{' and try from there.
 	start := -1
 	for i, b := range data {
@@ -72,26 +84,41 @@ func extractAssistantTextFromJSON(data []byte) string {
 		}
 	}
 	if start < 0 {
-		return ""
+		return nil
 	}
 	var obj struct {
 		Role    string `json:"role"`
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type      string `json:"type"`
+			Text      string `json:"text"`
+			Signature string `json:"signature"`
 		} `json:"content"`
 	}
 	if err := json.Unmarshal(data[start:], &obj); err != nil {
-		return ""
+		return nil
 	}
 	if !strings.EqualFold(obj.Role, "assistant") {
-		return ""
+		return nil
 	}
-	var sb strings.Builder
+	var text, thought strings.Builder
+	var signature string
 	for _, c := range obj.Content {
-		if c.Type == "text" && c.Text != "" {
-			sb.WriteString(c.Text)
+		switch c.Type {
+		case "text":
+			text.WriteString(c.Text)
+		case "reasoning", "thinking":
+			thought.WriteString(c.Text)
+			if signature == "" {
+				signature = c.Signature
+			}
 		}
 	}
-	return sb.String()
+	if text.Len() == 0 && thought.Len() == 0 && signature == "" {
+		return nil
+	}
+	return &BlobEvent{
+		AssistantText: text.String(),
+		ThoughtText:   thought.String(),
+		Signature:     signature,
+	}
 }
