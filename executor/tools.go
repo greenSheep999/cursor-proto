@@ -32,40 +32,23 @@ type ToolDefinition struct {
 // (buildMcpToolsWrapper in reference/js-src/agentClient.js).
 const mcpProviderIdentifier = "cursor-tools"
 
-// cursorReservedToolNames are tool names Cursor's server treats as internal.
-// Registering an MCP tool with one of these names yields a Provider Error
-// (grpc-status: 8). We rename callers' colliding tools to `mcp_<Name>` on the
-// wire and restore the original name when the model calls them back.
-//
-// The list matches the JS reference implementation (sanitizeMcpToolName in
-// reference/js-src/agentClient.js).
-var cursorReservedToolNames = map[string]struct{}{
-	"TodoWrite":        {},
-	"WebFetch":         {},
-	"Task":             {},
-	"EditNotebook":     {},
-	"FetchMcpResource": {},
-	"Delete":           {},
-}
+const externalToolPrefix = "mcp_"
 
 // SanitizeMcpToolName returns the wire name for a caller-supplied tool. It
-// prefixes reserved names with `mcp_` so the Cursor server does not reject
-// the registration.
+// places every external tool in a dedicated namespace so it cannot collide
+// with Cursor's built-in tools. Some built-in-looking names fail explicitly,
+// while combinations such as Bash + Read + Edit + Write only emit heartbeats
+// and never start generation. Prefixing every caller tool avoids both failure
+// modes without maintaining a version-specific reserved-name list.
 func SanitizeMcpToolName(name string) string {
-	if _, reserved := cursorReservedToolNames[name]; reserved {
-		return "mcp_" + name
-	}
-	return name
+	return externalToolPrefix + name
 }
 
 // RestoreMcpToolName inverts SanitizeMcpToolName so tool-call events surface
 // the caller's original name.
 func RestoreMcpToolName(name string) string {
-	if strings.HasPrefix(name, "mcp_") {
-		orig := strings.TrimPrefix(name, "mcp_")
-		if _, reserved := cursorReservedToolNames[orig]; reserved {
-			return orig
-		}
+	if strings.HasPrefix(name, externalToolPrefix) {
+		return strings.TrimPrefix(name, externalToolPrefix)
 	}
 	return name
 }

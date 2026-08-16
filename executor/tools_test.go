@@ -10,11 +10,12 @@ import (
 
 func TestSanitizeMcpToolName(t *testing.T) {
 	cases := map[string]string{
-		"get_weather": "get_weather",
+		"get_weather": "mcp_get_weather",
 		"TodoWrite":   "mcp_TodoWrite",
 		"WebFetch":    "mcp_WebFetch",
 		"Task":        "mcp_Task",
 		"Delete":      "mcp_Delete",
+		"mcp_Custom":  "mcp_mcp_Custom",
 	}
 	for in, want := range cases {
 		if got := SanitizeMcpToolName(in); got != want {
@@ -25,11 +26,11 @@ func TestSanitizeMcpToolName(t *testing.T) {
 
 func TestRestoreMcpToolName(t *testing.T) {
 	cases := map[string]string{
-		"mcp_TodoWrite": "TodoWrite",
-		"mcp_WebFetch":  "WebFetch",
-		"get_weather":   "get_weather",
-		// Non-reserved names with mcp_ prefix are left alone.
-		"mcp_MyCustomTool": "mcp_MyCustomTool",
+		"mcp_TodoWrite":     "TodoWrite",
+		"mcp_WebFetch":      "WebFetch",
+		"mcp_get_weather":   "get_weather",
+		"mcp_mcp_Custom":    "mcp_Custom",
+		"unprefixed_server": "unprefixed_server",
 	}
 	for in, want := range cases {
 		if got := RestoreMcpToolName(in); got != want {
@@ -97,7 +98,7 @@ func TestBuildMcpToolDefinitions(t *testing.T) {
 	if len(defs) != 2 {
 		t.Fatalf("want 2 defs, got %d", len(defs))
 	}
-	if defs[0].Name != "get_weather" || defs[0].ToolName != "get_weather" {
+	if defs[0].Name != "mcp_get_weather" || defs[0].ToolName != "mcp_get_weather" {
 		t.Errorf("unexpected name/tool_name: %s/%s", defs[0].Name, defs[0].ToolName)
 	}
 	if defs[0].ProviderIdentifier != "cursor-tools" {
@@ -131,7 +132,7 @@ func TestBuildMcpInstructionsShape(t *testing.T) {
 	if instr.ServerName != "cursor-tools" || instr.ServerIdentifier != "cursor-tools" {
 		t.Errorf("provider identifiers = %q/%q", instr.ServerName, instr.ServerIdentifier)
 	}
-	if !strings.Contains(instr.Instructions, "get_weather") ||
+	if !strings.Contains(instr.Instructions, "mcp_get_weather") ||
 		!strings.Contains(instr.Instructions, "mcp_TodoWrite") {
 		t.Errorf("missing tool names in instructions:\n%s", instr.Instructions)
 	}
