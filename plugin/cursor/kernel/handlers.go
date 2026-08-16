@@ -13,7 +13,7 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-const pluginVersion = "0.6.7"
+const pluginVersion = "0.7.1"
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {
@@ -48,31 +48,12 @@ func identifierResult() string {
 	return string(buf)
 }
 
-// knownCursorModels is the static model list advertised through
-// model.static / model.for_auth. Cursor exposes a richer list via a
-// live gRPC call (executor.Client.ListModels), but static advertising
-// only needs the popular defaults — the executor plugin dispatches the
-// real request against the account regardless.
-var knownCursorModels = []string{
-	"composer-2.5",
-	"composer-2",
-	"claude-4.5-sonnet",
-	"claude-4.5-haiku",
-	"claude-opus-4.1",
-	"gpt-5",
-	"gpt-5-mini",
-	"gpt-5-codex",
-	"gemini-2.5-pro",
-	"gemini-2.5-flash",
-	"grok-code",
-	"cursor-small",
-}
-
-// staticModelsResult returns the model list Cursor ships. Kept as a
-// hand-maintained list so operators know what to expect before the
-// account has been used for a live ListModels call.
+// staticModelsResult supplies the shared protocol-line fallback for CPA hosts
+// that register model ownership before invoking model.for_auth. Per-account
+// live discovery below remains authoritative and automatically accepts future
+// catalog changes without advertising every effort/thinking/fast variant.
 func staticModelsResult() string {
-	return modelsResult(knownCursorModels)
+	return modelsResult(executor.StableModelFallbackIDs())
 }
 
 func modelsResult(names []string) string {

@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/router-for-me/cursor-proto/auth"
@@ -112,6 +113,30 @@ func TestDispatch_ModelStatic(t *testing.T) {
 	models, ok := m["Models"].([]any)
 	if !ok || len(models) == 0 {
 		t.Fatalf("Models missing or empty: %v", m["Models"])
+	}
+	seen := make(map[string]bool, len(models))
+	for _, rawModel := range models {
+		id := rawModel.(map[string]any)["ID"].(string)
+		seen[id] = true
+		if strings.Contains(id, "-thinking-") || strings.HasSuffix(id, "-fast") {
+			t.Fatalf("variant model %q must not be statically advertised", id)
+		}
+	}
+	for _, id := range []string{"claude-opus-5", "claude-opus-4-8", "claude-fable-5", "claude-sonnet-5"} {
+		if !seen[id] {
+			t.Errorf("required Cursor 3.16 base model %q is missing", id)
+		}
+	}
+}
+
+func TestDispatch_RegisterReportsCurrentPluginVersion(t *testing.T) {
+	raw, rc := dispatch("plugin.register", nil)
+	if rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	m := unwrapOK(t, raw)
+	if got := m["metadata"].(map[string]any)["Version"]; got != "0.7.1" {
+		t.Fatalf("metadata.Version = %v, want 0.7.1", got)
 	}
 }
 

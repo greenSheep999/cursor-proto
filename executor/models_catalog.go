@@ -8,6 +8,55 @@ import (
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
 
+// stableModelFallbackIDs is the last known-good set of primary model IDs for
+// the current Cursor protocol line. Live catalog discovery remains the source
+// of truth; this fallback exists for hosts that must register model ownership
+// before they have called model.for_auth for an account.
+var stableModelFallbackIDs = []string{
+	"auto-smart",
+	"claude-fable-5",
+	"claude-haiku-4-5",
+	"claude-opus-4-5",
+	"claude-opus-4-6",
+	"claude-opus-4-7",
+	"claude-opus-4-8",
+	"claude-opus-5",
+	"claude-sonnet-4",
+	"claude-sonnet-4-5",
+	"claude-sonnet-4-6",
+	"claude-sonnet-5",
+	"composer-2.5",
+	"gemini-2.5-flash",
+	"gemini-3-flash",
+	"gemini-3.1-pro",
+	"gemini-3.5-flash",
+	"gemini-3.6-flash",
+	"gemini-3.7-flash",
+	"glm-5.2",
+	"gpt-5-mini",
+	"gpt-5.1",
+	"gpt-5.2",
+	"gpt-5.3-codex",
+	"gpt-5.4",
+	"gpt-5.4-mini",
+	"gpt-5.4-nano",
+	"gpt-5.5",
+	"gpt-5.6-luna",
+	"gpt-5.6-sol",
+	"gpt-5.6-terra",
+	"grok-4.5",
+	"grok-4.6",
+	"kimi-k2.7-code",
+	"kimi-k3",
+}
+
+// StableModelFallbackIDs returns a copy of the current protocol line's
+// registration fallback. Callers must still prefer AvailableModelIDs from a
+// live account whenever the host supports per-auth model discovery.
+func StableModelFallbackIDs() []string {
+	return append([]string(nil), stableModelFallbackIDs...)
+}
+
 // AvailableModelIDs returns the stable primary IDs shown by Cursor's current
 // model picker. Variant slugs remain accepted by resolveRequestedModelFromCatalog
 // but are intentionally not advertised as separate models: Cursor 3.16 sends
