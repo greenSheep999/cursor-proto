@@ -754,6 +754,12 @@ func TestParseClaudePayload_UsesNativeWebSearch(t *testing.T) {
 	if !req.WebSearch {
 		t.Fatal("ChatRequest.WebSearch = false, want true")
 	}
+	if req.Mode != executor.APIConversationMode(true) {
+		t.Fatalf("WebSearch mode = %d, want agent mode", req.Mode)
+	}
+	if req.PureMode {
+		t.Fatal("WebSearch PureMode = true, want IDE request context")
+	}
 }
 
 func TestBuildChatRequest_UsesStableServerToolVariant(t *testing.T) {
