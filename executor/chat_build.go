@@ -136,18 +136,9 @@ func buildSelectedContext(attachments []Attachment) *cursorpb.AgentV1_SelectedCo
 		}
 		switch attachment.Kind {
 		case "image":
-			var dimension *cursorpb.AgentV1_SelectedImage_Dimension
-			if attachment.Width > 0 && attachment.Height > 0 {
-				dimension = &cursorpb.AgentV1_SelectedImage_Dimension{
-					Width:  attachment.Width,
-					Height: attachment.Height,
-				}
-			}
 			selected.SelectedImages = append(selected.SelectedImages, &cursorpb.AgentV1_SelectedImage{
-				Uuid:      auth.GenerateSessionID(),
-				Path:      attachment.Filename,
-				MimeType:  attachment.MimeType,
-				Dimension: dimension,
+				Uuid:     auth.GenerateSessionID(),
+				MimeType: attachment.MimeType,
 				DataOrBlobId: &cursorpb.AgentV1_SelectedImage_Data{
 					Data: append([]byte(nil), attachment.Data...),
 				},
@@ -157,7 +148,6 @@ func buildSelectedContext(attachments []Attachment) *cursorpb.AgentV1_SelectedCo
 				Uuid:     auth.GenerateSessionID(),
 				Filename: attachment.Filename,
 				MimeType: attachment.MimeType,
-				Path:     attachment.Filename,
 				DataOrBlobId: &cursorpb.AgentV1_SelectedDocument_Data{
 					Data: append([]byte(nil), attachment.Data...),
 				},

@@ -27,10 +27,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	"image/gif"
-	"image/jpeg"
-	"image/png"
 	"strings"
 	"sync"
 	"time"
@@ -587,34 +583,8 @@ func extractClaudeAttachments(raw json.RawMessage) []executor.Attachment {
 			MimeType: block.Source.MediaType,
 			Data:     data,
 		})
-		if block.Type == "image" {
-			width, height := imageDimensions(block.Source.MediaType, data)
-			attachments[len(attachments)-1].Width = width
-			attachments[len(attachments)-1].Height = height
-		}
 	}
 	return attachments
-}
-
-func imageDimensions(mimeType string, data []byte) (int32, int32) {
-	var (
-		config image.Config
-		err    error
-	)
-	switch strings.ToLower(strings.TrimSpace(mimeType)) {
-	case "image/png":
-		config, err = png.DecodeConfig(bytes.NewReader(data))
-	case "image/jpeg":
-		config, err = jpeg.DecodeConfig(bytes.NewReader(data))
-	case "image/gif":
-		config, err = gif.DecodeConfig(bytes.NewReader(data))
-	default:
-		return 0, 0
-	}
-	if err != nil || config.Width <= 0 || config.Height <= 0 {
-		return 0, 0
-	}
-	return int32(config.Width), int32(config.Height)
 }
 
 func attachmentExtension(mimeType, kind string) string {

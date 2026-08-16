@@ -28,8 +28,6 @@ type Attachment struct {
 	Filename string
 	MimeType string
 	Data     []byte
-	Width    int32
-	Height   int32
 }
 
 // ChatRequest carries the minimum parameters needed to start an agent run.

@@ -8,7 +8,7 @@ func TestBuildAgentRunRequest_Attachments(t *testing.T) {
 		Model:       "claude-opus-4-8-medium",
 		UserMessage: "inspect",
 		Attachments: []Attachment{
-			{Kind: "image", Filename: "pixel.png", MimeType: "image/png", Data: []byte("image"), Width: 1, Height: 1},
+			{Kind: "image", Filename: "pixel.png", MimeType: "image/png", Data: []byte("image")},
 			{Kind: "document", Filename: "report.pdf", MimeType: "application/pdf", Data: []byte("pdf")},
 		},
 	}, "message-id")
@@ -22,10 +22,14 @@ func TestBuildAgentRunRequest_Attachments(t *testing.T) {
 	if len(selected.GetSelectedImages()) != 1 || string(selected.GetSelectedImages()[0].GetData()) != "image" {
 		t.Fatalf("selected images = %+v", selected.GetSelectedImages())
 	}
-	if dimension := selected.GetSelectedImages()[0].GetDimension(); dimension.GetWidth() != 1 || dimension.GetHeight() != 1 {
-		t.Fatalf("selected image dimension = %+v", dimension)
+	image := selected.GetSelectedImages()[0]
+	if image.GetPath() != "" || image.GetDimension() != nil {
+		t.Fatalf("selected image includes fields absent from Cursor client wire shape: %+v", image)
 	}
 	if len(selected.GetSelectedDocuments()) != 1 || string(selected.GetSelectedDocuments()[0].GetData()) != "pdf" {
 		t.Fatalf("selected documents = %+v", selected.GetSelectedDocuments())
+	}
+	if path := selected.GetSelectedDocuments()[0].GetPath(); path != "" {
+		t.Fatalf("selected document path = %q, want empty", path)
 	}
 }
