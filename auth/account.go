@@ -33,6 +33,15 @@ type Account struct {
 	MachineID    string `json:"machine_id,omitempty"`
 	MacMachineID string `json:"mac_machine_id,omitempty"`
 
+	// Client platform fields keep the IDE fingerprint internally consistent
+	// when an account is used on a host other than the machine that created it.
+	// Empty fields fall back to the executor's local runtime defaults.
+	ClientOS        string `json:"client_os,omitempty"`
+	ClientOSVersion string `json:"client_os_version,omitempty"`
+	ClientArch      string `json:"client_arch,omitempty"`
+	ClientShell     string `json:"client_shell,omitempty"`
+	WorkspacePath   string `json:"workspace_path,omitempty"`
+
 	// ProxyURL routes this account's Cursor upstream traffic through an
 	// account-specific HTTP, HTTPS, SOCKS5, or SOCKS5H proxy.
 	ProxyURL string `json:"proxy_url,omitempty"`

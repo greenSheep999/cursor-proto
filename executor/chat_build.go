@@ -1,33 +1,34 @@
 package executor
 
 import (
-	"os"
-
 	"github.com/router-for-me/cursor-proto/auth"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
 
 // buildAgentRunRequest constructs the top-level AgentRunRequest for a chat.
 // See docs/schema-3.10.md for the field layout.
-func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string) (*cursorpb.AgentV1_AgentRunRequest, error) {
+func (c *Client) buildAgentRunRequest(req *ChatRequest, messageID string, accounts ...*auth.Account) (*cursorpb.AgentV1_AgentRunRequest, error) {
+	acc := c.Account
+	if len(accounts) > 0 {
+		acc = accounts[0]
+	}
+	platform := resolveClientPlatform(acc)
 	var env *cursorpb.AgentV1_RequestContextEnv
 	if !req.PureMode {
 		workspace := req.WorkspacePath
 		if workspace == "" {
-			if wd, err := os.Getwd(); err == nil {
-				workspace = wd
-			}
+			workspace = platform.workspacePath
 		}
 		env = &cursorpb.AgentV1_RequestContextEnv{
-			OsVersion:      osVersion(),
+			OsVersion:      platform.osVersion,
 			WorkspacePaths: []string{workspace},
-			Shell:          defaultShell(),
+			Shell:          platform.shell,
 			TimeZone:       timezone(),
 			ProjectFolder:  workspace,
 		}
 	} else {
 		env = &cursorpb.AgentV1_RequestContextEnv{
-			OsVersion: osVersion(),
+			OsVersion: platform.osVersion,
 			TimeZone:  timezone(),
 		}
 	}
@@ -246,10 +247,3 @@ func buildPrependUserMessages(turns []HistoryTurn) []*cursorpb.AgentV1_UserMessa
 }
 
 func ptr[T any](v T) *T { return &v }
-
-func defaultShell() string {
-	if s := os.Getenv("SHELL"); s != "" {
-		return s
-	}
-	return "/bin/zsh"
-}

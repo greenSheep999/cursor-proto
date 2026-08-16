@@ -46,6 +46,7 @@ func CursorLine() string {
 // ChecksumSession, SessionID, ClientKey, etc. filled — call FillSessionDefaults
 // if you loaded it from JSON).
 func ApplyCommonHeaders(req *http.Request, acc *auth.Account, requestID string) {
+	platform := resolveClientPlatform(acc)
 	req.Header.Set("authorization", "Bearer "+acc.AccessToken)
 	req.Header.Set("connect-protocol-version", "1")
 	req.Header.Set("user-agent", UserAgent)
@@ -55,9 +56,9 @@ func ApplyCommonHeaders(req *http.Request, acc *auth.Account, requestID string) 
 	req.Header.Set("x-cursor-client-version", CursorClientVersion)
 	req.Header.Set("x-cursor-client-commit", CursorClientCommit)
 	req.Header.Set("x-cursor-client-type", "ide")
-	req.Header.Set("x-cursor-client-os", "darwin")
-	req.Header.Set("x-cursor-client-os-version", osVersion())
-	req.Header.Set("x-cursor-client-arch", clientArch())
+	req.Header.Set("x-cursor-client-os", platform.os)
+	req.Header.Set("x-cursor-client-os-version", platform.osVersion)
+	req.Header.Set("x-cursor-client-arch", platform.arch)
 	req.Header.Set("x-cursor-client-device-type", "desktop")
 	req.Header.Set("x-cursor-client-layout", "unifiedAgent")
 	req.Header.Set("x-cursor-timezone", timezone())

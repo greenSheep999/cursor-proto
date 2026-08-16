@@ -79,6 +79,33 @@ func TestNewAccountFromPollBuildsRealChecksum(t *testing.T) {
 	}
 }
 
+func TestSaveAndLoadAccountPreservesClientPlatform(t *testing.T) {
+	dir := t.TempDir()
+	orig := &Account{
+		Email:           "windows@example.com",
+		AccessToken:     "token",
+		ClientOS:        "win32",
+		ClientOSVersion: "10.0.22631",
+		ClientArch:      "x64",
+		ClientShell:     `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,
+		WorkspacePath:   `C:\Users\Example\project`,
+	}
+	path, err := SaveAccount(dir, orig)
+	if err != nil {
+		t.Fatalf("SaveAccount: %v", err)
+	}
+	got, err := LoadAccount(path)
+	if err != nil {
+		t.Fatalf("LoadAccount: %v", err)
+	}
+	if got.ClientOS != orig.ClientOS || got.ClientOSVersion != orig.ClientOSVersion || got.ClientArch != orig.ClientArch {
+		t.Fatalf("platform = %q/%q/%q, want %q/%q/%q", got.ClientOS, got.ClientOSVersion, got.ClientArch, orig.ClientOS, orig.ClientOSVersion, orig.ClientArch)
+	}
+	if got.ClientShell != orig.ClientShell || got.WorkspacePath != orig.WorkspacePath {
+		t.Fatalf("environment = %q/%q, want %q/%q", got.ClientShell, got.WorkspacePath, orig.ClientShell, orig.WorkspacePath)
+	}
+}
+
 func TestNewAccountFromPollRejectsWebToken(t *testing.T) {
 	pr := &PollResult{
 		AccessToken: typedJWT(t, "web", "auth0|user_ABC"),

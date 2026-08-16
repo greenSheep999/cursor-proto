@@ -21,6 +21,7 @@ import (
 // This is not used by the proxy runtime. It exists so cmd/test-rawstream can
 // dump captures without duplicating the RunSSE / BidiAppend orchestration.
 func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadCloser, error) {
+	acc := c.CurrentAccount()
 	// Do NOT default Mode to 3 here — 3 is PLAN in Cursor's proto, not
 	// AGENT. See chat.go RunChat comment for full context. Leave the field
 	// at 0; downstream request builders normalise UNSPECIFIED to AGENT.
@@ -40,7 +41,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 		req.UserMessage = spliceHistory(req.History, req.UserMessage)
 	}
 
-	agentRun, err := c.buildAgentRunRequest(req, messageID)
+	agentRun, err := c.buildAgentRunRequest(req, messageID, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +64,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 		return nil, err
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
-	ApplyCommonHeaders(sseReq, c.CurrentAccount(), requestID)
+	ApplyCommonHeaders(sseReq, acc, requestID)
 
 	sseClient := c.NewStreamClient()
 	sseResp, err := sseClient.Do(sseReq)
@@ -76,7 +77,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 		return nil, fmt.Errorf("RunSSE http %d: %s", sseResp.StatusCode, string(body))
 	}
 
-	if err := c.bidiAppend(ctx, requestID, 0, agentClientMsg); err != nil {
+	if err := c.bidiAppendForAccount(ctx, acc, requestID, 0, agentClientMsg); err != nil {
 		sseResp.Body.Close()
 		return nil, fmt.Errorf("BidiAppend seed: %w", err)
 	}

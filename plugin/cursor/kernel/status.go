@@ -517,16 +517,24 @@ func accountFromAuthFile(file *cpaformat.AuthFile) *auth.Account {
 	issued, _ := cpaformat.ParseTime(file.IssuedAt)
 	expired, _ := cpaformat.ParseTime(file.Expired)
 	acc := &auth.Account{
-		Email:        file.Email,
-		UserID:       file.UserID,
-		AccessToken:  file.AccessToken,
-		RefreshToken: file.RefreshToken,
-		AuthID:       file.AuthID,
-		AuthType:     file.AuthKind,
-		IssuedAt:     issued,
-		ExpiresAt:    expired,
-		MachineID:    file.MachineID,
-		MacMachineID: file.MacMachineID,
+		Email:           file.Email,
+		UserID:          file.UserID,
+		AccessToken:     file.AccessToken,
+		RefreshToken:    file.RefreshToken,
+		AuthID:          file.AuthID,
+		AuthType:        file.AuthKind,
+		IssuedAt:        issued,
+		ExpiresAt:       expired,
+		MachineID:       file.MachineID,
+		MacMachineID:    file.MacMachineID,
+		ClientOS:        file.ClientOS,
+		ClientOSVersion: file.ClientOSVersion,
+		ClientArch:      file.ClientArch,
+		ClientShell:     file.ClientShell,
+		WorkspacePath:   file.WorkspacePath,
+		ProxyURL:        file.ProxyURL,
+		Refreshable:     file.Refreshable,
+		RefreshLead:     time.Duration(file.RefreshLeadNanos),
 	}
 	acc.FillSessionDefaults(time.Now())
 	return acc

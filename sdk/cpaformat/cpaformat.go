@@ -86,6 +86,15 @@ type CursorTokenStorage struct {
 	MachineID    string `json:"machine_id,omitempty"`
 	MacMachineID string `json:"mac_machine_id,omitempty"`
 
+	// Client platform fields describe the Cursor IDE environment presented to
+	// upstream. They are optional for backward compatibility; the executor
+	// falls back to a coherent profile for its local runtime when omitted.
+	ClientOS        string `json:"client_os,omitempty"`
+	ClientOSVersion string `json:"client_os_version,omitempty"`
+	ClientArch      string `json:"client_arch,omitempty"`
+	ClientShell     string `json:"client_shell,omitempty"`
+	WorkspacePath   string `json:"workspace_path,omitempty"`
+
 	// IssuedAt is when the token was last issued/refreshed, in RFC3339.
 	IssuedAt string `json:"issued_at,omitempty"`
 

@@ -20,6 +20,24 @@ material plus `type`, `email`, `proxy_url`, `prefix`, `priority`,
 `note`, `disabled`, `disable_cooling`, `request_retry`,
 `excluded_models` at the top level.
 
+Cursor accounts may also persist an optional, internally consistent IDE
+platform profile:
+
+```json
+{
+  "client_os": "win32",
+  "client_os_version": "10.0.22631",
+  "client_arch": "x64",
+  "client_shell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  "workspace_path": "C:\\Users\\Public\\Cursor"
+}
+```
+
+Supported `client_os` values are `darwin`, `win32`, and `linux`. The fields
+round-trip through `cursor-to-cpa` and CPA auth refreshes. When omitted, the
+executor uses a coherent profile for its local runtime rather than mixing
+headers and Agent environment fields from different operating systems.
+
 We reuse that layout, giving Cursor its own provider key (`"type":
 "cursor"`) and adding a small provider-specific block for the fields
 the runtime executor needs:

@@ -13,16 +13,21 @@ import (
 
 func sampleAccount() *auth.Account {
 	return &auth.Account{
-		Email:        "Test.User@Example.com",
-		UserID:       "user_01KX3G01P34XHA85JW68Z9ES36",
-		AccessToken:  "cursor-access-token",
-		RefreshToken: "cursor-refresh-token",
-		AuthID:       "auth0|user_01KX3G01P34XHA85JW68Z9ES36",
-		AuthType:     "Auth_0",
-		IssuedAt:     time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC),
-		ExpiresAt:    time.Date(2025, 1, 3, 3, 4, 5, 0, time.UTC),
-		MachineID:    "machine-id-hex",
-		MacMachineID: "mac-machine-id-hex",
+		Email:           "Test.User@Example.com",
+		UserID:          "user_01KX3G01P34XHA85JW68Z9ES36",
+		AccessToken:     "cursor-access-token",
+		RefreshToken:    "cursor-refresh-token",
+		AuthID:          "auth0|user_01KX3G01P34XHA85JW68Z9ES36",
+		AuthType:        "Auth_0",
+		IssuedAt:        time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC),
+		ExpiresAt:       time.Date(2025, 1, 3, 3, 4, 5, 0, time.UTC),
+		MachineID:       "machine-id-hex",
+		MacMachineID:    "mac-machine-id-hex",
+		ClientOS:        "win32",
+		ClientOSVersion: "10.0.22631",
+		ClientArch:      "x64",
+		ClientShell:     `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,
+		WorkspacePath:   `C:\Users\Test.User\project`,
 	}
 }
 
@@ -48,6 +53,12 @@ func TestFromAccount_Basics(t *testing.T) {
 	}
 	if a.MacMachineID != "mac-machine-id-hex" {
 		t.Errorf("MacMachineID not carried over: %q", a.MacMachineID)
+	}
+	if a.ClientOS != "win32" || a.ClientOSVersion != "10.0.22631" || a.ClientArch != "x64" {
+		t.Errorf("client platform not carried over: os=%q version=%q arch=%q", a.ClientOS, a.ClientOSVersion, a.ClientArch)
+	}
+	if a.ClientShell != srcWindowsShell || a.WorkspacePath != `C:\Users\Test.User\project` {
+		t.Errorf("client environment not carried over: shell=%q workspace=%q", a.ClientShell, a.WorkspacePath)
 	}
 	if a.Expired == "" {
 		t.Errorf("Expired should be set for known expiration")
@@ -100,7 +111,7 @@ func TestAuthFile_MarshalRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(buf, &meta); err != nil {
 		t.Fatalf("unmarshal into map: %v", err)
 	}
-	for _, k := range []string{"type", "access_token", "email", "prefix", "proxy_url"} {
+	for _, k := range []string{"type", "access_token", "email", "client_os", "client_os_version", "client_arch", "client_shell", "workspace_path", "prefix", "proxy_url"} {
 		if _, ok := meta[k]; !ok {
 			t.Errorf("missing top-level key %q", k)
 		}
@@ -167,6 +178,12 @@ func TestAuthFile_ToAccountRoundTrip(t *testing.T) {
 	if back.MachineID != src.MachineID {
 		t.Errorf("MachineID round-trip mismatch")
 	}
+	if back.ClientOS != src.ClientOS || back.ClientOSVersion != src.ClientOSVersion || back.ClientArch != src.ClientArch {
+		t.Errorf("client platform round-trip mismatch: got %q/%q/%q", back.ClientOS, back.ClientOSVersion, back.ClientArch)
+	}
+	if back.ClientShell != src.ClientShell || back.WorkspacePath != src.WorkspacePath {
+		t.Errorf("client environment round-trip mismatch: got %q/%q", back.ClientShell, back.WorkspacePath)
+	}
 	if !back.IssuedAt.Equal(src.IssuedAt) {
 		t.Errorf("IssuedAt round-trip mismatch: %v vs %v", back.IssuedAt, src.IssuedAt)
 	}
@@ -174,6 +191,8 @@ func TestAuthFile_ToAccountRoundTrip(t *testing.T) {
 		t.Errorf("ExpiresAt round-trip mismatch: %v vs %v", back.ExpiresAt, src.ExpiresAt)
 	}
 }
+
+const srcWindowsShell = `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
 
 func TestAuthFile_WriteToDir(t *testing.T) {
 	a, err := FromAccount(sampleAccount())

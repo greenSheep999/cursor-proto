@@ -35,7 +35,7 @@ type ChatRequest struct {
 	Model          string // e.g. "composer-2.5"
 	UserMessage    string // the human turn text
 	ConversationID string // optional; auto-generated if empty
-	WorkspacePath  string // optional; default os.Getwd
+	WorkspacePath  string // optional; default from the account platform profile
 	// Mode selects Cursor's server-side conversation mode. The proto enum is:
 	//   0 UNSPECIFIED — server treats as PLAN (verified 2026-07-19 with a
 	//                   fresh Composer trace: system_reminder "Plan mode is
@@ -150,6 +150,7 @@ type ChatEvent struct {
 //
 // Cursor pairs the two via the shared request-id string.
 func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEvent, error) {
+	acc := c.CurrentAccount()
 	// Historical bug (verified fixed 2026-07-19): this used to set
 	// `req.Mode = 3` when unset, on the assumption that "3 = agent". The
 	// proto enum actually maps 3 to AGENT_MODE_PLAN, so every default call
@@ -194,7 +195,7 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 	// field 1 of a manually-built "AgentClientMessage" (Cursor doesn't ship a
 	// dedicated proto message for this outer envelope; per CursorGateway's
 	// reverse-engineering the wrapper is just `{ field 1: AgentRunRequest }`).
-	agentRun, err := c.buildAgentRunRequest(req, messageID)
+	agentRun, err := c.buildAgentRunRequest(req, messageID, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +220,7 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 		return nil, err
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
-	ApplyCommonHeaders(sseReq, c.CurrentAccount(), requestID)
+	ApplyCommonHeaders(sseReq, acc, requestID)
 
 	// Use a client without a body timeout — the stream can be long.
 	// c.NewStreamClient() honors -http-version so operators can force
@@ -236,7 +237,7 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 	}
 
 	// Send the first BidiAppend carrying the AgentClientMessage.
-	if err := c.bidiAppend(ctx, requestID, 0, agentClientMsg); err != nil {
+	if err := c.bidiAppendForAccount(ctx, acc, requestID, 0, agentClientMsg); err != nil {
 		sseResp.Body.Close()
 		return nil, fmt.Errorf("BidiAppend seed: %w", err)
 	}
@@ -248,7 +249,7 @@ func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEven
 		if len(payload) == 0 {
 			return nil
 		}
-		err := c.bidiAppend(ctx, requestID, appendSeqno, payload)
+		err := c.bidiAppendForAccount(ctx, acc, requestID, appendSeqno, payload)
 		appendSeqno++
 		return err
 	}
@@ -468,6 +469,10 @@ func bytesContains(haystack, needle []byte) bool {
 // 5-byte data envelope; the service may acknowledge a bare unary protobuf with
 // HTTP 200 while silently ignoring it, leaving WebSearch streams on heartbeats.
 func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, payload []byte) error {
+	return c.bidiAppendForAccount(ctx, c.CurrentAccount(), requestID, seq, payload)
+}
+
+func (c *Client) bidiAppendForAccount(ctx context.Context, acc *auth.Account, requestID string, seq int64, payload []byte) error {
 	appendRequest, err := proto.Marshal(&cursorpb.AiserverV1_BidiAppendRequest{
 		Data:        hexEncode(payload), // legacy field, CursorGateway still populates this
 		DataBinary:  payload,            // 3.10 preferred wire form
@@ -485,7 +490,7 @@ func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, pa
 		return err
 	}
 	req.Header.Set("content-type", "application/grpc-web+proto")
-	ApplyCommonHeaders(req, c.CurrentAccount(), auth.GenerateRequestID())
+	ApplyCommonHeaders(req, acc, auth.GenerateRequestID())
 
 	cli := c.NewUnaryClient(30 * time.Second)
 	resp, err := cli.Do(req)

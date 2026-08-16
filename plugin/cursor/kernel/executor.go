@@ -550,9 +550,6 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		WebSearch:          shape.WebSearch,
 		WebFetch:           shape.WebFetch,
 	}
-	if shape.WebSearch || shape.WebFetch {
-		req.WorkspacePath = "/Users/Shared/Cursor"
-	}
 	if headers != nil {
 		if convID := firstHeader(headers, "X-Conversation-Id"); convID != "" {
 			req.ConversationID = convID
