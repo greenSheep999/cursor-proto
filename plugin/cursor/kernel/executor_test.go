@@ -36,6 +36,14 @@ type fakeRunner struct {
 	err    error
 }
 
+type channelRunner struct {
+	events <-chan executor.ChatEvent
+}
+
+func (r *channelRunner) RunChat(context.Context, *executor.ChatRequest) (<-chan executor.ChatEvent, error) {
+	return r.events, nil
+}
+
 func (f *fakeRunner) RunChat(ctx context.Context, req *executor.ChatRequest) (<-chan executor.ChatEvent, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -558,6 +566,66 @@ func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testi
 	}
 	if got := strings.Count(joined, `"text":"Hi"`); got != 1 {
 		t.Fatalf("assistant text emitted %d times, want once: %s", got, joined)
+	}
+}
+
+func TestExecuteStream_Claude_HeartbeatOnlyStartsThenTimesOut(t *testing.T) {
+	t.Setenv("CURSOR_STREAM_FIRST_OUTPUT_TIMEOUT_MS", "50")
+	events := make(chan executor.ChatEvent, 1)
+	events <- buildHeartbeatEvent()
+	defer close(events)
+
+	var (
+		mu           sync.Mutex
+		emitted      [][]byte
+		closedError  string
+		streamClosed = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			var req struct {
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("close unmarshal: %v", err)
+			}
+			closedError = req.Error
+			close(streamClosed)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return &channelRunner{events: events}, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "heartbeat-timeout"))
+	select {
+	case <-streamClosed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("heartbeat-only stream never timed out")
+	}
+
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if !strings.Contains(joined, "event: message_start") || !strings.Contains(joined, "event: ping") {
+		t.Fatalf("heartbeat did not establish a valid Anthropic stream: %s", joined)
+	}
+	if !strings.Contains(closedError, "first-output timeout") {
+		t.Fatalf("close error = %q, want first-output timeout", closedError)
 	}
 }
 

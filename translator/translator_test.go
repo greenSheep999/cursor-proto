@@ -63,6 +63,19 @@ func TestAnthropicStreamShape(t *testing.T) {
 	}
 }
 
+func TestAnthropicHeartbeatStartsStreamBeforePing(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-opus-5")
+	frame := string(w.Encode(&Event{Kind: EventHeartbeat}))
+	startAt := strings.Index(frame, "event: message_start")
+	pingAt := strings.Index(frame, "event: ping")
+	if startAt < 0 || pingAt < 0 || startAt > pingAt {
+		t.Fatalf("heartbeat must emit message_start before ping:\n%s", frame)
+	}
+	if !strings.Contains(frame, `{"type":"ping"}`) {
+		t.Fatalf("heartbeat ping payload missing:\n%s", frame)
+	}
+}
+
 func TestAnthropicStreamInfersRefusalStopReason(t *testing.T) {
 	w := NewAnthropicStreamWriter("claude-fable-5")
 	w.Encode(&Event{Kind: EventTextDelta, Text: "我不能满足这个请求。"})

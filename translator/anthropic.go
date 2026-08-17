@@ -202,6 +202,11 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		})...)
 		return buf
 
+	case EventHeartbeat:
+		buf = append(buf, w.startFrame()...)
+		buf = append(buf, w.frame("ping", map[string]any{"type": "ping"})...)
+		return buf
+
 	case EventToolCallStarted:
 		buf = append(buf, w.startFrame()...)
 		// Close any open text block before opening the tool_use block —

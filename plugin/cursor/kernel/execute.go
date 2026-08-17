@@ -14,7 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
@@ -392,6 +394,19 @@ func emitStreamKeepalive(streamID, format string) error {
 	return emit(streamID, []byte("event: ping\ndata: {\"type\":\"ping\"}\n\n"))
 }
 
+func streamFirstOutputTimeout() time.Duration {
+	const fallback = 60 * time.Second
+	raw := strings.TrimSpace(os.Getenv("CURSOR_STREAM_FIRST_OUTPUT_TIMEOUT_MS"))
+	if raw == "" {
+		return fallback
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds <= 0 {
+		return fallback
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
 // emitOpenAIPayload converts the translator's HTTP-ready SSE bytes into the
 // payload units expected by CPA's async stream bridge. The host adds the
 // outer `data: ...\n\n` framing for OpenAI streams itself. Passing complete
@@ -518,6 +533,23 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 	streamStarted := false
 	var pendingText strings.Builder
 	var lastUsage *translator.Usage
+	firstOutputTimer := time.NewTimer(streamFirstOutputTimeout())
+	defer firstOutputTimer.Stop()
+	stopFirstOutputTimer := func() {
+		if !firstOutputTimer.Stop() {
+			select {
+			case <-firstOutputTimer.C:
+			default:
+			}
+		}
+	}
+	markOutput := func() {
+		if sawOutput {
+			return
+		}
+		sawOutput = true
+		stopFirstOutputTimer()
+	}
 	flushPendingText := func() bool {
 		if pendingText.Len() == 0 {
 			return true
@@ -534,7 +566,20 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		streamStarted = true
 		return true
 	}
-	for ev := range events {
+	streamEnded := false
+	for !streamEnded {
+		var ev executor.ChatEvent
+		select {
+		case next, ok := <-events:
+			if !ok {
+				streamEnded = true
+				continue
+			}
+			ev = next
+		case <-firstOutputTimer.C:
+			*errOut = "upstream produced no content before first-output timeout"
+			return
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -542,7 +587,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			if blob.AssistantText != "" {
 				delta := textState.consumeSnapshot(blob.AssistantText)
 				if delta != "" {
-					sawOutput = true
+					markOutput()
 					if expectThinkingSignature && !signatureSent {
 						pendingText.WriteString(delta)
 					} else {
@@ -577,7 +622,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		switch trEv.Kind {
 		case translator.EventTextDelta:
 			if delta := textState.consumeDelta(trEv.Text); delta != "" {
-				sawOutput = true
+				markOutput()
 				if expectThinkingSignature && !signatureSent {
 					pendingText.WriteString(delta)
 				} else {
@@ -590,7 +635,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				}
 			}
 		case translator.EventThinkingDelta:
-			sawOutput = true
+			markOutput()
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
 					*errOut = err.Error()
@@ -600,6 +645,13 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 		case translator.EventHeartbeat:
 			if !streamStarted {
+				if payload := tr.Encode(trEv); len(payload) > 0 {
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+						return
+					}
+					streamStarted = true
+				}
 				continue
 			}
 			if err := emitStreamKeepalive(streamID, "claude"); err != nil {
@@ -608,7 +660,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted,
 			translator.EventServerToolStarted, translator.EventWebSearchResult:
-			sawOutput = true
+			markOutput()
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
 					*errOut = err.Error()
@@ -617,6 +669,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				streamStarted = true
 			}
 		case translator.EventTurnEnded:
+			stopFirstOutputTimer()
 			lastUsage = trEv.Usage
 		}
 	}
