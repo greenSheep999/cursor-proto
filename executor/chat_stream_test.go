@@ -172,8 +172,8 @@ func TestBidiAppendUsesConnectEnvelope(t *testing.T) {
 	if appendRequest.GetRequestId().GetRequestId() != "request-id" || appendRequest.GetAppendSeqno() != 1 {
 		t.Fatalf("unexpected BidiAppend request: %v", &appendRequest)
 	}
-	if appendRequest.GetData() != "" {
-		t.Fatalf("data field = %q, want empty when data_binary is used", appendRequest.GetData())
+	if appendRequest.GetData() != "3200" {
+		t.Fatalf("data field = %q, want legacy hex payload 3200", appendRequest.GetData())
 	}
 	if !bytes.Equal(appendRequest.GetDataBinary(), []byte{0x32, 0x00}) {
 		t.Fatalf("data_binary = %x, want 3200", appendRequest.GetDataBinary())

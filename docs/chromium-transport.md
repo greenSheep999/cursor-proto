@@ -195,6 +195,11 @@ exposing response contents, headers, request IDs, account identity, or URLs.
 Status and byte counts are captured incrementally as Chromium receives them,
 and a normally finished downstream response does not trigger page cancellation.
 
+For BidiAppend, the executor sends the append payload in both protobuf fields
+supported by Cursor's current schema: legacy hex `data` and binary
+`data_binary`. The values are kept identical. A 200 acknowledgement alone is
+not proof that Cursor consumed a data-binary-only append.
+
 The response-start timeout is deliberately shorter than Cloudflare's
 120-second proxy read timeout. If one Cursor account accepts a request but
 never starts a response body, the sidecar aborts that browser fetch and returns a

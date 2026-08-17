@@ -247,3 +247,25 @@ increments bytes as chunks arrive, so those values survive a later page error.
 It also treats a close after `writableFinished` as normal completion instead of
 canceling the page. This is an observability/cancellation correction; it does
 not synthesize or alter Cursor response bytes.
+
+Production v0.8.11 then isolated the protocol symptom for a simple Claude turn:
+
+```text
+AvailableModels: HTTP 200, 205760 bytes
+BidiAppend:      HTTP 200, 26 bytes
+RunSSE:          HTTP 200, 389 bytes, no semantic output
+```
+
+## v0.8.12 follow-up: restore dual BidiAppend payload fields
+
+The Cursor 3.16 schema still contains both `BidiAppendRequest.data` (field 1,
+hex string) and `data_binary` (field 4, bytes). Before the 3.16 refresh this
+client sent both fields with identical payloads. The upgrade removed `data`
+without production evidence that the gateway had stopped consuming it.
+
+Cursor can return a successful 26-byte BidiAppend acknowledgement while
+silently ignoring a seed that contains only `data_binary`; the paired RunSSE
+then closes with control frames but no content, tool call, or usage. v0.8.12
+restores the dual-field wire shape: `data` is the lowercase hex encoding of the
+same bytes carried in `data_binary`. A regression test decodes the real framed
+HTTP request and asserts both representations.

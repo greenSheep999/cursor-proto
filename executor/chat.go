@@ -495,6 +495,11 @@ func (c *Client) bidiAppend(ctx context.Context, requestID string, seq int64, pa
 
 func (c *Client) bidiAppendForAccount(ctx context.Context, acc *auth.Account, requestID, originalRequestID string, seq int64, payload []byte) error {
 	appendRequest, err := proto.Marshal(&cursorpb.AiserverV1_BidiAppendRequest{
+		// Cursor's current gateway acknowledges data_binary-only requests with
+		// HTTP 200 but can silently ignore the append. Keep the legacy hex field
+		// in sync with data_binary, matching the official client-compatible wire
+		// shape used before the 3.16 schema refresh.
+		Data:        hexEncode(payload),
 		DataBinary:  append([]byte(nil), payload...),
 		RequestId:   &cursorpb.AiserverV1_BidiRequestId{RequestId: requestID},
 		AppendSeqno: seq,
