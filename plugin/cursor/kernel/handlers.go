@@ -13,7 +13,7 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-const pluginVersion = "0.8.10"
+const pluginVersion = "0.8.11"
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {

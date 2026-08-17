@@ -15,8 +15,10 @@ export function createUpstreamObservability(now = () => Date.now()) {
       current.requests += 1;
       stats.set(name, current);
       let completed = false;
+      let status = 0;
+      let responseBytes = 0;
 
-      const complete = ({ status = 0, responseBytes = 0 }, failed) => {
+      const complete = (failed) => {
         if (completed) return;
         completed = true;
         current.failures += failed ? 1 : 0;
@@ -26,11 +28,17 @@ export function createUpstreamObservability(now = () => Date.now()) {
       };
 
       return {
-        finish(result) {
-          complete(result, false);
+        responseStarted(value) {
+          status = finiteNonNegative(value);
         },
-        fail(result = {}) {
-          complete(result, true);
+        addResponseBytes(value) {
+          responseBytes += finiteNonNegative(value);
+        },
+        finish() {
+          complete(false);
+        },
+        fail() {
+          complete(true);
         },
       };
     },

@@ -234,3 +234,16 @@ response byte count, and duration. It intentionally excludes response bodies,
 headers, request IDs, URLs, account identity, and proxy details. This separates
 a RunSSE stream that ends without semantic events from a BidiAppend seed that
 Cursor acknowledges with HTTP 200 but ignores.
+
+## v0.8.11 follow-up: preserve transport metadata across response close
+
+The first production RPC counters reported `status=0` because Node emits the
+downstream response `close` event after a normal `response.end()`. The existing
+cancellation hook closed the page before `page.evaluate()` returned, causing
+an already-forwarded response to be classified as a local failure.
+
+The sidecar now records status when Chromium receives upstream headers and
+increments bytes as chunks arrive, so those values survive a later page error.
+It also treats a close after `writableFinished` as normal completion instead of
+canceling the page. This is an observability/cancellation correction; it does
+not synthesize or alter Cursor response bytes.

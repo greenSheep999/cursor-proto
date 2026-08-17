@@ -80,7 +80,7 @@ const server = http.createServer(async (request, response) => {
   let requestContext;
   let completed = false;
   const cancel = () => {
-    if (!completed && page) page.close().catch(() => {});
+    if (!completed && !response.writableFinished && page) page.close().catch(() => {});
   };
   request.once('aborted', cancel);
   response.once('close', cancel);
@@ -99,8 +99,8 @@ const server = http.createServer(async (request, response) => {
     }
     const upstreamRequest = upstreamObservability.begin(target);
     try {
-      const result = await proxyThroughPage(page, request, response, target, body);
-      upstreamRequest.finish(result);
+      await proxyThroughPage(page, request, response, target, body, upstreamRequest);
+      upstreamRequest.finish();
     } catch (error) {
       upstreamRequest.fail();
       throw error;
@@ -128,9 +128,7 @@ server.listen(listen.port, listen.host, () => {
   process.stdout.write(`[cursor-chromium-sidecar] listening on http://${listen.host}:${listen.port} max_concurrency=${maxConcurrency}\n`);
 });
 
-async function proxyThroughPage(page, request, response, target, body) {
-  let upstreamStatus = 0;
-  let responseBytes = 0;
+async function proxyThroughPage(page, request, response, target, body, upstreamRequest) {
   const routeName = target.hostname.startsWith('api3.') ? 'api3' : 'api2';
   const originDocument = `https://${routeName}.cursor.sh/__cursor_chromium_sidecar_origin__`;
   await page.route(originDocument, (route) => route.fulfill({
@@ -141,14 +139,14 @@ async function proxyThroughPage(page, request, response, target, body) {
   await page.goto(originDocument, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
   await page.exposeFunction('__cursorSidecarStart', async (status, responseHeaders) => {
-    upstreamStatus = status;
+    upstreamRequest.responseStarted(status);
     if (response.headersSent || response.destroyed) return;
     response.writeHead(status, filterResponseHeaders(responseHeaders));
   });
   await page.exposeFunction('__cursorSidecarChunk', async (chunkBase64) => {
     if (response.destroyed) throw new Error('downstream closed');
     const chunk = Buffer.from(chunkBase64, 'base64');
-    responseBytes += chunk.length;
+    upstreamRequest.addResponseBytes(chunk.length);
     if (!response.write(chunk)) {
       await new Promise((resolve, reject) => {
         const cleanup = () => {
@@ -179,7 +177,6 @@ async function proxyThroughPage(page, request, response, target, body) {
     bodyBase64: body.toString('base64'),
     responseStartTimeoutMs,
   });
-  return { status: upstreamStatus, responseBytes };
 }
 
 function targetURL(requestURL) {

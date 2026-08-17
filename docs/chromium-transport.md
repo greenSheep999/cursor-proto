@@ -192,6 +192,8 @@ The `upstream_rpc` health field groups transport-only completion metadata by
 allowlisted RPC class (`available_models`, `run_sse`, `bidi_append`, or
 `other`). It records counts, last status, byte length, and duration without
 exposing response contents, headers, request IDs, account identity, or URLs.
+Status and byte counts are captured incrementally as Chromium receives them,
+and a normally finished downstream response does not trigger page cancellation.
 
 The response-start timeout is deliberately shorter than Cloudflare's
 120-second proxy read timeout. If one Cursor account accepts a request but

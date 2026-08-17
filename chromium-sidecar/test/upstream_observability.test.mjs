@@ -8,12 +8,16 @@ test('reports only allowlisted RPC transport metadata', () => {
   const upstream = createUpstreamObservability(() => now);
 
   const run = upstream.begin(new URL('https://api2.cursor.sh/agent.v1.AgentService/RunSSE'));
+  run.responseStarted(200);
+  run.addResponseBytes(37);
   now = 1_125;
-  run.finish({ status: 200, responseBytes: 37 });
+  run.finish();
 
   const append = upstream.begin(new URL('https://api2.cursor.sh/aiserver.v1.BidiService/BidiAppend'));
+  append.responseStarted(200);
+  append.addResponseBytes(5);
   now = 1_170;
-  append.fail({ status: 502, responseBytes: 0 });
+  append.fail();
 
   assert.deepEqual(upstream.snapshot(), {
     run_sse: {
@@ -26,8 +30,8 @@ test('reports only allowlisted RPC transport metadata', () => {
     bidi_append: {
       requests: 1,
       failures: 1,
-      last_status: 502,
-      last_response_bytes: 0,
+      last_status: 200,
+      last_response_bytes: 5,
       last_duration_ms: 45,
     },
   });
