@@ -3,6 +3,8 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -160,6 +162,36 @@ func TestNewPluginExecutorClientUsesChromiumSidecar(t *testing.T) {
 	}
 	if client.API3 != client.API2 {
 		t.Fatalf("API3 = %q, want %q", client.API3, client.API2)
+	}
+}
+
+func TestNewPluginExecutorClientCarriesAccountProxyToSidecarRequest(t *testing.T) {
+	received := make(chan http.Header, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		received <- request.Header.Clone()
+		response.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	t.Setenv(chromiumSidecarURLEnv, server.URL)
+	t.Setenv(chromiumSidecarTokenEnv, "test-sidecar-token")
+	client, err := newPluginExecutorClient(&auth.Account{
+		AccessToken: "test-access-token",
+		ProxyURL:    "socks5://proxy-user:proxy-pass@proxy.example:1080",
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if err := client.UnaryCall("test.Service", "Probe", nil, nil); err != nil {
+		t.Fatalf("unary call: %v", err)
+	}
+
+	headers := <-received
+	if got := headers.Get("x-cursor-chromium-sidecar-token"); got != "test-sidecar-token" {
+		t.Fatalf("sidecar token = %q", got)
+	}
+	if got := headers.Get("x-cursor-chromium-upstream-proxy"); got != "socks5://proxy-user:proxy-pass@proxy.example:1080" {
+		t.Fatalf("sidecar proxy route = %q", got)
 	}
 }
 

@@ -178,6 +178,16 @@ returns flattened variants without maintaining account-specific mapping files.
 - Browser crashes make `/healthz` fail and the process exits so systemd,
   Docker, or another supervisor can restart it.
 
+`/healthz` also reports credential-safe route counters:
+
+- `direct_requests` and `proxied_requests` count resolved request routes;
+- `last_route` is `direct`, `socks-bridge`, `socks-proxy`, or `http-proxy`;
+- `proxy_bridge_count` reports the number of reusable authenticated SOCKS
+  bridges without revealing their endpoints or credentials.
+
+These fields distinguish a missing per-account proxy handoff from an upstream
+empty response after Chromium has already selected the intended proxy route.
+
 The response-start timeout is deliberately shorter than Cloudflare's
 120-second proxy read timeout. If one Cursor account accepts a request but
 never starts a response body, the sidecar aborts that browser fetch and returns a

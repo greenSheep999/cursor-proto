@@ -187,3 +187,29 @@ sidecar process, and are closed during sidecar shutdown. Accounts without a
 proxy continue to use the default Chromium context. This keeps proxy choice an
 account-level transport concern and avoids hard-coding one production proxy in
 the sidecar or plugin.
+
+## v0.8.9 follow-up: credential-safe route observability
+
+After v0.8.8 deployment, a real authenticated SOCKS bridge probe succeeded,
+but CPA Claude chat still returned an empty upstream response. Catalog success
+does not prove that an individual chat request selected the same account route,
+and logging the routing header would disclose proxy credentials.
+
+The sidecar health response therefore exposes only aggregate, non-identifying
+route state:
+
+```json
+{
+  "direct_requests": 0,
+  "proxied_requests": 1,
+  "last_route": "socks-bridge",
+  "proxy_bridge_count": 1
+}
+```
+
+No proxy URL, host, port, username, password, account identifier, or derived
+hash is included. Counters advance only after the request-scoped Chromium route
+has been resolved. A plugin-level HTTP boundary test also verifies that an
+account proxy survives `StorageJSON -> auth.Account -> executor.Client` and is
+carried to the loopback sidecar request while Go's loopback transport remains
+direct.

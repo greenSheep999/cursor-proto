@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { chromium } from 'playwright';
 import { browserFetchAndStream } from './browser_fetch.mjs';
+import { createRouteObservability } from './route_observability.mjs';
 import { createAuthenticatedSocksBridge } from './socks_bridge.mjs';
 
 const listen = parseListen(process.env.CURSOR_CHROMIUM_LISTEN ?? '127.0.0.1:18901');
@@ -11,6 +12,7 @@ const requiredToken = process.env.CURSOR_CHROMIUM_SIDECAR_TOKEN ?? '';
 const executablePath = process.env.CURSOR_CHROMIUM_EXECUTABLE_PATH || undefined;
 let semaphore;
 const proxyBridges = new Map();
+const routeObservability = createRouteObservability();
 
 const browser = await chromium.launch({
   headless: true,
@@ -38,6 +40,7 @@ const server = http.createServer(async (request, response) => {
       active: semaphore.active,
       queued: semaphore.queued,
       max_concurrency: maxConcurrency,
+      ...routeObservability.snapshot(proxyBridges.size),
     }));
     return;
   }
@@ -80,11 +83,12 @@ const server = http.createServer(async (request, response) => {
   response.once('close', cancel);
 
   try {
-    const proxy = await browserProxyFor(request.headers['x-cursor-chromium-upstream-proxy']);
-    if (proxy) {
+    const route = await browserProxyFor(request.headers['x-cursor-chromium-upstream-proxy']);
+    routeObservability.record(route.name);
+    if (route.proxy) {
       requestContext = await browser.newContext({
         storageState: { cookies: [], origins: [] },
-        proxy,
+        proxy: route.proxy,
       });
       page = await requestContext.newPage();
     } else {
@@ -235,7 +239,7 @@ semaphore = new Semaphore(maxConcurrency);
 
 async function browserProxyFor(rawProxy) {
   const raw = Array.isArray(rawProxy) ? rawProxy[0] : rawProxy;
-  if (!raw) return undefined;
+  if (!raw) return { name: 'direct', proxy: undefined };
   const parsed = new URL(raw);
   if (['socks5:', 'socks5h:'].includes(parsed.protocol) && (parsed.username || parsed.password)) {
     let bridge = proxyBridges.get(raw);
@@ -243,7 +247,7 @@ async function browserProxyFor(rawProxy) {
       bridge = await createAuthenticatedSocksBridge(raw);
       proxyBridges.set(raw, bridge);
     }
-    return { server: bridge.url };
+    return { name: 'socks-bridge', proxy: { server: bridge.url } };
   }
   if (!['http:', 'https:', 'socks5:', 'socks5h:'].includes(parsed.protocol)) {
     throw new Error(`unsupported Chromium upstream proxy scheme ${parsed.protocol}`);
@@ -252,7 +256,10 @@ async function browserProxyFor(rawProxy) {
   const proxy = { server };
   if (parsed.username) proxy.username = decodeURIComponent(parsed.username);
   if (parsed.password) proxy.password = decodeURIComponent(parsed.password);
-  return proxy;
+  return {
+    name: ['socks5:', 'socks5h:'].includes(parsed.protocol) ? 'socks-proxy' : 'http-proxy',
+    proxy,
+  };
 }
 
 function parseListen(value) {

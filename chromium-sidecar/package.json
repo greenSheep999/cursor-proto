@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/main.mjs",
-    "check": "node --check src/main.mjs && node --check src/browser_fetch.mjs && node --check src/socks_bridge.mjs",
+    "check": "node --check src/main.mjs && node --check src/browser_fetch.mjs && node --check src/route_observability.mjs && node --check src/socks_bridge.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
