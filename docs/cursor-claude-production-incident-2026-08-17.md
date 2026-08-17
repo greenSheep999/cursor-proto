@@ -151,3 +151,39 @@ The follow-up fixes are:
 
 The primary-source protocol and CLI comparison is recorded in
 `docs/cli-tool-and-anthropic-stream-contracts-2026-08-17.md`.
+
+## v0.8.8 follow-up: preserve per-account egress through Chromium
+
+The first v0.8.7 production checks succeeded until the Chromium sidecar was
+restarted. After a clean restart, `AvailableModels` still worked but Claude
+turns from the two eligible production accounts returned an empty upstream
+response in about one second. CPA's scheduler log showed that both accounts
+were configured with the same authenticated SOCKS5 route, while the sidecar
+launched Chromium without any proxy configuration.
+
+This exposed a transport-boundary bug: `ChromiumSidecarOption` correctly kept
+Go's loopback request away from the account proxy, but discarded the proxy
+instead of transferring it to Chromium. Cursor therefore saw the VPS egress
+for chat even though CPA reported the account as using SOCKS5. Catalog access
+alone was not a sufficient health signal because Cursor can return a catalog
+and still silently suppress Claude generation on the wrong network identity.
+
+Playwright/Chromium cannot authenticate directly to a username/password
+SOCKS5 proxy (`Browser does not support socks5 proxy authentication`). v0.8.8
+therefore uses this request-scoped route:
+
+```text
+CPA account proxy URL
+  -> loopback-only sidecar header
+  -> per-proxy local unauthenticated SOCKS5 bridge
+  -> authenticated upstream SOCKS5
+  -> per-request Chromium BrowserContext
+  -> Cursor upstream
+```
+
+The routing header is removed before the Cursor request is issued. Proxy
+bridges listen only on `127.0.0.1`, are reused by exact proxy URL within the
+sidecar process, and are closed during sidecar shutdown. Accounts without a
+proxy continue to use the default Chromium context. This keeps proxy choice an
+account-level transport concern and avoids hard-coding one production proxy in
+the sidecar or plugin.

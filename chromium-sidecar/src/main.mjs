@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { chromium } from 'playwright';
 import { browserFetchAndStream } from './browser_fetch.mjs';
+import { createAuthenticatedSocksBridge } from './socks_bridge.mjs';
 
 const listen = parseListen(process.env.CURSOR_CHROMIUM_LISTEN ?? '127.0.0.1:18901');
 const maxConcurrency = positiveInt(process.env.CURSOR_CHROMIUM_MAX_CONCURRENCY, 8);
@@ -9,6 +10,7 @@ const responseStartTimeoutMs = positiveInt(process.env.CURSOR_CHROMIUM_RESPONSE_
 const requiredToken = process.env.CURSOR_CHROMIUM_SIDECAR_TOKEN ?? '';
 const executablePath = process.env.CURSOR_CHROMIUM_EXECUTABLE_PATH || undefined;
 let semaphore;
+const proxyBridges = new Map();
 
 const browser = await chromium.launch({
   headless: true,
@@ -69,6 +71,7 @@ const server = http.createServer(async (request, response) => {
   }
 
   let page;
+  let requestContext;
   let completed = false;
   const cancel = () => {
     if (!completed && page) page.close().catch(() => {});
@@ -77,7 +80,16 @@ const server = http.createServer(async (request, response) => {
   response.once('close', cancel);
 
   try {
-    page = await context.newPage();
+    const proxy = await browserProxyFor(request.headers['x-cursor-chromium-upstream-proxy']);
+    if (proxy) {
+      requestContext = await browser.newContext({
+        storageState: { cookies: [], origins: [] },
+        proxy,
+      });
+      page = await requestContext.newPage();
+    } else {
+      page = await context.newPage();
+    }
     await proxyThroughPage(page, request, response, target, body);
     completed = true;
   } catch (error) {
@@ -90,6 +102,7 @@ const server = http.createServer(async (request, response) => {
     request.off('aborted', cancel);
     response.off('close', cancel);
     await page?.close().catch(() => {});
+    await requestContext?.close().catch(() => {});
     release();
   }
 });
@@ -161,6 +174,7 @@ function filterRequestHeaders(headers) {
     'accept-encoding', 'connection', 'content-length', 'host',
     'proxy-authorization', 'transfer-encoding', 'user-agent',
     'x-cursor-chromium-sidecar-token',
+    'x-cursor-chromium-upstream-proxy',
   ]);
   return Object.fromEntries(
     Object.entries(headers)
@@ -219,6 +233,28 @@ class Semaphore {
 
 semaphore = new Semaphore(maxConcurrency);
 
+async function browserProxyFor(rawProxy) {
+  const raw = Array.isArray(rawProxy) ? rawProxy[0] : rawProxy;
+  if (!raw) return undefined;
+  const parsed = new URL(raw);
+  if (['socks5:', 'socks5h:'].includes(parsed.protocol) && (parsed.username || parsed.password)) {
+    let bridge = proxyBridges.get(raw);
+    if (!bridge) {
+      bridge = await createAuthenticatedSocksBridge(raw);
+      proxyBridges.set(raw, bridge);
+    }
+    return { server: bridge.url };
+  }
+  if (!['http:', 'https:', 'socks5:', 'socks5h:'].includes(parsed.protocol)) {
+    throw new Error(`unsupported Chromium upstream proxy scheme ${parsed.protocol}`);
+  }
+  const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
+  const proxy = { server };
+  if (parsed.username) proxy.username = decodeURIComponent(parsed.username);
+  if (parsed.password) proxy.password = decodeURIComponent(parsed.password);
+  return proxy;
+}
+
 function parseListen(value) {
   const index = value.lastIndexOf(':');
   if (index <= 0) throw new Error(`invalid CURSOR_CHROMIUM_LISTEN: ${value}`);
@@ -245,6 +281,7 @@ async function shutdown(signal) {
   process.stderr.write(`[cursor-chromium-sidecar] shutting down on ${signal}\n`);
   await new Promise((resolve) => server.close(resolve));
   await context.close().catch(() => {});
+  await Promise.all([...proxyBridges.values()].map((bridge) => bridge.close().catch(() => {})));
   await browser.close().catch(() => {});
   process.exit(0);
 }

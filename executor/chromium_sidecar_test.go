@@ -27,6 +27,9 @@ func TestChromiumSidecarOption(t *testing.T) {
 	if got := req.Header.Get(sidecarTokenHeader); got != "secret" {
 		t.Fatalf("sidecar token = %q", got)
 	}
+	if got := req.Header.Get(sidecarProxyHeader); got != "http://proxy.example:8080" {
+		t.Fatalf("sidecar upstream proxy = %q", got)
+	}
 }
 
 func TestChromiumSidecarOptionRejectsNonLoopback(t *testing.T) {

@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-const sidecarTokenHeader = "x-cursor-chromium-sidecar-token"
+const (
+	sidecarTokenHeader = "x-cursor-chromium-sidecar-token"
+	sidecarProxyHeader = "x-cursor-chromium-upstream-proxy"
+)
 
 // ChromiumSidecarOption routes every Cursor RPC through a loopback Chromium
 // sidecar. Keeping this as one executor option ensures AvailableModels,
@@ -20,6 +23,10 @@ func ChromiumSidecarOption(rawURL, token string) (Option, error) {
 		return nil, err
 	}
 	return func(c *Client) {
+		// Preserve the account/request proxy for the Chromium hop before
+		// clearing it from Go's loopback transport. The sidecar applies this
+		// route inside Chromium, where Cursor sees the browser network stack.
+		c.sidecarUpstreamProxy = strings.TrimSpace(c.ProxyURL)
 		c.API2 = joinSidecarPath(base, "api2")
 		// Cursor 3.16 routes RunSSE on api2. The sidecar supports /api3 for
 		// future protocol lines, but the current client must use the verified
@@ -68,8 +75,13 @@ func joinSidecarPath(base *url.URL, segment string) string {
 }
 
 func (c *Client) applySidecarToken(req *http.Request) {
-	if c == nil || strings.TrimSpace(c.sidecarToken) == "" {
+	if c == nil {
 		return
 	}
-	req.Header.Set(sidecarTokenHeader, c.sidecarToken)
+	if token := strings.TrimSpace(c.sidecarToken); token != "" {
+		req.Header.Set(sidecarTokenHeader, token)
+	}
+	if proxyURL := strings.TrimSpace(c.sidecarUpstreamProxy); proxyURL != "" {
+		req.Header.Set(sidecarProxyHeader, proxyURL)
+	}
 }

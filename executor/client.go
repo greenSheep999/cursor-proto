@@ -60,7 +60,8 @@ type Client struct {
 
 	// sidecarToken authenticates requests to the optional loopback Chromium
 	// sidecar. It is never set on native Cursor requests.
-	sidecarToken string
+	sidecarToken         string
+	sidecarUpstreamProxy string
 
 	modelCatalogMu       sync.RWMutex
 	modelCatalog         *cursorpb.AiserverV1_AvailableModelsResponse
