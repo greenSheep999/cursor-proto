@@ -309,6 +309,13 @@ invoice or importing a valid Pro/Team account whose billing and session are
 current. Transport or translator changes cannot override that upstream account
 policy.
 
+The Mac's currently signed-in Cursor IDE account was also compared without
+printing identity or token material: both email and access token matched a
+production auth record. A same-Mac, same-token request through a local real
+Chromium sidecar returned HTTP 403 with the identical unpaid-invoice trailer.
+This rules out a remaining VPS/egress difference for the current account; the
+earlier successful IDE observation predates the account's present billing block.
+
 ### v0.8.13 production acceptance
 
 The released plugin and sidecar were deployed to the shared CPA namespace and
