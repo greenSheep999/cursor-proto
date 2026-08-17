@@ -200,6 +200,11 @@ supported by Cursor's current schema: legacy hex `data` and binary
 `data_binary`. The values are kept identical. A 200 acknowledgement alone is
 not proof that Cursor consumed a data-binary-only append.
 
+RunSSE trailers are part of the protocol result, not optional diagnostics. The
+plugin must inspect a non-OK trailer before discarding an event with no
+`AgentServerMessage`; otherwise billing, quota, authentication, and model-gate
+errors collapse into a misleading empty response.
+
 The response-start timeout is deliberately shorter than Cloudflare's
 120-second proxy read timeout. If one Cursor account accepts a request but
 never starts a response body, the sidecar aborts that browser fetch and returns a

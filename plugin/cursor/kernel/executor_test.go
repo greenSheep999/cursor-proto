@@ -841,6 +841,103 @@ func TestExecuteStream_Claude_FastEmptyAfterHeartbeatStaysRetryableBeforePreambl
 	}
 }
 
+func TestBuildClaudeNonStreamingSurfacesCursorTrailerError(t *testing.T) {
+	events := make(chan executor.ChatEvent, 1)
+	events <- executor.ChatEvent{
+		Trailer: true,
+		Status:  &executor.TrailerStatus{Code: 8, Message: "billing blocked"},
+	}
+	close(events)
+
+	_, err := buildClaudeNonStreaming("claude-opus-5", nil, events)
+	if err == nil {
+		t.Fatal("expected Cursor trailer error")
+	}
+	if !strings.Contains(err.Error(), "billing blocked") || !strings.Contains(err.Error(), "grpc-status=8") {
+		t.Fatalf("error = %q, want parsed Cursor trailer", err)
+	}
+}
+
+func TestBuildOpenAINonStreamingSurfacesCursorTrailerError(t *testing.T) {
+	events := make(chan executor.ChatEvent, 1)
+	events <- executor.ChatEvent{
+		Trailer: true,
+		Status:  &executor.TrailerStatus{Code: 8, Message: "named model unavailable"},
+	}
+	close(events)
+
+	_, err := buildOpenAINonStreaming("claude-opus-5", nil, events)
+	if err == nil {
+		t.Fatal("expected Cursor trailer error")
+	}
+	if !strings.Contains(err.Error(), "named model unavailable") || !strings.Contains(err.Error(), "grpc-status=8") {
+		t.Fatalf("error = %q, want parsed Cursor trailer", err)
+	}
+}
+
+func TestExecuteStreamClaudeSurfacesCursorTrailerError(t *testing.T) {
+	runner := &fakeRunner{events: []executor.ChatEvent{
+		buildHeartbeatEvent(),
+		{
+			Trailer: true,
+			Status:  &executor.TrailerStatus{Code: 8, Message: "billing blocked"},
+		},
+	}}
+
+	var (
+		mu          sync.Mutex
+		emitted     [][]byte
+		closedError string
+		done        = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			var req struct {
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("close unmarshal: %v", err)
+			}
+			closedError = req.Error
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return runner, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "trailer-error"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("trailer-error stream never closed")
+	}
+
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if joined != "" {
+		t.Fatalf("trailer error committed bytes before host retry: %s", joined)
+	}
+	if !strings.Contains(closedError, "billing blocked") || !strings.Contains(closedError, "grpc-status=8") {
+		t.Fatalf("close error = %q, want parsed Cursor trailer", closedError)
+	}
+}
+
 func TestExecuteStream_Claude_OrdersRealSignatureBeforeBufferedText(t *testing.T) {
 	runner := &fakeRunner{events: []executor.ChatEvent{
 		buildThinkingDeltaEvent("reasoning"),

@@ -269,3 +269,42 @@ then closes with control frames but no content, tool call, or usage. v0.8.12
 restores the dual-field wire shape: `data` is the lowercase hex encoding of the
 same bytes carried in `data_binary`. A regression test decodes the real framed
 HTTP request and asserts both representations.
+
+The production differential did not change the response shape, so the missing
+legacy field was not the cause of this incident. Keeping both fields restores
+the previously verified compatibility shape, but account/trailer state remained
+the deciding factor.
+
+## v0.8.13 root cause: Cursor account billing/session state
+
+A credential-safe event-summary probe decoded the 389-byte RunSSE body as two
+frames:
+
+```text
+InteractionUpdate.heartbeat
+gRPC trailer: status 8 (RESOURCE_EXHAUSTED)
+```
+
+The parsed Cursor error was `ERROR_RATE_LIMITED` with an explicit unpaid-team-
+invoice message. An anonymous audit of all nine production Cursor auth records
+found:
+
+- six accounts blocked by an unpaid team invoice;
+- two expired/not-logged-in sessions;
+- one Free account restricted to Auto and unable to use a named Claude model.
+
+Therefore the Chromium route, authenticated SOCKS bridge, entitlement catalog,
+BidiAppend HTTP call, and RunSSE transport were all operating. The production
+pool simply contained no account eligible to execute a named Claude request.
+
+The plugin also had a separate error-propagation bug: all collectors skipped
+events with `Server == nil` before inspecting trailer status. A parsed Cursor
+error was discarded and later replaced by the generic empty-response error.
+v0.8.13 checks non-OK trailers first in Anthropic/OpenAI, stream/non-stream
+collectors. Uncommitted streams close with the actual retryable Cursor error;
+committed Anthropic streams emit a legal `event:error`.
+
+Restoring named Claude generation now requires either paying the affected team
+invoice or importing a valid Pro/Team account whose billing and session are
+current. Transport or translator changes cannot override that upstream account
+policy.

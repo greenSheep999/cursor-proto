@@ -145,6 +145,13 @@ func usageWithObservedOutput(usage *translator.Usage, text string) *translator.U
 	return &copy
 }
 
+func cursorTrailerError(event executor.ChatEvent) error {
+	if !event.Trailer || event.Status == nil || event.Status.OK() {
+		return nil
+	}
+	return event.Status.Err()
+}
+
 // buildOpenAINonStreaming mirrors nonStreamOpenAI in cmd/cursor-proxy.
 // It intentionally omits the cache-simulator logic — the plugin does
 // not have opinions about caching, that's a host-level concern.
@@ -159,6 +166,9 @@ func buildOpenAINonStreaming(model string, tools []executor.ToolDefinition, even
 	sawBlob := false
 	deltaText := ""
 	for ev := range events {
+		if err := cursorTrailerError(ev); err != nil {
+			return nil, err
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -203,6 +213,9 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	var serverToolUses []map[string]any
 	webSearchRequests := 0
 	for ev := range events {
+		if err := cursorTrailerError(ev); err != nil {
+			return nil, err
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -474,6 +487,10 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 	sawOutput := false
 	var lastUsage *translator.Usage
 	for ev := range events {
+		if err := cursorTrailerError(ev); err != nil {
+			*errOut = err.Error()
+			return
+		}
 		if ev.Server == nil {
 			continue
 		}
@@ -627,6 +644,18 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				return
 			}
 			*errOut = firstOutputTimeoutMessage
+			return
+		}
+		if err := cursorTrailerError(ev); err != nil {
+			if streamStarted {
+				if payload := tr.EncodeError("api_error", err.Error()); len(payload) > 0 {
+					if emitErr := emit(streamID, payload); emitErr != nil {
+						*errOut = emitErr.Error()
+					}
+				}
+				return
+			}
+			*errOut = err.Error()
 			return
 		}
 		if ev.Server == nil {
