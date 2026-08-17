@@ -195,6 +195,59 @@ surface to CPA or `cursor-proxy`; the existing translators already produce:
 Once the executor's three Cursor RPCs use Chromium, those downstream surfaces
 receive the same non-empty Claude events as the local prototype.
 
+### Internal New API to CPA routing
+
+When New API and CPA run on the same Docker host, CPA-backed New API channels
+must use the shared Docker network rather than CPA's public Cloudflare domain:
+
+```text
+New API client
+    |
+    v
+api.100b.best -> New API -> http://cli-proxy-api:8317 -> CPA Cursor plugin
+                                      |
+                                      v
+                              Chromium sidecar -> Cursor
+```
+
+Using `https://cpa.example.com` as a New API channel base URL sends same-host
+service traffic out through Cloudflare and back to CPA. Cloudflare can then
+intermittently return an HTML challenge or edge error instead of an API JSON
+response. A typical symptom is a retrying `non_stream` client receiving HTTP
+403 with `Just a moment...` and `challenges.cloudflare.com` in the body. That
+response is generated before the CPA plugin or Cursor executor handles the
+request; retrying the model request does not repair the route.
+
+The production rules are:
+
+1. Attach New API and CPA to one private Docker network.
+2. Set every CPA-backed New API channel base URL to
+   `http://cli-proxy-api:8317` (or the deployment's equivalent service name).
+3. Keep CPA's public domain for real external CPA clients only.
+4. If New API has an SSRF egress lockdown, add a narrow allow rule for TCP
+   traffic from New API to CPA port 8317 before the private-network drop rule.
+   Do not disable the rest of the SSRF policy.
+5. Resolve and verify the current container addresses before installing an
+   address-based firewall rule. Reapply or regenerate the rule whenever a
+   container is recreated with a different address.
+
+Before changing channel rows, save their current values in a backup table or
+an equivalent recoverable snapshot. Verify the route from inside the New API
+container before switching production traffic:
+
+```bash
+wget -S -O /dev/null \
+  --header="Authorization: Bearer $CPA_API_KEY" \
+  http://cli-proxy-api:8317/v1/models
+```
+
+After switching, test both streaming modes for `/v1/chat/completions` and
+`/v1/responses`. Acceptance requires HTTP 200, no HTML challenge body, the
+expected completion marker, and a terminal finish/completed event. Chat and
+non-streaming Responses responses should include usage. Streaming Responses
+usage depends on the CPA host conversion layer and is not a Chromium transport
+health signal.
+
 ## Operational requirements
 
 The sidecar requires Node.js and Playwright Chromium. Install dependencies in
