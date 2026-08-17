@@ -92,6 +92,59 @@ func AvailableModelIDs(resp *cursorpb.AiserverV1_AvailableModelsResponse) []stri
 	return out
 }
 
+// RoutableModelIDs returns every model name the executor can accept from a
+// downstream router. It includes the compact primary catalog returned by
+// AvailableModelIDs plus the live variant slugs Cursor exposes for effort,
+// thinking, context, and fast-mode choices.
+//
+// User-facing model lists can stay compact by using AvailableModelIDs. CPA's
+// model.for_auth registration must use this wider set, however, because CPA
+// resolves the provider before invoking the plugin. If a valid variant such
+// as claude-opus-5-high is omitted here, CPA rejects it as "unknown provider"
+// even though resolveRequestedModelFromCatalog can map it correctly.
+func RoutableModelIDs(resp *cursorpb.AiserverV1_AvailableModelsResponse) []string {
+	if resp == nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(resp.GetModels()))
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	for _, model := range resp.GetModels() {
+		base := baseModelID(model)
+		add(base)
+
+		// Exploded catalogs put the routable variant in Name while baseModelID
+		// folds it back to the primary model.
+		if name := strings.TrimSpace(model.GetName()); name != base {
+			add(name)
+		}
+		for _, variant := range model.GetVariants() {
+			add(variant.GetLegacySlug())
+			add(variant.GetVariantStringRepresentation())
+		}
+		// Some catalog revisions populate legacy_slugs without expanding the
+		// Variants field. Restrict these to children of the primary id so short
+		// marketing aliases such as "default" are not claimed accidentally.
+		for _, slug := range model.GetLegacySlugs() {
+			slug = strings.TrimSpace(slug)
+			if base != "" && strings.HasPrefix(slug, base+"-") {
+				add(slug)
+			}
+		}
+	}
+	return out
+}
+
 // baseModelID returns the primary model id for a catalog entry.
 //
 // For the modern Cursor 3.16 parameterised catalog Name is already the base

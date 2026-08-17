@@ -13,7 +13,7 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-const pluginVersion = "0.8.1"
+const pluginVersion = "0.8.2"
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {
@@ -94,7 +94,7 @@ var listModelsForAuth = func(acc *auth.Account) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return executor.AvailableModelIDs(resp), nil
+	return executor.RoutableModelIDs(resp), nil
 }
 
 func handleModelsForAuth(payload []byte) ([]byte, int) {

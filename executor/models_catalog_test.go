@@ -37,6 +37,46 @@ func TestAvailableModelIDsExposePrimaryCatalogNames(t *testing.T) {
 	}
 }
 
+func TestRoutableModelIDsIncludeLiveVariants(t *testing.T) {
+	resp := &cursorpb.AiserverV1_AvailableModelsResponse{
+		Models: []*cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel{
+			{
+				Name:        "claude-opus-5",
+				LegacySlugs: []string{"claude-opus-5-low", "default"},
+				Variants: []*cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig{
+					{
+						LegacySlug:                  strPtr("claude-opus-5-high"),
+						VariantStringRepresentation: strPtr("claude-opus-5-thinking-high"),
+					},
+				},
+			},
+			{
+				Name:            "claude-sonnet-5-thinking-max",
+				ServerModelName: strPtr("claude-sonnet-5"),
+				LegacySlugs:     []string{"claude-sonnet-5-thinking-max"},
+			},
+		},
+	}
+
+	got := RoutableModelIDs(resp)
+	want := []string{
+		"claude-opus-5",
+		"claude-opus-5-high",
+		"claude-opus-5-thinking-high",
+		"claude-opus-5-low",
+		"claude-sonnet-5",
+		"claude-sonnet-5-thinking-max",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d] = %q, want %q (all=%v)", i, got[i], want[i], got)
+		}
+	}
+}
+
 func TestResolveRequestedModelUsesDefaultVariantForPrimaryName(t *testing.T) {
 	resp := modelCatalogFixture()
 

@@ -135,8 +135,8 @@ func TestDispatch_RegisterReportsCurrentPluginVersion(t *testing.T) {
 		t.Fatalf("rc = %d", rc)
 	}
 	m := unwrapOK(t, raw)
-	if got := m["metadata"].(map[string]any)["Version"]; got != "0.8.1" {
-		t.Fatalf("metadata.Version = %v, want 0.8.1", got)
+	if got := m["metadata"].(map[string]any)["Version"]; got != "0.8.2" {
+		t.Fatalf("metadata.Version = %v, want 0.8.2", got)
 	}
 }
 
