@@ -308,3 +308,21 @@ Restoring named Claude generation now requires either paying the affected team
 invoice or importing a valid Pro/Team account whose billing and session are
 current. Transport or translator changes cannot override that upstream account
 policy.
+
+### v0.8.13 production acceptance
+
+The released plugin and sidecar were deployed to the shared CPA namespace and
+verified through both public surfaces:
+
+```text
+direct CPA non-stream -> HTTP 500 with parsed unpaid-invoice trailer
+direct CPA stream     -> HTTP 500 with parsed unpaid-invoice trailer
+TokenSheep non-stream -> HTTP 500 with the same parsed trailer
+TokenSheep stream     -> HTTP 500 with the same parsed trailer
+```
+
+TokenSheep's New API logs confirmed both public probes selected channel 16.
+Neither request timed out, returned a malformed HTTP 200, or collapsed to the
+generic empty-upstream message. Once a billing-current Claude-eligible account
+is supplied, the same matrix must be rerun for successful content, tools, long
+context, WebSearch, thinking signatures, and usage before model scoring begins.
