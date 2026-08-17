@@ -188,6 +188,11 @@ returns flattened variants without maintaining account-specific mapping files.
 These fields distinguish a missing per-account proxy handoff from an upstream
 empty response after Chromium has already selected the intended proxy route.
 
+The `upstream_rpc` health field groups transport-only completion metadata by
+allowlisted RPC class (`available_models`, `run_sse`, `bidi_append`, or
+`other`). It records counts, last status, byte length, and duration without
+exposing response contents, headers, request IDs, account identity, or URLs.
+
 The response-start timeout is deliberately shorter than Cloudflare's
 120-second proxy read timeout. If one Cursor account accepts a request but
 never starts a response body, the sidecar aborts that browser fetch and returns a

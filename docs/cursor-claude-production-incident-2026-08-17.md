@@ -213,3 +213,24 @@ has been resolved. A plugin-level HTTP boundary test also verifies that an
 account proxy survives `StorageJSON -> auth.Account -> executor.Client` and is
 carried to the loopback sidecar request while Go's loopback transport remains
 direct.
+
+Production v0.8.9 evidence ruled out a missing proxy handoff. Before the manual
+chat probe, health already showed only proxied traffic and an active SOCKS
+bridge. One simple Claude request remained empty while increasing the proxied
+counter for every retry and paired RPC.
+
+## v0.8.10 follow-up: RPC-stage transport observability
+
+To locate the empty response inside Cursor's paired chat protocol, health also
+reports an `upstream_rpc` object keyed only by allowlisted RPC class:
+
+- `available_models`;
+- `run_sse`;
+- `bidi_append`;
+- `other` for any future method not yet classified.
+
+Each entry contains request and failure counts plus the last HTTP status,
+response byte count, and duration. It intentionally excludes response bodies,
+headers, request IDs, URLs, account identity, and proxy details. This separates
+a RunSSE stream that ends without semantic events from a BidiAppend seed that
+Cursor acknowledges with HTTP 200 but ignores.

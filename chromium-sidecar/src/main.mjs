@@ -3,6 +3,7 @@ import { chromium } from 'playwright';
 import { browserFetchAndStream } from './browser_fetch.mjs';
 import { createRouteObservability } from './route_observability.mjs';
 import { createAuthenticatedSocksBridge } from './socks_bridge.mjs';
+import { createUpstreamObservability } from './upstream_observability.mjs';
 
 const listen = parseListen(process.env.CURSOR_CHROMIUM_LISTEN ?? '127.0.0.1:18901');
 const maxConcurrency = positiveInt(process.env.CURSOR_CHROMIUM_MAX_CONCURRENCY, 8);
@@ -13,6 +14,7 @@ const executablePath = process.env.CURSOR_CHROMIUM_EXECUTABLE_PATH || undefined;
 let semaphore;
 const proxyBridges = new Map();
 const routeObservability = createRouteObservability();
+const upstreamObservability = createUpstreamObservability();
 
 const browser = await chromium.launch({
   headless: true,
@@ -41,6 +43,7 @@ const server = http.createServer(async (request, response) => {
       queued: semaphore.queued,
       max_concurrency: maxConcurrency,
       ...routeObservability.snapshot(proxyBridges.size),
+      upstream_rpc: upstreamObservability.snapshot(),
     }));
     return;
   }
@@ -94,7 +97,14 @@ const server = http.createServer(async (request, response) => {
     } else {
       page = await context.newPage();
     }
-    await proxyThroughPage(page, request, response, target, body);
+    const upstreamRequest = upstreamObservability.begin(target);
+    try {
+      const result = await proxyThroughPage(page, request, response, target, body);
+      upstreamRequest.finish(result);
+    } catch (error) {
+      upstreamRequest.fail();
+      throw error;
+    }
     completed = true;
   } catch (error) {
     if (!response.headersSent) {
@@ -119,6 +129,8 @@ server.listen(listen.port, listen.host, () => {
 });
 
 async function proxyThroughPage(page, request, response, target, body) {
+  let upstreamStatus = 0;
+  let responseBytes = 0;
   const routeName = target.hostname.startsWith('api3.') ? 'api3' : 'api2';
   const originDocument = `https://${routeName}.cursor.sh/__cursor_chromium_sidecar_origin__`;
   await page.route(originDocument, (route) => route.fulfill({
@@ -129,12 +141,14 @@ async function proxyThroughPage(page, request, response, target, body) {
   await page.goto(originDocument, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
   await page.exposeFunction('__cursorSidecarStart', async (status, responseHeaders) => {
+    upstreamStatus = status;
     if (response.headersSent || response.destroyed) return;
     response.writeHead(status, filterResponseHeaders(responseHeaders));
   });
   await page.exposeFunction('__cursorSidecarChunk', async (chunkBase64) => {
     if (response.destroyed) throw new Error('downstream closed');
     const chunk = Buffer.from(chunkBase64, 'base64');
+    responseBytes += chunk.length;
     if (!response.write(chunk)) {
       await new Promise((resolve, reject) => {
         const cleanup = () => {
@@ -165,6 +179,7 @@ async function proxyThroughPage(page, request, response, target, body) {
     bodyBase64: body.toString('base64'),
     responseStartTimeoutMs,
   });
+  return { status: upstreamStatus, responseBytes };
 }
 
 function targetURL(requestURL) {
