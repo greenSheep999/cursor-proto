@@ -569,7 +569,7 @@ func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testi
 	}
 }
 
-func TestExecuteStream_Claude_HeartbeatOnlyStartsThenTimesOut(t *testing.T) {
+func TestExecuteStream_Claude_HeartbeatOnlyEndsInBandWithoutRetryableCloseError(t *testing.T) {
 	t.Setenv("CURSOR_STREAM_FIRST_OUTPUT_TIMEOUT_MS", "50")
 	events := make(chan executor.ChatEvent, 1)
 	events <- buildHeartbeatEvent()
@@ -624,8 +624,17 @@ func TestExecuteStream_Claude_HeartbeatOnlyStartsThenTimesOut(t *testing.T) {
 	if !strings.Contains(joined, "event: message_start") || !strings.Contains(joined, "event: ping") {
 		t.Fatalf("heartbeat did not establish a valid Anthropic stream: %s", joined)
 	}
-	if !strings.Contains(closedError, "first-output timeout") {
-		t.Fatalf("close error = %q, want first-output timeout", closedError)
+	if closedError != "" {
+		t.Fatalf("close error = %q, want clean close after stream start", closedError)
+	}
+	if !strings.Contains(joined, firstOutputTimeoutMessage) {
+		t.Fatalf("timeout message was not emitted in-band: %s", joined)
+	}
+	if !strings.Contains(joined, "event: message_stop") {
+		t.Fatalf("heartbeat-only timeout did not terminate the Anthropic stream: %s", joined)
+	}
+	if got := strings.Count(joined, "event: message_start"); got != 1 {
+		t.Fatalf("message_start count = %d, want 1: %s", got, joined)
 	}
 }
 

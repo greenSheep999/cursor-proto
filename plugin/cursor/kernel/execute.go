@@ -407,6 +407,8 @@ func streamFirstOutputTimeout() time.Duration {
 	return time.Duration(milliseconds) * time.Millisecond
 }
 
+const firstOutputTimeoutMessage = "upstream produced no content before first-output timeout"
+
 // emitOpenAIPayload converts the translator's HTTP-ready SSE bytes into the
 // payload units expected by CPA's async stream bridge. The host adds the
 // outer `data: ...\n\n` framing for OpenAI streams itself. Passing complete
@@ -577,7 +579,27 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 			ev = next
 		case <-firstOutputTimer.C:
-			*errOut = "upstream produced no content before first-output timeout"
+			if streamStarted {
+				// Once an Anthropic stream has emitted message_start/ping, closing
+				// the host bridge with an error makes downstream routers retry the
+				// same request and splice a second message_start into the existing
+				// SSE response. Finish the already-started stream in-band instead:
+				// the client gets an explicit timeout message and a legal terminal
+				// sequence, while the router observes a clean EOF and does not retry.
+				if payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: firstOutputTimeoutMessage}); len(payload) > 0 {
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+						return
+					}
+				}
+				if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, StopReason: "error"}); len(payload) > 0 {
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+					}
+				}
+				return
+			}
+			*errOut = firstOutputTimeoutMessage
 			return
 		}
 		if ev.Server == nil {
