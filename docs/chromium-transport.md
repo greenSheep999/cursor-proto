@@ -137,6 +137,34 @@ Native Go remains the explicit fallback when the sidecar URL is absent. The
 first version does not silently retry a failed Chromium request through Go,
 because doing so can turn a real Claude error into a misleading empty response.
 
+## Per-account catalog shapes
+
+Cursor does not return one universal model-catalog shape. The shape can differ
+between accounts on the same machine and can change when the active account is
+switched:
+
+- A parameterized catalog returns one primary row such as `claude-opus-5` and
+  puts effort, thinking, context, and fast-mode choices in `Variants`.
+- An exploded catalog returns each choice as its own `Name`, such as
+  `claude-opus-5-high` or `claude-opus-5-thinking-max-fast`.
+
+Compatibility is therefore resolved per auth from its live catalog, never from
+a process-wide assumption about which shape Cursor is currently using:
+
+1. `AvailableModelIDs` folds either shape into compact primary names for normal
+   user-facing model lists.
+2. `RoutableModelIDs` registers the primary names plus every live variant slug
+   with CPA. This matters because CPA selects a provider before invoking the
+   plugin; an omitted variant would otherwise fail as `unknown provider`.
+3. Chat execution resolves the requested name back against that same account's
+   live catalog and sends Cursor's exact `parameter_values`, preserving effort,
+   thinking, context, and fast-mode semantics.
+4. Duplicate names are removed, while short marketing aliases that are not
+   actual children of a primary model are not claimed automatically.
+
+This covers mixed pools where one account returns primary rows and another
+returns flattened variants without maintaining account-specific mapping files.
+
 ## Process and resource model
 
 - One long-lived Chromium browser per sidecar process.
