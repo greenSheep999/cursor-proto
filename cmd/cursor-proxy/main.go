@@ -956,7 +956,7 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 			}
 			continue
 		}
-		trEv := translateEvent(ev.Server, clientToolNames)
+		trEv := translateAnthropicEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}
@@ -1002,12 +1002,12 @@ func streamAnthropic(w http.ResponseWriter, model string, events <-chan executor
 	// rewrite cache_read_input_tokens to max(real, simulated).
 	decision.applyToUsage(lastUsage, true)
 	end := &translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}
-	// A trailer error that arrived AFTER we'd already committed SSE
-	// headers can't be turned into an HTTP status anymore, so surface it
-	// on the message_delta as stop_reason="error". This keeps clients
-	// from treating a partial stream as a successful end_turn.
+	// A trailer error that arrived after HTTP/SSE was committed must use
+	// Anthropic's standard event:error. "error" is not a legal stop_reason,
+	// and message_stop would misrepresent this as a successful response.
 	if trailerErr != nil {
-		end.StopReason = "error"
+		writeSSE(tr.EncodeError("api_error", trailerErr.Message))
+		return
 	}
 	writeSSE(tr.Encode(end))
 }
@@ -1043,7 +1043,7 @@ eventLoop:
 			}
 			continue
 		}
-		trEv := translateEvent(ev.Server, clientToolNames)
+		trEv := translateAnthropicEvent(ev.Server, clientToolNames)
 		if trEv == nil {
 			continue
 		}

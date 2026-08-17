@@ -29,7 +29,19 @@ func translateEvent(msg *cursorpb.AgentV1_AgentServerMessage, clientToolNames []
 	if ev == nil {
 		return nil
 	}
-	translator.ApplyClientToolAlias(ev, clientToolNames)
+	translator.ApplyClientToolContract(ev, clientToolNames, translator.ToolNameDialectDeclaredOnly)
+	return ev
+}
+
+// translateAnthropicEvent uses the same dynamic tools[] contract as every
+// other protocol, with Claude Code's built-in spellings only as a fallback for
+// lazy/deferred native tools that were omitted from the current request.
+func translateAnthropicEvent(msg *cursorpb.AgentV1_AgentServerMessage, clientToolNames []string) *translator.Event {
+	ev := translator.FromServerMessage(msg)
+	if ev == nil {
+		return nil
+	}
+	translator.ApplyClientToolContract(ev, clientToolNames, translator.ToolNameDialectClaudeCode)
 	return ev
 }
 

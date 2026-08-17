@@ -211,7 +211,7 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 			sawBlob = true
 			continue
 		}
-		trEv := translatePluginEvent(ev.Server, tools)
+		trEv := translateAnthropicPluginEvent(ev.Server, tools)
 		if trEv == nil {
 			continue
 		}
@@ -574,6 +574,13 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 		}
 	}
+	resetFirstOutputTimer := func() {
+		if sawOutput {
+			return
+		}
+		stopFirstOutputTimer()
+		firstOutputTimer.Reset(streamFirstOutputTimeout())
+	}
 	markOutput := func() {
 		if sawOutput {
 			return
@@ -609,19 +616,10 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			ev = next
 		case <-firstOutputTimer.C:
 			if streamStarted {
-				// Once an Anthropic stream has emitted message_start/ping, closing
-				// the host bridge with an error makes downstream routers retry the
-				// same request and splice a second message_start into the existing
-				// SSE response. Finish the already-started stream in-band instead:
-				// the client gets an explicit timeout message and a legal terminal
-				// sequence, while the router observes a clean EOF and does not retry.
-				if payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: firstOutputTimeoutMessage}); len(payload) > 0 {
-					if err := emit(streamID, payload); err != nil {
-						*errOut = err.Error()
-						return
-					}
-				}
-				if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, StopReason: "error"}); len(payload) > 0 {
+				// The response is already committed, so downstream failover would
+				// splice a second message_start. Report the timeout through
+				// Anthropic's legal SSE error event and close this one stream.
+				if payload := tr.EncodeError("api_error", firstOutputTimeoutMessage); len(payload) > 0 {
 					if err := emit(streamID, payload); err != nil {
 						*errOut = err.Error()
 					}
@@ -666,7 +664,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 			continue
 		}
-		trEv := translatePluginEvent(ev.Server, tools)
+		trEv := translateAnthropicPluginEvent(ev.Server, tools)
 		if trEv == nil {
 			continue
 		}
@@ -695,6 +693,10 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				streamStarted = true
 			}
 		case translator.EventHeartbeat:
+			// A heartbeat proves Cursor is still actively processing the turn.
+			// Treat the first-output timeout as an idle timeout, not an absolute
+			// wall-clock deadline, so long-context prefill is not killed at 60s.
+			resetFirstOutputTimer()
 			if !streamStarted {
 				// Cursor often emits a heartbeat immediately before closing an
 				// empty response. Starting the Anthropic message on that heartbeat
@@ -734,17 +736,9 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 	}
 	if isEmptyPluginUpstreamResponse(sawOutput, lastUsage) {
 		if streamStarted {
-			// Once a legal Anthropic preamble has reached the client, closing the
-			// host bridge with an error invites downstream retry concatenation.
-			// Finish this one stream in-band instead; callers receive a valid
-			// terminal sequence and never see duplicate message_start frames.
-			if payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: emptyUpstreamResponseMessage}); len(payload) > 0 {
-				if err := emit(streamID, payload); err != nil {
-					*errOut = err.Error()
-					return
-				}
-			}
-			if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, StopReason: "error"}); len(payload) > 0 {
+			// Preserve the single committed envelope and report the upstream
+			// failure through Anthropic's standard error event.
+			if payload := tr.EncodeError("api_error", emptyUpstreamResponseMessage); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
 					*errOut = err.Error()
 				}

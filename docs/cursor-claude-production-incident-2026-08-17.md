@@ -119,3 +119,35 @@ Responses, and Gemini usage renderers.
 - usage counters are mathematically consistent with response size and cache
   counters;
 - TokenSheep and direct CPA both pass the same request matrix.
+
+## v0.8.7 follow-up: dynamic tools, latest WebSearch, and long prefill
+
+The post-v0.8.6 CCTest report still failed tool calling, WebSearch, and
+protocol compliance. A real Claude Code coding turn also produced:
+
+```text
+No such tool available: glob
+```
+
+while the Claude Code dispatcher had registered `Glob`. A separate long-context
+turn ended at approximately the plugin's 60-second first-output deadline with:
+
+```text
+upstream produced no content before first-output timeout
+```
+
+The follow-up fixes are:
+
+1. resolve translated Cursor tool events through a request-scoped client tool
+   contract, preserving the exact name/casing declared by the caller;
+2. keep CLI-specific fallback spellings behind a single tool-contract module,
+   rather than scattering Claude/OpenAI conditionals across protocol writers;
+3. recognize Anthropic's current `web_search_20260318` server-tool version in
+   addition to `web_search_20250305` and `web_search_20260209`;
+4. treat Cursor heartbeat activity as renewal of the first-semantic-output idle
+   timer, so long prompt prefill is not killed by an absolute 60-second timer;
+5. emit Anthropic's standard `event:error` after a committed stream fails,
+   instead of the invalid `stop_reason:"error"` or a synthetic success ending.
+
+The primary-source protocol and CLI comparison is recorded in
+`docs/cli-tool-and-anthropic-stream-contracts-2026-08-17.md`.

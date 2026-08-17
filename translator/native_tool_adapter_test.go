@@ -506,6 +506,46 @@ func TestApplyClientToolAlias_CodexShell(t *testing.T) {
 	}
 }
 
+func TestApplyClientToolContract_CodexExactDialect(t *testing.T) {
+	ev := &Event{ToolName: "bash"}
+	ApplyClientToolContract(ev, []string{"exec_command", "apply_patch"}, ToolNameDialectDeclaredOnly)
+	if ev.ToolName != "exec_command" {
+		t.Fatalf("Codex shell tool = %q, want request-declared exec_command", ev.ToolName)
+	}
+}
+
+func TestApplyClientToolContract_ClaudeCodeFallback(t *testing.T) {
+	ev := &Event{ToolName: "glob"}
+	ApplyClientToolContract(ev, nil, ToolNameDialectClaudeCode)
+	if ev.ToolName != "Glob" {
+		t.Fatalf("Claude Code lazy glob = %q, want canonical Glob", ev.ToolName)
+	}
+}
+
+func TestApplyClientToolContract_PreservesMCPExactCase(t *testing.T) {
+	ev := &Event{ToolName: "MyServer.CustomTool"}
+	ApplyClientToolContract(ev, []string{"MyServer.CustomTool"}, ToolNameDialectClaudeCode)
+	if ev.ToolName != "MyServer.CustomTool" {
+		t.Fatalf("MCP exact tool name changed to %q", ev.ToolName)
+	}
+}
+
+func TestApplyClientToolAlias_AmbiguousCasePreservesExactIdentity(t *testing.T) {
+	ev := &Event{ToolName: "glob"}
+	ApplyClientToolAlias(ev, []string{"Glob", "glob"})
+	if ev.ToolName != "glob" {
+		t.Fatalf("exact lowercase identity changed to %q", ev.ToolName)
+	}
+}
+
+func TestApplyClientToolAlias_AmbiguousAliasesAreNotGuessed(t *testing.T) {
+	ev := &Event{ToolName: "bash"}
+	ApplyClientToolAlias(ev, []string{"shell", "exec_command"})
+	if ev.ToolName != "bash" {
+		t.Fatalf("ambiguous shell aliases guessed %q, want semantic bash unchanged", ev.ToolName)
+	}
+}
+
 // TestApplyClientToolAlias_ExactMatch — Grok emits `add` (MCP-side
 // exact match). Client declared `add`. Should stay as declared.
 func TestApplyClientToolAlias_ExactMatch(t *testing.T) {

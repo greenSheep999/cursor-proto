@@ -67,6 +67,22 @@ func NewAnthropicMessageID() string {
 	return "msg_01" + string(random)
 }
 
+// EncodeError emits Anthropic's standard SSE error event. Once HTTP 200 has
+// been committed, failures must use event:error rather than an invented stop
+// reason or a synthetic successful message_stop sequence.
+func (w *AnthropicStreamWriter) EncodeError(errorType, message string) []byte {
+	if errorType == "" {
+		errorType = "api_error"
+	}
+	return w.frame("error", map[string]any{
+		"type": "error",
+		"error": map[string]any{
+			"type":    errorType,
+			"message": message,
+		},
+	})
+}
+
 func (w *AnthropicStreamWriter) startFrame() []byte {
 	if w.sentStart {
 		return nil
@@ -408,10 +424,9 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			usage["server_tool_use"] = map[string]int{"web_search_requests": w.webSearchRequests}
 		}
 		stopReason := AnthropicStopReason(w.text.String(), w.sawToolCall)
-		// Callers can force a specific stop_reason (e.g. "error" when the
-		// upstream trailer surfaced a grpc-status != 0 after we'd already
-		// written the SSE headers). Otherwise fall through to the
-		// state-derived default.
+		// Callers can force a legal provider stop reason such as max_tokens,
+		// pause_turn, refusal, or model_context_window_exceeded. Transport and
+		// upstream failures use EncodeError instead.
 		if ev.StopReason != "" {
 			stopReason = ev.StopReason
 		}

@@ -145,7 +145,7 @@ func clientNameForCursorTool(cursorType string) string {
 // declares `shell`, we returned `bash`, hence 6× "unsupported call".
 var toolNameAliases = [][]string{
 	// shell family
-	{"bash", "shell", "run_terminal_command", "run_terminal_cmd", "run_shell_command", "run_command", "execute", "sh"},
+	{"bash", "shell", "exec_command", "shell_command", "run_terminal_command", "run_terminal_cmd", "run_shell_command", "run_command", "execute", "sh"},
 	// write family
 	{"write", "write_file", "create_file", "create", "str_replace_editor"},
 	// read family
@@ -158,6 +158,48 @@ var toolNameAliases = [][]string{
 	{"ls", "list_dir", "list_directory", "list_files"},
 	// fetch family
 	{"web_fetch", "webfetch", "fetch_url", "http_get", "web_search"},
+}
+
+// ToolNameDialect selects the fallback spelling used when a translated
+// native tool cannot be matched to a name declared in the current request.
+// Declared names always win; dialects exist only for lazy/deferred built-ins.
+type ToolNameDialect uint8
+
+const (
+	ToolNameDialectDeclaredOnly ToolNameDialect = iota
+	ToolNameDialectClaudeCode
+)
+
+var claudeCodeFallbackToolNames = map[string]string{
+	"bash":      "Bash",
+	"read":      "Read",
+	"write":     "Write",
+	"grep":      "Grep",
+	"glob":      "Glob",
+	"ls":        "LS",
+	"web_fetch": "WebFetch",
+}
+
+// ApplyClientToolContract resolves a tool event through one deep interface:
+// first use the caller's dynamic tools[] contract, then apply a CLI-specific
+// fallback only when no declared tool matched. Protocol writers do not need to
+// know Cursor's native names or maintain their own alias tables.
+func ApplyClientToolContract(ev *Event, clientToolNames []string, dialect ToolNameDialect) {
+	if ev == nil || ev.ToolName == "" {
+		return
+	}
+	ApplyClientToolAlias(ev, clientToolNames)
+	for _, name := range clientToolNames {
+		if strings.EqualFold(strings.TrimSpace(name), ev.ToolName) {
+			return
+		}
+	}
+	if dialect != ToolNameDialectClaudeCode {
+		return
+	}
+	if canonical, ok := claudeCodeFallbackToolNames[strings.ToLower(ev.ToolName)]; ok {
+		ev.ToolName = canonical
+	}
 }
 
 // ApplyClientToolAlias rewrites ev.ToolName to whatever the client
@@ -177,22 +219,36 @@ func ApplyClientToolAlias(ev *Event, clientToolNames []string) {
 	if ev == nil || ev.ToolName == "" || len(clientToolNames) == 0 {
 		return
 	}
-	// Build a lowercase set of client names once. We'll do
-	// case-insensitive matching but return the caller's exact
-	// casing.
+	// Exact, case-sensitive identity is authoritative, including when a
+	// catalog intentionally declares both `Glob` and `glob`.
+	for _, name := range clientToolNames {
+		if strings.TrimSpace(name) == ev.ToolName {
+			return
+		}
+	}
+
+	// Build a lowercase index, but retain only unique case-folded names.
+	// Ambiguous casing must not be resolved by map insertion order.
 	byLower := make(map[string]string, len(clientToolNames))
+	ambiguousLower := make(map[string]bool)
 	for _, name := range clientToolNames {
 		n := strings.TrimSpace(name)
 		if n == "" {
 			continue
 		}
-		byLower[strings.ToLower(n)] = n
+		lower := strings.ToLower(n)
+		if existing, ok := byLower[lower]; ok && existing != n {
+			ambiguousLower[lower] = true
+			continue
+		}
+		byLower[lower] = n
 	}
 	// If the current ToolName already matches (case-insensitively)
 	// something the client declared, return the client's exact
 	// spelling — this covers the Grok case where the model calls
 	// an MCP tool by the caller's own name.
-	if exact, ok := byLower[strings.ToLower(ev.ToolName)]; ok {
+	currentLower := strings.ToLower(ev.ToolName)
+	if exact, ok := byLower[currentLower]; ok && !ambiguousLower[currentLower] {
 		ev.ToolName = exact
 		return
 	}
@@ -203,11 +259,21 @@ func ApplyClientToolAlias(ev *Event, clientToolNames []string) {
 	if group == nil {
 		return
 	}
+	var candidate string
 	for _, alias := range group {
-		if exact, ok := byLower[strings.ToLower(alias)]; ok {
-			ev.ToolName = exact
+		lower := strings.ToLower(alias)
+		if ambiguousLower[lower] {
 			return
 		}
+		if exact, ok := byLower[lower]; ok {
+			if candidate != "" && candidate != exact {
+				return
+			}
+			candidate = exact
+		}
+	}
+	if candidate != "" {
+		ev.ToolName = candidate
 	}
 	// No client alias matched. Leave the current name.
 }

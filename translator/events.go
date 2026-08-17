@@ -56,10 +56,8 @@ type Event struct {
 	Usage *Usage
 
 	// StopReason lets callers override the stop_reason emitted on
-	// EventTurnEnded. Empty means "let the writer choose" (end_turn or
-	// tool_use, depending on state). Currently used by the streaming
-	// paths to surface a trailer error as stop_reason="error" instead
-	// of a misleading end_turn.
+	// EventTurnEnded with a legal provider reason. Transport and upstream
+	// failures must use the protocol's error event instead.
 	StopReason string
 }
 

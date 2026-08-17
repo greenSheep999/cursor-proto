@@ -185,6 +185,60 @@ func TestTranslatePluginEventRestoresDeclaredToolCase(t *testing.T) {
 	}
 }
 
+func TestTranslateClaudePluginEventUsesCanonicalCaseForLazyNativeTool(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallStarted{
+					ToolCallStarted: &cursorpb.AgentV1_ToolCallStartedUpdate{
+						ToolCall: &cursorpb.AgentV1_ToolCall{
+							Tool: &cursorpb.AgentV1_ToolCall_GlobToolCall{
+								GlobToolCall: &cursorpb.AgentV1_GlobToolCall{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	event := translateAnthropicPluginEvent(server, nil)
+	if event == nil {
+		t.Fatal("expected tool event")
+	}
+	if event.ToolName != "Glob" {
+		t.Fatalf("tool name = %q, want Claude Code canonical Glob", event.ToolName)
+	}
+	generic := translatePluginEvent(server, nil)
+	if generic == nil || generic.ToolName != "glob" {
+		t.Fatalf("generic/OpenAI fallback = %+v, want lowercase semantic glob", generic)
+	}
+}
+
+func TestTranslateClaudePluginEventPreservesDeclaredLowercaseTool(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallStarted{
+					ToolCallStarted: &cursorpb.AgentV1_ToolCallStartedUpdate{
+						ToolCall: &cursorpb.AgentV1_ToolCall{
+							Tool: &cursorpb.AgentV1_ToolCall_GlobToolCall{
+								GlobToolCall: &cursorpb.AgentV1_GlobToolCall{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	event := translateAnthropicPluginEvent(server, []executor.ToolDefinition{{Name: "glob"}})
+	if event == nil {
+		t.Fatal("expected tool event")
+	}
+	if event.ToolName != "glob" {
+		t.Fatalf("tool name = %q, want client-declared glob", event.ToolName)
+	}
+}
+
 func buildThinkingDeltaEvent(text string) executor.ChatEvent {
 	msg := &cursorpb.AgentV1_AgentServerMessage{
 		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
@@ -628,14 +682,73 @@ func TestExecuteStream_Claude_HeartbeatOnlyEndsInBandWithoutRetryableCloseError(
 	if closedError != "" {
 		t.Fatalf("close error = %q, want clean close after stream start", closedError)
 	}
-	if !strings.Contains(joined, firstOutputTimeoutMessage) {
-		t.Fatalf("timeout message was not emitted in-band: %s", joined)
+	if !strings.Contains(joined, "event: error") || !strings.Contains(joined, `"type":"api_error"`) || !strings.Contains(joined, firstOutputTimeoutMessage) {
+		t.Fatalf("standard timeout error event was not emitted in-band: %s", joined)
 	}
-	if !strings.Contains(joined, "event: message_stop") {
-		t.Fatalf("heartbeat-only timeout did not terminate the Anthropic stream: %s", joined)
+	if strings.Contains(joined, "event: message_stop") || strings.Contains(joined, `"stop_reason":"error"`) {
+		t.Fatalf("failed Anthropic stream was misrepresented as a successful stop: %s", joined)
 	}
 	if got := strings.Count(joined, "event: message_start"); got != 1 {
 		t.Fatalf("message_start count = %d, want 1: %s", got, joined)
+	}
+}
+
+func TestExecuteStream_Claude_HeartbeatRenewsFirstOutputIdleTimeout(t *testing.T) {
+	t.Setenv("CURSOR_STREAM_FIRST_OUTPUT_TIMEOUT_MS", "50")
+	t.Setenv("CURSOR_STREAM_HEARTBEAT_PREAMBLE_MS", "0")
+	events := make(chan executor.ChatEvent)
+	go func() {
+		defer close(events)
+		events <- buildHeartbeatEvent()
+		time.Sleep(35 * time.Millisecond)
+		events <- buildHeartbeatEvent()
+		time.Sleep(35 * time.Millisecond)
+		events <- buildTextDeltaEvent("LONG_CONTEXT_OK")
+		events <- buildTurnEndedEvent(1000, 4)
+	}()
+
+	var (
+		mu      sync.Mutex
+		emitted [][]byte
+		done    = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return &channelRunner{events: events}, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "heartbeat-renewal"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream never closed")
+	}
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if strings.Contains(joined, firstOutputTimeoutMessage) {
+		t.Fatalf("live heartbeat stream was killed by first-output timeout: %s", joined)
+	}
+	if !strings.Contains(joined, "LONG_CONTEXT_OK") {
+		t.Fatalf("post-heartbeat content was not emitted: %s", joined)
 	}
 }
 
@@ -917,6 +1030,25 @@ func TestParseClaudePayload_UsesNativeWebSearch(t *testing.T) {
 	}
 	if req.WorkspacePath != "" {
 		t.Fatalf("WebSearch workspace = %q, want account-profile default", req.WorkspacePath)
+	}
+}
+
+func TestParseClaudePayload_UsesLatestNativeWebSearchVersion(t *testing.T) {
+	payload := []byte(`{
+		"model":"claude-opus-5",
+		"messages":[{"role":"user","content":"search"}],
+		"tools":[{"type":"web_search_20260318","name":"web_search","max_uses":1}],
+		"stream":true
+	}`)
+	shape, err := parseClaudePayload(payload)
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if !shape.WebSearch {
+		t.Fatal("WebSearch = false for web_search_20260318")
+	}
+	if len(shape.Tools) != 0 {
+		t.Fatalf("server WebSearch leaked into client tools: %+v", shape.Tools)
 	}
 }
 

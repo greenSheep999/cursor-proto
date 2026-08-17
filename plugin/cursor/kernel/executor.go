@@ -458,7 +458,7 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 	}
 	for _, t := range req.Tools {
 		switch strings.ToLower(strings.TrimSpace(t.Type)) {
-		case "web_search_20250305", "web_search_20260209":
+		case "web_search_20250305", "web_search_20260209", "web_search_20260318":
 			shape.WebSearch = true
 			continue
 		case "web_fetch_20250910":
@@ -785,6 +785,31 @@ func translatePluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []e
 	}
 	translator.ApplyClientToolAlias(event, names)
 	return event
+}
+
+// translateClaudePluginEvent preserves the exact tool spelling declared by
+// the Anthropic client. When a request omits a native tool from tools[] (for
+// example Claude Code's deferred/lazy tool loading), fall back to Claude
+// Code's canonical case-sensitive names instead of Cursor's lowercase names.
+// Without this fallback Claude Code receives `glob` and rejects it because its
+// dispatch table contains `Glob`.
+func translatePluginEventForDialect(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition, dialect translator.ToolNameDialect) *translator.Event {
+	event := translator.FromServerMessage(server)
+	if event == nil {
+		return nil
+	}
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if name := strings.TrimSpace(tool.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	translator.ApplyClientToolContract(event, names, dialect)
+	return event
+}
+
+func translateAnthropicPluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition) *translator.Event {
+	return translatePluginEventForDialect(server, tools, translator.ToolNameDialectClaudeCode)
 }
 
 // normaliseFormat maps a wire format string to one we handle. Empty

@@ -134,3 +134,21 @@ func TestAnthropicNativeWebSearchShape(t *testing.T) {
 		t.Fatalf("completed native server tool must end the turn normally: %s", end)
 	}
 }
+
+func TestAnthropicErrorEventShape(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-opus-5")
+	body := string(w.EncodeError("timeout_error", "upstream timed out"))
+	for _, expected := range []string{
+		"event: error",
+		`"type":"error"`,
+		`"type":"timeout_error"`,
+		`"message":"upstream timed out"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("missing %s in Anthropic error event: %s", expected, body)
+		}
+	}
+	if strings.Contains(body, "message_stop") || strings.Contains(body, `"stop_reason":"error"`) {
+		t.Fatalf("error event contained a successful/illegal terminal frame: %s", body)
+	}
+}
