@@ -19,10 +19,13 @@ package kernel
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -83,6 +86,7 @@ func loadIDEAccount(dbPath string) (*cpaformat.AuthFile, error) {
 	authType := q("cursorAuth/cachedSignUpType")
 	authID := q("cursorAuth/authId")
 	userID := q("cursorAuth/cachedUserID")
+	teamID := teamIDFromIDEValues(q("cursorAuth/teamId"), q("cursorAuth/cachedTeam"))
 
 	mid, _ := auth.GetMachineID()
 	mac, _ := auth.GetMacMachineID()
@@ -97,6 +101,7 @@ func loadIDEAccount(dbPath string) (*cpaformat.AuthFile, error) {
 			UserID:       userID,
 			AuthID:       authID,
 			AuthKind:     authType,
+			TeamID:       teamID,
 			MachineID:    mid,
 			MacMachineID: mac,
 			IssuedAt:     cpaformat.FormatTime(now),
@@ -105,4 +110,45 @@ func loadIDEAccount(dbPath string) (*cpaformat.AuthFile, error) {
 			Refreshable:  refresh != "",
 		},
 	}, nil
+}
+
+// teamIDFromIDEValues normalises the two SQLite keys Cursor IDE persists for
+// team membership into the string representation stored on
+// cpaformat.CursorTokenStorage.TeamID. Cursor writes the numeric team id under
+// cursorAuth/teamId and a companion JSON blob (`{"teamId":<n>,"name":"..."}`)
+// under cursorAuth/cachedTeam. Either can be missing on personal accounts;
+// both are strings on the wire because ItemTable.value is TEXT. Non-team
+// accounts return "" so downstream headers stay unset.
+func teamIDFromIDEValues(directKey, cachedTeamJSON string) string {
+	if id := strings.TrimSpace(directKey); id != "" && id != "0" {
+		return id
+	}
+	raw := strings.TrimSpace(cachedTeamJSON)
+	if raw == "" {
+		return ""
+	}
+	// storageService.getObject values are JSON-encoded; some IDE builds
+	// double-quote-wrap the raw JSON so ItemTable.value parses to a string
+	// first — accept both shapes.
+	if unquoted, err := strconv.Unquote(raw); err == nil {
+		raw = strings.TrimSpace(unquoted)
+	}
+	var payload struct {
+		TeamID any `json:"teamId"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	switch v := payload.TeamID.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		if v <= 0 {
+			return ""
+		}
+		return strconv.FormatInt(int64(v), 10)
+	case json.Number:
+		return string(v)
+	}
+	return ""
 }

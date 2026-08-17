@@ -16,10 +16,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
 	usagepb "github.com/router-for-me/cursor-proto/usage/pb"
 	"google.golang.org/protobuf/proto"
@@ -113,6 +115,18 @@ type Snapshot struct {
 	Country    string `json:"country,omitempty"`
 	CreatedAt  string `json:"created_at,omitempty"`
 	SignUpType string `json:"sign_up_type,omitempty"`
+
+	// Team membership — GetMe returns team_id/team_name/is_team_admin on
+	// team-plan accounts and leaves them unset on personal accounts. TeamID
+	// is emitted as a decimal string (Cursor's wire form is int32) so the
+	// snapshot serialises cleanly whether or not the account has a team.
+	// Downstream code copies TeamID onto auth.Account so ApplyCommonHeaders
+	// can preserve the IDE's x-cursor-team-id metadata. Live transport probes
+	// show this field does not independently change Claude entitlement.
+	TeamID       string `json:"team_id,omitempty"`
+	TeamName     string `json:"team_name,omitempty"`
+	IsTeamAdmin  bool   `json:"is_team_admin,omitempty"`
+	IsEnterprise bool   `json:"is_enterprise_user,omitempty"`
 
 	// Fetched records which RPC groups succeeded so the JSON consumer can
 	// tell "0 = actual 0" from "0 = permission_denied, skipped".
@@ -316,6 +330,14 @@ func (c *Client) Fetch(ctx context.Context) (*Snapshot, error) {
 				snap.Country = resp.GetCountry()
 				snap.CreatedAt = resp.GetCreatedAt()
 				snap.SignUpType = resp.GetEmailDomainType()
+				// Team fields are proto3 `optional` and default to zero.
+				// Only surface them when the server actually set a team.
+				if tid := resp.GetTeamId(); tid > 0 {
+					snap.TeamID = strconv.FormatInt(int64(tid), 10)
+				}
+				snap.TeamName = resp.GetTeamName()
+				snap.IsTeamAdmin = resp.GetIsTeamAdmin()
+				snap.IsEnterprise = resp.GetIsEnterpriseUser()
 				snap.Fetched.Me = true
 				return nil
 			},
@@ -338,6 +360,34 @@ func (c *Client) Fetch(ctx context.Context) (*Snapshot, error) {
 		snap.Errors = nil
 	}
 	return snap, nil
+}
+
+// ApplyToAccount copies identity fields the OAuth poll response does not
+// carry (team_id, canonical email) from a Snapshot onto an *auth.Account,
+// so downstream requests can emit `x-cursor-team-id` and CPA can persist
+// the team membership alongside the tokens.
+//
+// Only fields the snapshot actually filled are copied; missing fields are
+// left untouched so callers can layer this on top of an already-populated
+// Account without clobbering it. Returns whether anything changed so
+// callers running from a mtime watcher can skip a write when nothing did.
+func (s *Snapshot) ApplyToAccount(acc *auth.Account) bool {
+	if s == nil || acc == nil {
+		return false
+	}
+	changed := false
+	if !s.Fetched.Me {
+		return false
+	}
+	if id := strings.TrimSpace(s.TeamID); id != "" && acc.TeamID != id {
+		acc.TeamID = id
+		changed = true
+	}
+	if email := strings.TrimSpace(s.Email); email != "" && acc.Email != email {
+		acc.Email = email
+		changed = true
+	}
+	return changed
 }
 
 // aggregateJob returns a closure that runs GetAggregatedUsageEvents for

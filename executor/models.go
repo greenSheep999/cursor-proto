@@ -13,8 +13,37 @@ import (
 const modelCatalogTTL = 5 * time.Minute
 
 // ListModels calls AiService/AvailableModels and returns the model list.
+//
+// The request payload mirrors what the Cursor 3.16.17 IDE model picker
+// sends (verified against workbench.glass.main.js's `refreshDefaultModels`
+// at offset ~39.7M):
+//
+//	new AvailableModelsRequest({
+//	    isNightly: false,
+//	    excludeMaxNamedModels: true,   // do not emit *-max sibling rows
+//	    additionalModelNames: [],       // user-added external models
+//	    useModelParameters: true,       // send parameterised catalog
+//	    useReactModelPicker: true,      // return the newer picker shape
+//	    byokEnabled: false,             // user has BYO OpenAI key
+//	})
+//
+// These flags preserve the current IDE request shape and parameterised
+// catalog representation. They do not determine Claude entitlement: live
+// differential probes show the same account receives 24 non-Claude models
+// through Go and 35 models (11 Claude) through Chromium with identical
+// protobuf fields and x-cursor headers. See cmd/test-model-stack.
 func (c *Client) ListModels() (*cursorpb.AiserverV1_AvailableModelsResponse, error) {
-	req := &cursorpb.AiserverV1_AvailableModelsRequest{}
+	useModelParameters := true
+	useReactModelPicker := true
+	byokEnabled := false
+	req := &cursorpb.AiserverV1_AvailableModelsRequest{
+		IsNightly:             false,
+		ExcludeMaxNamedModels: true,
+		AdditionalModelNames:  nil,
+		UseModelParameters:    &useModelParameters,
+		UseReactModelPicker:   &useReactModelPicker,
+		ByokEnabled:           &byokEnabled,
+	}
 	var resp cursorpb.AiserverV1_AvailableModelsResponse
 	if err := c.UnaryCall("aiserver.v1.AiService", "AvailableModels", req, &resp); err != nil {
 		return nil, err

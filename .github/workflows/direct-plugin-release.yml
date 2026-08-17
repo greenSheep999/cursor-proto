@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Existing public release tag to receive cursor.so
         required: true
-        default: cursor3.16/v0.7.1
+        default: cursor3.16/v0.8.0
         type: string
 
 permissions:
@@ -41,6 +41,13 @@ jobs:
           sha256sum dist/cursor.so
           nm -D dist/cursor.so | grep -E 'cliproxy_plugin_init|cliproxyPlugin(Call|Free|Shutdown)'
 
+      - name: Package Chromium sidecar
+        run: |
+          set -euo pipefail
+          tar -C chromium-sidecar -czf dist/cursor-chromium-sidecar.tar.gz \
+            Dockerfile package.json package-lock.json src
+          sha256sum dist/cursor-chromium-sidecar.tar.gz
+
       - name: Upload directly to release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,5 +57,6 @@ jobs:
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
           gh release upload "$RELEASE_TAG" \
             dist/cursor.so \
+            dist/cursor-chromium-sidecar.tar.gz \
             --repo "$GITHUB_REPOSITORY" \
             --clobber

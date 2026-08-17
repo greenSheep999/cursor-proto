@@ -1,0 +1,13 @@
+{
+  "name": "cursor-chromium-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.mjs",
+    "check": "node --check src/main.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.61.1"
+  }
+}

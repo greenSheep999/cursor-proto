@@ -3,17 +3,17 @@ package kernel
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
-	"github.com/router-for-me/cursor-proto/executor/transport"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-const pluginVersion = "0.7.1"
+const pluginVersion = "0.8.0"
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {
@@ -86,7 +86,11 @@ type authModelRequest struct {
 }
 
 var listModelsForAuth = func(acc *auth.Account) ([]string, error) {
-	resp, err := executor.NewClient(acc, executor.WithHTTPVersion(transport.Http1_1)).ListModels()
+	client, err := newPluginExecutorClient(acc)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.ListModels()
 	if err != nil {
 		return nil, err
 	}
@@ -96,24 +100,49 @@ var listModelsForAuth = func(acc *auth.Account) ([]string, error) {
 func handleModelsForAuth(payload []byte) ([]byte, int) {
 	var req authModelRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
+		// Malformed request from host — record the reason so operators
+		// don't see a mysterious "static-fallback advertised" line
+		// against a healthy account.
 		return okEnvelopeJSON(staticModelsResult()), 0
 	}
 	file, err := cpaformat.Unmarshal(req.StorageJSON)
 	if err != nil {
+		reportModelForAuthFallback(req.AuthID, "unmarshal_storage", err)
 		return okEnvelopeJSON(staticModelsResult()), 0
 	}
 	acc, err := file.ToAccount()
 	if err != nil {
+		reportModelForAuthFallback(req.AuthID, "to_account", err)
 		return okEnvelopeJSON(staticModelsResult()), 0
 	}
 	names, err := listModelsForAuth(acc)
 	if err != nil {
+		reportModelForAuthFallback(req.AuthID, "list_models", err)
 		return okEnvelopeJSON(staticModelsResult()), 0
 	}
 	if len(names) == 0 {
+		reportModelForAuthFallback(req.AuthID, "empty_catalog", nil)
 		return okEnvelopeJSON(staticModelsResult()), 0
 	}
 	return okEnvelopeJSON(modelsResult(names)), 0
+}
+
+// reportModelForAuthFallback surfaces the reason CPA's model.for_auth call
+// fell back to the static list. Written to stderr (CPA tees plugin stderr
+// into its own log) rather than the response envelope so callers cannot
+// starve on a partially-populated Models list. AuthID is included so a
+// pool with dozens of accounts is trivially diagnosable — the id is the
+// same string CPA prints in its own account-error log lines.
+func reportModelForAuthFallback(authID, reason string, err error) {
+	id := strings.TrimSpace(authID)
+	if id == "" {
+		id = "<unknown>"
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[cursor-plugin] model.for_auth fallback: auth=%s reason=%s err=%v\n", id, reason, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[cursor-plugin] model.for_auth fallback: auth=%s reason=%s\n", id, reason)
 }
 
 // authParseRequest mirrors pluginapi.AuthParseRequest for the ABI JSON

@@ -76,7 +76,7 @@ Response shape (stable, additive):
   "impersonated_version":  "3.16.17",
   "impersonated_commit":   "6b2afae0257df2bb5e1835f15165dc2f0de056b0",
   "release_hash":          "6b2afae0257df2bb5e1835f15165dc2f0de056b2",
-  "proto_version":         "cursor3.16/v0.7.1"
+  "proto_version":         "cursor3.16/v0.8.0"
 }
 ```
 
@@ -204,7 +204,7 @@ env:
   CURSOR_PROTO_TAG_3_10: cursor3.10/v0.1.1
   CURSOR_PROTO_TAG_3_11: cursor3.11/v0.2.0
   CURSOR_PROTO_TAG_3_15: cursor3.15/v0.4.0
-  CURSOR_PROTO_TAG_3_16: cursor3.16/v0.7.1
+  CURSOR_PROTO_TAG_3_16: cursor3.16/v0.8.0
 ```
 
 Download the matching artifact:
@@ -256,7 +256,7 @@ tags win — please update this document.
 | 3.10        | `cursor3.10/v0.1.6` (also legacy `v0.1.0`) | `release/cursor-3.10` | maintained (security patches only) | Cursor 3.10.20     |
 | 3.11        | `cursor3.11/v0.3.8` | `release/cursor-3.11` | maintained | Cursor 3.11.19     |
 | 3.15        | `cursor3.15/v0.6.7` | `release/cursor-3.15` | maintained | Cursor 3.15.19     |
-| 3.16        | `cursor3.16/v0.7.1` | `main`                | current | Cursor 3.16.17     |
+| 3.16        | `cursor3.16/v0.8.0` | `main`                | current | Cursor 3.16.17     |
 
 Note: `cursor3.11/v0.3.0` is the first release with **agent mode**
 (the /v1/agents/* endpoint tree backed by @cursor/sdk). Wire mode

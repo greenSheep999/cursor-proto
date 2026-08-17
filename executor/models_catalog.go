@@ -62,24 +62,171 @@ func StableModelFallbackIDs() []string {
 // but are intentionally not advertised as separate models: Cursor 3.16 sends
 // one catalog model ID plus parameter values instead of treating every effort,
 // thinking, context, and fast combination as a distinct upstream model.
+//
+// Older IDE-side settings (or a server that ignores our
+// use_model_parameters hint) still receive the exploded catalog where each
+// entry's Name is a variant slug such as `claude-sonnet-4-5-thinking-high`.
+// When we detect that shape we fold variants back to their primary id using
+// server_model_name / id_aliases / legacy_slugs / heuristic-stripped variant
+// suffixes so CPA's model registry sees the base names its chat requests
+// actually target.
 func AvailableModelIDs(resp *cursorpb.AiserverV1_AvailableModelsResponse) []string {
 	if resp == nil {
 		return nil
 	}
 	seen := make(map[string]struct{})
 	out := make([]string, 0, len(resp.GetModels()))
-	for _, model := range resp.GetModels() {
-		id := primaryModelID(model)
+	add := func(id string) {
 		if id == "" {
-			continue
+			return
 		}
 		if _, ok := seen[id]; ok {
-			continue
+			return
 		}
 		seen[id] = struct{}{}
 		out = append(out, id)
 	}
+	for _, model := range resp.GetModels() {
+		add(baseModelID(model))
+	}
 	return out
+}
+
+// baseModelID returns the primary model id for a catalog entry.
+//
+// For the modern Cursor 3.16 parameterised catalog Name is already the base
+// (e.g. "claude-sonnet-4-5") and the variants live under Variants — we return
+// Name verbatim. server_model_name is the same string on this shape, and we
+// deliberately do NOT touch id_aliases/legacy_slugs (they carry marketing
+// abbreviations like "gpt" / "gemini" and every variant slug respectively —
+// collapsing to those would over-fold distinct base models into one).
+//
+// The fallback path fires only when Name matches an exploded-variant shape
+// (a Name identical to a legacy_slug entry, or trailing a known variant
+// suffix). This covers the 207-row team catalog codex tracked down: each
+// row lands as `<base>-<effort>-<thinking>` with the base repeated in
+// id_aliases/legacy_slugs. In that case we recover the base via the
+// server_model_name (if different from Name) or by stripping the trailing
+// variant suffixes.
+func baseModelID(model *cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel) string {
+	if model == nil {
+		return ""
+	}
+	name := strings.TrimSpace(model.GetName())
+	if name == "" {
+		return strings.TrimSpace(model.GetServerModelName())
+	}
+	server := strings.TrimSpace(model.GetServerModelName())
+	if !looksLikeExplodedVariant(model, name) {
+		return name
+	}
+	// Exploded shape detected: prefer server_model_name when it disagrees
+	// with name (the exploded row's server field carries the base), then
+	// try to strip the variant suffix off name, and finally give up and
+	// return name verbatim so the caller at least advertises something.
+	if server != "" && server != name {
+		return server
+	}
+	if stripped := stripVariantSuffixes(name); stripped != "" && stripped != name {
+		return stripped
+	}
+	return name
+}
+
+// looksLikeExplodedVariant returns true when a catalog row appears to be a
+// single variant of a base model rather than a parameterised base.
+// Heuristic:
+//
+//  1. The row's legacy_slugs list contains name itself — the modern shape
+//     never repeats name in that list because Variants carry the slugs.
+//  2. name ends with a known variant suffix AND one of the id_aliases or
+//     legacy_slugs holds a shorter form of it. This second guard prevents
+//     us from stripping legitimate base names that happen to end in the
+//     word "max" or "fast" without an actual sibling row.
+func looksLikeExplodedVariant(model *cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel, name string) bool {
+	for _, slug := range model.GetLegacySlugs() {
+		if strings.TrimSpace(slug) == name {
+			return true
+		}
+	}
+	if !hasKnownVariantSuffix(name) {
+		return false
+	}
+	stripped := stripVariantSuffixes(name)
+	if stripped == "" || stripped == name {
+		return false
+	}
+	for _, alias := range model.GetIdAliases() {
+		if strings.TrimSpace(alias) == stripped {
+			return true
+		}
+	}
+	for _, slug := range model.GetLegacySlugs() {
+		if strings.TrimSpace(slug) == stripped {
+			return true
+		}
+	}
+	// server_model_name equal to the stripped form is a strong signal the
+	// row is a variant that happens to omit the id from the alias arrays.
+	if strings.TrimSpace(model.GetServerModelName()) == stripped {
+		return true
+	}
+	return false
+}
+
+// variantSuffixes lists the trailing tokens Cursor appends to a base model
+// id when it emits an exploded-variant catalog row. Ordering matters — the
+// longest match wins so "claude-opus-5-thinking-high" collapses cleanly to
+// "claude-opus-5" without partial matches on "-high" leaving orphans.
+var variantSuffixes = []string{
+	"-thinking-max",
+	"-thinking-high",
+	"-thinking-medium",
+	"-thinking-low",
+	"-thinking-fast",
+	"-thinking",
+	"-longcontext",
+	"-long-context",
+	"-max",
+	"-fast",
+	"-effort-max",
+	"-effort-high",
+	"-effort-medium",
+	"-effort-low",
+}
+
+// hasKnownVariantSuffix reports whether name ends with any variant suffix.
+// Used by looksLikeExplodedVariant to keep the fold-back path narrowly
+// scoped to catalogs that emit one row per (base, effort, thinking) tuple.
+func hasKnownVariantSuffix(name string) bool {
+	for _, suffix := range variantSuffixes {
+		if strings.HasSuffix(name, suffix) && name != suffix {
+			return true
+		}
+	}
+	return false
+}
+
+// stripVariantSuffixes trims a single Cursor variant suffix from name. It is
+// applied repeatedly so pathological compound suffixes like
+// `-thinking-high-fast` collapse to their base id. Returns "" when the input
+// is empty so the caller can treat "" as a signal to keep the raw name.
+func stripVariantSuffixes(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, suffix := range variantSuffixes {
+			if strings.HasSuffix(trimmed, suffix) && trimmed != suffix {
+				trimmed = strings.TrimSuffix(trimmed, suffix)
+				changed = true
+				break
+			}
+		}
+	}
+	return trimmed
 }
 
 func resolveRequestedModelFromCatalog(resp *cursorpb.AiserverV1_AvailableModelsResponse, requestedID string) (*cursorpb.AgentV1_RequestedModel, bool) {

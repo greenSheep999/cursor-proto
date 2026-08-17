@@ -4,9 +4,12 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -59,13 +62,57 @@ func loadAccountFromIDE() *auth.Account {
 		log.Fatalf("no accessToken: %v", err)
 	}
 	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'`).Scan(&email)
+	var directTeam, cachedTeam string
+	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/teamId'`).Scan(&directTeam)
+	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedTeam'`).Scan(&cachedTeam)
+	teamID := teamIDFromIDEValues(directTeam, cachedTeam)
 
 	machineID, _ := auth.GetMachineID()
 	macID, _ := auth.GetMacMachineID()
-	return &auth.Account{
+	acc := &auth.Account{
 		Email:        email,
 		AccessToken:  access,
+		TeamID:       teamID,
 		MachineID:    machineID,
 		MacMachineID: macID,
 	}
+	if teamID != "" {
+		fmt.Printf("  team_id         = %s\n", teamID)
+	}
+	return acc
+}
+
+// teamIDFromIDEValues mirrors the helper in the plugin and cursor-proxy
+// packages. Kept here so test-connect can produce IDE-faithful requests
+// when a team account is signed in. This preserves IDE request metadata; live
+// probes show it does not independently change Claude/model entitlement.
+func teamIDFromIDEValues(directKey, cachedTeamJSON string) string {
+	if id := strings.TrimSpace(directKey); id != "" && id != "0" {
+		return id
+	}
+	raw := strings.TrimSpace(cachedTeamJSON)
+	if raw == "" {
+		return ""
+	}
+	if unquoted, err := strconv.Unquote(raw); err == nil {
+		raw = strings.TrimSpace(unquoted)
+	}
+	var payload struct {
+		TeamID any `json:"teamId"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	switch v := payload.TeamID.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		if v <= 0 {
+			return ""
+		}
+		return strconv.FormatInt(int64(v), 10)
+	case json.Number:
+		return string(v)
+	}
+	return ""
 }

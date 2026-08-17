@@ -14,9 +14,11 @@ plugins:
     cursor:
       enabled: true
       priority: 5
-      # Optional operator knobs consumed by the plugin at runtime.
-      # (No plugin-owned config fields are declared yet in
-      # plugin.register.ConfigFields, so nothing else is required.)
+      # Claude access for transport-gated accounts is configured in the CPA
+      # process environment, not in YAML. Start chromium-sidecar first, then:
+      #   CURSOR_CHROMIUM_SIDECAR_URL=http://127.0.0.1:18901
+      # Optional shared secret (set the same value on the sidecar and CPA):
+      #   CURSOR_CHROMIUM_SIDECAR_TOKEN=change-me
 
 # Example: after running
 #   cursor-to-cpa -in ./account.json

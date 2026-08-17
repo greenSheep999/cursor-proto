@@ -40,6 +40,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -195,6 +196,7 @@ func loadAccountFromIDE(dbPath string) (*auth.Account, error) {
 	authType := q("cursorAuth/cachedSignUpType")
 	authID := q("cursorAuth/authId")
 	userID := q("cursorAuth/cachedUserID")
+	teamID := teamIDFromIDEValues(q("cursorAuth/teamId"), q("cursorAuth/cachedTeam"))
 
 	mid, _ := auth.GetMachineID()
 	mac, _ := auth.GetMacMachineID()
@@ -206,11 +208,52 @@ func loadAccountFromIDE(dbPath string) (*auth.Account, error) {
 		RefreshToken: refresh,
 		AuthID:       authID,
 		AuthType:     authType,
+		TeamID:       teamID,
 		MachineID:    mid,
 		MacMachineID: mac,
 		IssuedAt:     time.Now(),
 		Refreshable:  refresh != "",
 	}, nil
+}
+
+// teamIDFromIDEValues extracts the Cursor team id from the two SQLite keys
+// the IDE persists on team accounts: `cursorAuth/teamId` (a bare numeric
+// string when present) and `cursorAuth/cachedTeam` (a JSON blob
+// `{"teamId":<int>,"name":"…"}`). Personal accounts leave both empty and
+// this returns "" so ApplyCommonHeaders does not emit x-cursor-team-id.
+//
+// Duplicates the equivalent helper in plugin/cursor/kernel/ide_import.go —
+// the two are kept in sync by hand because the CLI is a standalone binary
+// and the plugin is a c-shared library that cannot import cmd/*.
+func teamIDFromIDEValues(directKey, cachedTeamJSON string) string {
+	if id := strings.TrimSpace(directKey); id != "" && id != "0" {
+		return id
+	}
+	raw := strings.TrimSpace(cachedTeamJSON)
+	if raw == "" {
+		return ""
+	}
+	if unquoted, err := strconv.Unquote(raw); err == nil {
+		raw = strings.TrimSpace(unquoted)
+	}
+	var payload struct {
+		TeamID any `json:"teamId"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	switch v := payload.TeamID.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		if v <= 0 {
+			return ""
+		}
+		return strconv.FormatInt(int64(v), 10)
+	case json.Number:
+		return string(v)
+	}
+	return ""
 }
 
 // defaultIDEStatePath returns the OS-specific location where Cursor

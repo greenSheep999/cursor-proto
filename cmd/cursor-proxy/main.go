@@ -162,6 +162,9 @@ func main() {
 		"(http://[user:pass@]host:port, https://…, or socks5://…). Falls back to $HTTPS_PROXY / $HTTP_PROXY. "+
 		"Required when your account is region-gated (Cursor returns ERROR_UNSUPPORTED_REGION on the "+
 		"claude-*, gpt-*, gemini-* families without a non-CN egress).")
+	chromiumSidecarURL := flag.String("chromium-sidecar-url", "",
+		"loopback Chromium transport URL used for AvailableModels, RunSSE, and BidiAppend; "+
+			"falls back to $CURSOR_CHROMIUM_SIDECAR_URL")
 	simulateCache := flag.Bool("simulate-cache", true, "enable local prompt-cache simulator; env CURSOR_PROXY_SIMULATE_CACHE=false disables it")
 	cacheTTL := flag.String("cache-ttl", "10m", "simulator entry TTL (duration string)")
 	cacheSize := flag.Int("cache-size", 1000, "simulator max entries")
@@ -222,6 +225,9 @@ func main() {
 		_ = os.Setenv("HTTP_PROXY", p)
 		log.Printf("[proxy] upstream proxy: %s", p)
 	}
+	if strings.TrimSpace(*chromiumSidecarURL) == "" {
+		*chromiumSidecarURL = strings.TrimSpace(os.Getenv("CURSOR_CHROMIUM_SIDECAR_URL"))
+	}
 
 	// Resolve HTTP version: -http-version > $CURSOR_PROXY_HTTP_VERSION.
 	// The flag's own default is "auto", which is treated as "look at
@@ -275,8 +281,12 @@ func main() {
 		ideReloader = makeIDEAccountReloader(dbPath, startMTime)
 	}
 
-	c := newWireClient(acc, httpVer, *upstreamProxy)
-	c.API3 = c.API2 // chat also lives on api2
+	c := newWireClient(acc, httpVer, *upstreamProxy, *chromiumSidecarURL, os.Getenv("CURSOR_CHROMIUM_SIDECAR_TOKEN"))
+	if strings.TrimSpace(*chromiumSidecarURL) == "" {
+		c.API3 = c.API2 // chat also lives on api2
+	} else {
+		log.Printf("[proxy] Chromium sidecar enabled: %s", *chromiumSidecarURL)
+	}
 	if ideReloader != nil {
 		c.AccountReloader = ideReloader
 	}
@@ -364,10 +374,21 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }
 
-func newWireClient(acc *auth.Account, httpVersion transport.Version, upstreamProxy string) *executor.Client {
+func newWireClient(acc *auth.Account, httpVersion transport.Version, upstreamProxy string, chromiumSidecar ...string) *executor.Client {
 	options := []executor.Option{executor.WithHTTPVersion(httpVersion)}
 	if proxyURL := strings.TrimSpace(upstreamProxy); proxyURL != "" {
 		options = append(options, executor.WithProxyURL(proxyURL))
+	}
+	if len(chromiumSidecar) > 0 && strings.TrimSpace(chromiumSidecar[0]) != "" {
+		token := ""
+		if len(chromiumSidecar) > 1 {
+			token = chromiumSidecar[1]
+		}
+		option, err := executor.ChromiumSidecarOption(chromiumSidecar[0], token)
+		if err != nil {
+			log.Fatalf("bad Chromium sidecar URL: %v", err)
+		}
+		options = append(options, option)
 	}
 	return executor.NewClient(acc, options...)
 }
@@ -1279,14 +1300,68 @@ func readAccountFromIDE(dbPath string) (*auth.Account, error) {
 	}
 	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'`).Scan(&email)
 
+	teamKey := ideStringValue(db, "cursorAuth/teamId")
+	cachedTeam := ideStringValue(db, "cursorAuth/cachedTeam")
+	teamID := teamIDFromIDEValues(teamKey, cachedTeam)
+
 	machineID, _ := auth.GetMachineID()
 	macID, _ := auth.GetMacMachineID()
 	return &auth.Account{
 		Email:        email,
 		AccessToken:  access,
+		TeamID:       teamID,
 		MachineID:    machineID,
 		MacMachineID: macID,
 	}, nil
+}
+
+// ideStringValue reads a TEXT value from the IDE state.vscdb ItemTable,
+// returning "" (never an error) when the key is absent. Kept next to the
+// caller so the helper stays self-contained.
+func ideStringValue(db *sql.DB, key string) string {
+	var v string
+	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = ?`, key).Scan(&v)
+	return v
+}
+
+// teamIDFromIDEValues extracts the Cursor team id from the two SQLite keys
+// the IDE persists on team accounts. Cursor writes the numeric team id
+// under `cursorAuth/teamId` and a companion JSON blob
+// `{"teamId":<int>,"name":"..."}` under `cursorAuth/cachedTeam`. Personal
+// accounts leave both empty; this returns "" so ApplyCommonHeaders does
+// not emit x-cursor-team-id.
+//
+// Duplicated in cmd/cursor-export and plugin/cursor/kernel/ide_import.go
+// because those binaries live in separate packages and don't share code.
+func teamIDFromIDEValues(directKey, cachedTeamJSON string) string {
+	if id := strings.TrimSpace(directKey); id != "" && id != "0" {
+		return id
+	}
+	raw := strings.TrimSpace(cachedTeamJSON)
+	if raw == "" {
+		return ""
+	}
+	if unquoted, err := strconv.Unquote(raw); err == nil {
+		raw = strings.TrimSpace(unquoted)
+	}
+	var payload struct {
+		TeamID any `json:"teamId"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	switch v := payload.TeamID.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		if v <= 0 {
+			return ""
+		}
+		return strconv.FormatInt(int64(v), 10)
+	case json.Number:
+		return string(v)
+	}
+	return ""
 }
 
 // makeIDEAccountReloader returns a closure the executor.Client can call

@@ -40,6 +40,7 @@ func RawChatStream(ctx context.Context, c *Client, req *ChatRequest) (io.ReadClo
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
 	ApplyCommonHeaders(sseReq, acc, requestID)
+	c.applySidecarToken(sseReq)
 	sseReq.Header.Set("x-original-request-id", runID)
 
 	sseClient := c.NewStreamClient()

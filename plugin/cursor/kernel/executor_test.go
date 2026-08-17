@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
@@ -137,6 +138,21 @@ func buildHeartbeatEvent() executor.ChatEvent {
 		},
 	}
 	return executor.ChatEvent{Server: msg}
+}
+
+func TestNewPluginExecutorClientUsesChromiumSidecar(t *testing.T) {
+	t.Setenv(chromiumSidecarURLEnv, "http://127.0.0.1:18901")
+	t.Setenv(chromiumSidecarTokenEnv, "test-token")
+	client, err := newPluginExecutorClient(&auth.Account{})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if client.API2 != "http://127.0.0.1:18901/api2" {
+		t.Fatalf("API2 = %q", client.API2)
+	}
+	if client.API3 != client.API2 {
+		t.Fatalf("API3 = %q, want %q", client.API3, client.API2)
+	}
 }
 
 func TestTranslatePluginEventRestoresDeclaredToolCase(t *testing.T) {

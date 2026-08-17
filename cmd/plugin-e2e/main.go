@@ -20,6 +20,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"flag"
@@ -153,6 +154,20 @@ func main() {
 	var identEnv envelope
 	_ = json.Unmarshal(identRaw, &identEnv)
 	logf("executor.identifier: %s", string(identEnv.Result))
+
+	modelReq, _ := json.Marshal(map[string]any{
+		"AuthID":       "e2e-" + acc.Email,
+		"AuthProvider": "cursor",
+		"StorageJSON":  storage,
+	})
+	modelsRaw, rcModels := kernel.Dispatch("model.for_auth", modelReq, nil)
+	if rcModels != 0 {
+		log.Fatalf("model.for_auth rc=%d: %s", rcModels, string(modelsRaw))
+	}
+	if !bytes.Contains(modelsRaw, []byte(`"ID":"`+*model+`"`)) {
+		log.Fatalf("model.for_auth did not advertise requested model %q: %s", *model, string(modelsRaw))
+	}
+	logf("model.for_auth: requested model %s advertised", *model)
 
 	// Build the request body and drive executor.execute_stream.
 	payload := buildPayload(*format, *model, *msg)
@@ -321,55 +336,48 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// extractOpenAIContent walks an OpenAI SSE `data: {...}` frame and
-// pulls out the delta.content string when present.
+// extractOpenAIContent walks every OpenAI SSE event in one host-emitted
+// chunk. CPA may batch several `data:` events into one callback.
 func extractOpenAIContent(frame string) string {
-	prefix := "data: "
-	idx := strings.Index(frame, prefix)
-	if idx < 0 {
-		return ""
+	var out strings.Builder
+	for _, line := range strings.Split(frame, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
+			continue
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk) == nil && len(chunk.Choices) > 0 {
+			out.WriteString(chunk.Choices[0].Delta.Content)
+		}
 	}
-	frame = strings.TrimSpace(frame[idx+len(prefix):])
-	if frame == "[DONE]" {
-		return ""
-	}
-	var chunk struct {
-		Choices []struct {
-			Delta struct {
-				Content string `json:"content"`
-			} `json:"delta"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal([]byte(frame), &chunk); err != nil {
-		return ""
-	}
-	if len(chunk.Choices) == 0 {
-		return ""
-	}
-	return chunk.Choices[0].Delta.Content
+	return out.String()
 }
 
-// extractClaudeContent walks an Anthropic content_block_delta frame
-// and pulls out the text.
+// extractClaudeContent walks every Anthropic event in one host-emitted chunk.
 func extractClaudeContent(frame string) string {
-	prefix := "data: "
-	idx := strings.Index(frame, prefix)
-	if idx < 0 {
-		return ""
+	var out strings.Builder
+	for _, line := range strings.Split(frame, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var chunk struct {
+			Type  string `json:"type"`
+			Delta struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"delta"`
+		}
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk) == nil &&
+			chunk.Type == "content_block_delta" && chunk.Delta.Type == "text_delta" {
+			out.WriteString(chunk.Delta.Text)
+		}
 	}
-	frame = strings.TrimSpace(frame[idx+len(prefix):])
-	var chunk struct {
-		Type  string `json:"type"`
-		Delta struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"delta"`
-	}
-	if err := json.Unmarshal([]byte(frame), &chunk); err != nil {
-		return ""
-	}
-	if chunk.Type == "content_block_delta" && chunk.Delta.Type == "text_delta" {
-		return chunk.Delta.Text
-	}
-	return ""
+	return out.String()
 }

@@ -273,6 +273,100 @@ func TestSnapshot_JSONRoundTrip(t *testing.T) {
 	}
 }
 
+// TestFetch_TeamAccountPopulatesTeamFields pins identity fidelity: GetMe
+// returns team_id/team_name for team members, and Fetch surfaces both so
+// ApplyToAccount can persist the same metadata the IDE uses. This is not a
+// Claude entitlement fix; personal accounts still leave the fields at zero.
+func TestFetch_TeamAccountPopulatesTeamFields(t *testing.T) {
+	teamID := int32(9001)
+	teamName := "Acme"
+	adminFlag := true
+	routes := map[string]proto.Message{
+		"aiserver.v1.DashboardService/GetMe": &usagepb.GetMeResponse{
+			AuthId:      "workos|user_abc",
+			UserId:      7,
+			Email:       proto.String("member@acme.example"),
+			TeamId:      &teamID,
+			TeamName:    &teamName,
+			IsTeamAdmin: &adminFlag,
+		},
+	}
+	srv := newFakeServer(t, routes, nil)
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	snap, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if !snap.Fetched.Me {
+		t.Fatalf("Me not fetched: %+v", snap.Errors)
+	}
+	if snap.TeamID != "9001" {
+		t.Errorf("TeamID = %q, want 9001", snap.TeamID)
+	}
+	if snap.TeamName != teamName {
+		t.Errorf("TeamName = %q, want %q", snap.TeamName, teamName)
+	}
+	if !snap.IsTeamAdmin {
+		t.Errorf("IsTeamAdmin = false, want true")
+	}
+}
+
+// TestSnapshot_ApplyToAccount pins the OAuth backfill contract: GetMe is
+// the only source cursor-login has for team_id (poll returns tokens only),
+// so ApplyToAccount must copy it onto *auth.Account when the snapshot
+// carries one, and leave a personal account untouched. Empty snapshots and
+// nil receivers must be safe no-ops so cursor-login can call this in a
+// warn-only failure path without adding nil checks upstream.
+func TestSnapshot_ApplyToAccount(t *testing.T) {
+	t.Run("team account backfill", func(t *testing.T) {
+		acc := &auth.Account{Email: "x@example.com"}
+		snap := &Snapshot{
+			Email:    "canonical@example.com",
+			TeamID:   "9001",
+			TeamName: "Acme",
+			Fetched:  Fetched{Me: true},
+		}
+		if !snap.ApplyToAccount(acc) {
+			t.Fatal("expected apply to report changed=true when team_id gets set")
+		}
+		if acc.TeamID != "9001" {
+			t.Errorf("team_id not applied: %q", acc.TeamID)
+		}
+		if acc.Email != "canonical@example.com" {
+			t.Errorf("email not applied: %q", acc.Email)
+		}
+	})
+	t.Run("personal account no-op", func(t *testing.T) {
+		acc := &auth.Account{Email: "x@example.com", TeamID: ""}
+		snap := &Snapshot{Email: "x@example.com", Fetched: Fetched{Me: true}}
+		if snap.ApplyToAccount(acc) {
+			t.Fatal("nothing should have changed")
+		}
+		if acc.TeamID != "" {
+			t.Errorf("team_id must remain empty: %q", acc.TeamID)
+		}
+	})
+	t.Run("me not fetched skips apply", func(t *testing.T) {
+		acc := &auth.Account{}
+		snap := &Snapshot{TeamID: "9001"}
+		if snap.ApplyToAccount(acc) {
+			t.Fatal("must not apply when Fetched.Me is false")
+		}
+	})
+	t.Run("nil receivers are safe", func(t *testing.T) {
+		var snap *Snapshot
+		if snap.ApplyToAccount(&auth.Account{}) {
+			t.Fatal("nil snapshot must be a no-op")
+		}
+		snap = &Snapshot{TeamID: "9001", Fetched: Fetched{Me: true}}
+		if snap.ApplyToAccount(nil) {
+			t.Fatal("nil account must be a no-op")
+		}
+	})
+}
+
 func TestFormatCents(t *testing.T) {
 	cases := map[int64]string{
 		0:      "$0.00",

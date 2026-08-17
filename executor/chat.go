@@ -240,6 +240,7 @@ func (c *Client) runChatHTTP1SSE(ctx context.Context, req *ChatRequest, acc *aut
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
 	ApplyCommonHeaders(sseReq, acc, requestID)
+	c.applySidecarToken(sseReq)
 	sseReq.Header.Set("x-original-request-id", runID)
 
 	sseResp, err := c.NewStreamClient().Do(sseReq)
@@ -510,6 +511,7 @@ func (c *Client) bidiAppendForAccount(ctx context.Context, acc *auth.Account, re
 	}
 	req.Header.Set("content-type", "application/grpc-web+proto")
 	ApplyCommonHeaders(req, acc, requestID)
+	c.applySidecarToken(req)
 	req.Header.Set("x-original-request-id", originalRequestID)
 
 	cli := c.NewUnaryClient(30 * time.Second)

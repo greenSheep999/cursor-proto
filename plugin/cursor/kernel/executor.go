@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,11 @@ type clientCache struct {
 // loaded once per host process, so the cache lifetime is tied to the
 // plugin's lifetime.
 var globalClientCache = &clientCache{clients: make(map[string]*executor.Client)}
+
+const (
+	chromiumSidecarURLEnv   = "CURSOR_CHROMIUM_SIDECAR_URL"
+	chromiumSidecarTokenEnv = "CURSOR_CHROMIUM_SIDECAR_TOKEN"
+)
 
 // getClient returns a client for the given auth id, reusing the cache
 // when possible. When StorageJSON changes for the same AuthID (a
@@ -111,9 +117,26 @@ func (c *clientCache) buildClient(storage []byte) (*executor.Client, error) {
 		}
 	}
 	acc.FillSessionDefaults(time.Now())
-	c2 := executor.NewClient(acc, executor.WithHTTPVersion(transport.Http1_1))
-	c2.API3 = c2.API2
-	return c2, nil
+	return newPluginExecutorClient(acc)
+}
+
+// newPluginExecutorClient is the one construction seam for live plugin
+// traffic. Model discovery and chat execution both call it, so enabling the
+// Chromium sidecar cannot produce a split-brain catalog/chat configuration.
+func newPluginExecutorClient(acc *auth.Account) (*executor.Client, error) {
+	options := []executor.Option{executor.WithHTTPVersion(transport.Http1_1)}
+	if rawURL := strings.TrimSpace(os.Getenv(chromiumSidecarURLEnv)); rawURL != "" {
+		option, err := executor.ChromiumSidecarOption(rawURL, os.Getenv(chromiumSidecarTokenEnv))
+		if err != nil {
+			return nil, fmt.Errorf("configure Chromium sidecar: %w", err)
+		}
+		options = append(options, option)
+	}
+	c := executor.NewClient(acc, options...)
+	if strings.TrimSpace(os.Getenv(chromiumSidecarURLEnv)) == "" {
+		c.API3 = c.API2
+	}
+	return c, nil
 }
 
 // accessTokenFromStorage decodes just the access_token field from a

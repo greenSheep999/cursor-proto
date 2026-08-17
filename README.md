@@ -243,6 +243,18 @@ CURSOR_PROXY_API_KEYS=sk-mypersonalkey ./cursor-proxy -addr 127.0.0.1:8317
 curl -H "Authorization: Bearer sk-mypersonalkey" http://127.0.0.1:8317/v1/models
 # (equivalent flag form: ./cursor-proxy -addr 127.0.0.1:8317 -api-keys sk-mypersonalkey,sk-second)
 
+# Optional: enable the real Chromium transport required by accounts whose
+# native Go catalog omits Claude models.
+cd chromium-sidecar
+npm ci
+npx playwright install chromium
+npm start
+
+# In another shell:
+cd ..
+CURSOR_CHROMIUM_SIDECAR_URL=http://127.0.0.1:18901 \
+  ./cursor-proxy -addr 127.0.0.1:8317
+
 # 3. Talk to it with any OpenAI client
 curl -N http://127.0.0.1:8317/v1/chat/completions \
   -H "content-type: application/json" \
@@ -267,6 +279,26 @@ curl -N http://127.0.0.1:8317/v1/messages \
   }'
 ```
 
+### Claude access through Chromium
+
+Some Cursor accounts receive a transport-gated catalog: native Go requests
+return 24 models without Claude, while real Chromium returns the full 35-model
+catalog. Enable the loopback Chromium sidecar for those accounts. The setting
+applies consistently to model discovery, RunSSE, and BidiAppend, so OpenAI
+Chat Completions, OpenAI Responses, Anthropic Messages, and the CPA plugin all
+see the same Claude entitlement.
+
+For the CPA plugin, start the sidecar and export the URL in the CPA process
+environment before loading `cursor.so`:
+
+```bash
+export CURSOR_CHROMIUM_SIDECAR_URL=http://127.0.0.1:18901
+```
+
+The sidecar is loopback-only by design. See
+[docs/chromium-transport.md](docs/chromium-transport.md) for the evidence,
+configuration, security constraints, and deployment model.
+
 Endpoints exposed by `cursor-proxy`:
 
 - `GET  /v1/models` — full Cursor model catalog
@@ -275,31 +307,23 @@ Endpoints exposed by `cursor-proxy`:
 
 ## Which models work?
 
-`GET /v1/models` always returns the full catalog Cursor advertises (156 models
-at the time of writing). Whether a *specific* model is actually callable is
-**decided per-account**, not per-project or per-IP.
+`GET /v1/models` reports the catalog returned to the configured transport.
+For the live Cursor 3.16 account used in regression tests:
 
-Cursor stores a `country` field on every user account (queryable via
-`DashboardService/GetMe`, e.g. our test account shows `country: "CN"`). Some
-model providers (notably Anthropic Claude and the Claude Fable family) refuse
-to serve accounts whose country code is on a restricted list — **regardless
-of the IP the request comes from**. Routing traffic through an out-of-region
-SOCKS5 proxy does NOT unlock these models; verified empirically by connecting
-from a US residential IP (Charter/Comcast/RCN) and still getting
-`"Model not available: This model provider is not supported in your region"`.
-
-What this means:
-
-| Account country | Behaviour |
+| Transport | Catalog |
 |---|---|
-| US / EU / other permitted | All 156 models callable |
-| CN / other restricted | `composer-2.5*`, `grok-4.5*`, `gpt-5.5*`, `default` work; `claude-*` and `claude-fable-*` return the region error |
+| Native Go | 24 models, no Claude |
+| Chromium sidecar | 35 models, including 11 Claude models |
 
-If a call fails with `"This model provider is not supported in your region"`,
-that's an account-scoped restriction the proxy can't work around — you need
-an account whose registered country permits the model (typical fix: sign up
-with a US billing method and IP). There's no protocol issue on our side;
-error responses pass straight through to the client.
+The difference is transport classification, not `team_id`, model-picker
+flags, HTTP/2, or ordinary browser headers. The Chromium catalog and real
+`claude-opus-5` chat have both been verified through the CPA plugin, OpenAI
+Chat Completions, Anthropic Messages, and OpenAI Responses surfaces.
+
+Account-level provider or regional restrictions can still exist after the
+transport gate is satisfied. Those errors are passed through normally; the
+sidecar only makes the request use the same browser network implementation as
+Cursor IDE and does not change account billing, plan, or country metadata.
 
 ## Streaming — what it is and isn't
 

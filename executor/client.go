@@ -58,6 +58,10 @@ type Client struct {
 	ProxyURL    string
 	HTTP        *http.Client
 
+	// sidecarToken authenticates requests to the optional loopback Chromium
+	// sidecar. It is never set on native Cursor requests.
+	sidecarToken string
+
 	modelCatalogMu       sync.RWMutex
 	modelCatalog         *cursorpb.AiserverV1_AvailableModelsResponse
 	modelCatalogIdentity string
@@ -158,6 +162,7 @@ func (c *Client) UnaryCall(service, method string, msg, into proto.Message) erro
 	}
 	req.Header.Set("content-type", "application/proto")
 	ApplyCommonHeaders(req, c.CurrentAccount(), auth.GenerateRequestID())
+	c.applySidecarToken(req)
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
