@@ -49,3 +49,51 @@ test('aborts a Chromium fetch that never returns response headers', async (t) =>
     new Promise((_, reject) => setTimeout(() => reject(new Error('upstream request was not aborted')), 1_500)),
   ]);
 });
+
+test('aborts when response headers arrive but the body never starts', async (t) => {
+  let resolveClosed;
+  const closed = new Promise((resolve) => { resolveClosed = resolve; });
+  const server = http.createServer((request, response) => {
+    if (request.url === '/origin') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<!doctype html><title>origin</title>');
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/octet-stream' });
+    response.flushHeaders();
+    request.on('aborted', resolveClosed);
+    request.on('close', resolveClosed);
+    response.on('close', resolveClosed);
+    // Intentionally never write the first response body chunk.
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => server.close());
+
+  const address = server.address();
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.goto(`http://127.0.0.1:${address.port}/origin`);
+  await page.exposeFunction('__cursorSidecarStart', () => {});
+  await page.exposeFunction('__cursorSidecarChunk', () => {});
+  await page.exposeFunction('__cursorSidecarEnd', () => {});
+
+  const startedAt = Date.now();
+  await assert.rejects(
+    page.evaluate(browserFetchAndStream, {
+      url: `http://127.0.0.1:${address.port}/headers-only`,
+      headers: { 'content-type': 'application/octet-stream' },
+      bodyBase64: Buffer.from('probe').toString('base64'),
+      responseStartTimeoutMs: 100,
+    }),
+    /Chromium response start timeout after 100ms/,
+  );
+  assert.ok(Date.now() - startedAt < 1_500, 'body-start timeout should fail promptly');
+  await Promise.race([
+    closed,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('upstream response was not canceled')), 1_500)),
+  ]);
+});
