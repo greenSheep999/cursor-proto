@@ -76,7 +76,7 @@ Response shape (stable, additive):
   "impersonated_version":  "3.16.17",
   "impersonated_commit":   "6b2afae0257df2bb5e1835f15165dc2f0de056b0",
   "release_hash":          "6b2afae0257df2bb5e1835f15165dc2f0de056b2",
-  "proto_version":         "cursor3.16/v0.8.0"
+  "proto_version":         "cursor3.16/v0.8.1"
 }
 ```
 
@@ -204,7 +204,7 @@ env:
   CURSOR_PROTO_TAG_3_10: cursor3.10/v0.1.1
   CURSOR_PROTO_TAG_3_11: cursor3.11/v0.2.0
   CURSOR_PROTO_TAG_3_15: cursor3.15/v0.4.0
-  CURSOR_PROTO_TAG_3_16: cursor3.16/v0.8.0
+  CURSOR_PROTO_TAG_3_16: cursor3.16/v0.8.1
 ```
 
 Download the matching artifact:

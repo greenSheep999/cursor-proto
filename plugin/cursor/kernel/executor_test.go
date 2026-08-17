@@ -346,8 +346,9 @@ func TestExecute_Claude_NonStreaming(t *testing.T) {
 	}
 }
 
-// TestExecuteStream_OpenAI captures the chunks the plugin emits and
-// asserts an SSE-shaped sequence ending in [DONE].
+// TestExecuteStream_OpenAI captures the payload units the plugin emits. CPA
+// adds OpenAI SSE framing around each unit, so the plugin must end with raw
+// [DONE] and must not emit already-framed `data:` lines.
 func TestExecuteStream_OpenAI(t *testing.T) {
 	runner := &fakeRunner{
 		events: []executor.ChatEvent{
@@ -432,10 +433,13 @@ func TestExecuteStream_OpenAI(t *testing.T) {
 		t.Fatalf("emitted too few chunks: %d", len(emitted))
 	}
 	last := string(emitted[len(emitted)-1])
-	if !strings.Contains(last, "data: [DONE]") {
+	if last != "[DONE]" {
 		t.Errorf("final chunk not [DONE]: %q", last)
 	}
 	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	if strings.Contains(joined, "data:") {
+		t.Errorf("OpenAI host payloads must not contain SSE framing: %s", joined)
+	}
 	if !strings.Contains(joined, `"content":"Hi"`) {
 		t.Errorf("stream missing content: %s", joined)
 	}

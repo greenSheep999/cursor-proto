@@ -383,11 +383,35 @@ func emit(streamID string, payload []byte) error {
 }
 
 func emitStreamKeepalive(streamID, format string) error {
-	payload := []byte(": ping\n\n")
-	if format == "claude" {
-		payload = []byte("event: ping\ndata: {\"type\":\"ping\"}\n\n")
+	if format != "claude" {
+		// CPA owns OpenAI SSE framing and emits its own connection-level
+		// keepalives. Sending an SSE comment here would be wrapped as a data
+		// event by the host ("data: : ping"), which is not valid JSON.
+		return nil
 	}
-	return emit(streamID, payload)
+	return emit(streamID, []byte("event: ping\ndata: {\"type\":\"ping\"}\n\n"))
+}
+
+// emitOpenAIPayload converts the translator's HTTP-ready SSE bytes into the
+// payload units expected by CPA's async stream bridge. The host adds the
+// outer `data: ...\n\n` framing for OpenAI streams itself. Passing complete
+// SSE frames through host.stream.emit would therefore produce
+// `data: data: {...}`, which standard OpenAI clients reject.
+func emitOpenAIPayload(streamID string, encoded []byte) error {
+	for _, line := range strings.Split(string(encoded), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" {
+			continue
+		}
+		if err := emit(streamID, []byte(payload)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // streamOpenAI mirrors streamOpenAI in cmd/cursor-proxy but emits each
@@ -413,7 +437,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 			delta := textState.consumeSnapshot(blob.AssistantText)
 			if delta != "" {
 				sawOutput = true
-				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
+				if err := emitOpenAIPayload(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
 					return
 				}
@@ -428,7 +452,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 		case translator.EventTextDelta:
 			if delta := textState.consumeDelta(trEv.Text); delta != "" {
 				sawOutput = true
-				if err := emit(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
+				if err := emitOpenAIPayload(streamID, tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: delta})); err != nil {
 					*errOut = err.Error()
 					return
 				}
@@ -441,7 +465,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 		case translator.EventToolCallStarted, translator.EventToolCallDelta:
 			sawOutput = true
 			if payload := tr.Encode(trEv); len(payload) > 0 {
-				if err := emit(streamID, payload); err != nil {
+				if err := emitOpenAIPayload(streamID, payload); err != nil {
 					*errOut = err.Error()
 					return
 				}
@@ -450,7 +474,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 			sawTurnEnd = true
 			lastUsage = trEv.Usage
 			if payload := tr.Encode(trEv); len(payload) > 0 {
-				if err := emit(streamID, payload); err != nil {
+				if err := emitOpenAIPayload(streamID, payload); err != nil {
 					*errOut = err.Error()
 					return
 				}
@@ -465,19 +489,19 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 	// turn_ended — same rescue path as cursor-proxy's http handler.
 	if !sawTurnEnd && tr.SawToolCall {
 		if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded}); len(payload) > 0 {
-			if err := emit(streamID, payload); err != nil {
+			if err := emitOpenAIPayload(streamID, payload); err != nil {
 				*errOut = err.Error()
 				return
 			}
 		}
 	}
 	if payload := tr.FinalUsageFrame(); len(payload) > 0 {
-		if err := emit(streamID, payload); err != nil {
+		if err := emitOpenAIPayload(streamID, payload); err != nil {
 			*errOut = err.Error()
 			return
 		}
 	}
-	if err := emit(streamID, tr.FinalDone()); err != nil {
+	if err := emitOpenAIPayload(streamID, tr.FinalDone()); err != nil {
 		*errOut = err.Error()
 		return
 	}

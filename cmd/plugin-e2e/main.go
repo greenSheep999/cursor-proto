@@ -336,13 +336,14 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// extractOpenAIContent walks every OpenAI SSE event in one host-emitted
-// chunk. CPA may batch several `data:` events into one callback.
+// extractOpenAIContent accepts both the raw JSON payload units emitted to
+// CPA's stream bridge and legacy HTTP-ready `data:` frames.
 func extractOpenAIContent(frame string) string {
 	var out strings.Builder
 	for _, line := range strings.Split(frame, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if line == "" || line == "[DONE]" {
 			continue
 		}
 		var chunk struct {
@@ -352,7 +353,7 @@ func extractOpenAIContent(frame string) string {
 				} `json:"delta"`
 			} `json:"choices"`
 		}
-		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk) == nil && len(chunk.Choices) > 0 {
+		if json.Unmarshal([]byte(line), &chunk) == nil && len(chunk.Choices) > 0 {
 			out.WriteString(chunk.Choices[0].Delta.Content)
 		}
 	}
