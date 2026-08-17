@@ -13,7 +13,7 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-const pluginVersion = "0.8.2"
+const pluginVersion = "0.8.4"
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {
@@ -51,9 +51,10 @@ func identifierResult() string {
 // staticModelsResult supplies the shared protocol-line fallback for CPA hosts
 // that register model ownership before invoking model.for_auth. Per-account
 // live discovery below remains authoritative and automatically accepts future
-// catalog changes without advertising every effort/thinking/fast variant.
+// catalog changes. The fallback includes flattened variant ids because CPA
+// resolves provider ownership before the plugin can normalize a request.
 func staticModelsResult() string {
-	return modelsResult(executor.StableModelFallbackIDs())
+	return modelsResult(executor.StableRoutableModelFallbackIDs())
 }
 
 func modelsResult(names []string) string {

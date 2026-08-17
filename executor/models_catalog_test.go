@@ -77,6 +77,25 @@ func TestRoutableModelIDsIncludeLiveVariants(t *testing.T) {
 	}
 }
 
+func TestStableRoutableModelFallbackIDsIncludeFlattenedVariants(t *testing.T) {
+	got := StableRoutableModelFallbackIDs()
+	seen := make(map[string]bool, len(got))
+	for _, id := range got {
+		seen[id] = true
+	}
+
+	for _, id := range []string{
+		"claude-opus-5",
+		"claude-opus-5-medium",
+		"claude-opus-5-thinking-high",
+		"claude-opus-5-medium-fast",
+	} {
+		if !seen[id] {
+			t.Errorf("stable routable fallback is missing %q", id)
+		}
+	}
+}
+
 func TestResolveRequestedModelUsesDefaultVariantForPrimaryName(t *testing.T) {
 	resp := modelCatalogFixture()
 

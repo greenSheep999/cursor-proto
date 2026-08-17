@@ -57,6 +57,54 @@ func StableModelFallbackIDs() []string {
 	return append([]string(nil), stableModelFallbackIDs...)
 }
 
+// StableRoutableModelFallbackIDs returns the static ownership set used when
+// live catalog discovery is temporarily unavailable. Cursor has shipped both
+// compact catalogs (one base model plus parameters) and flattened catalogs
+// (one model id per parameter combination). CPA resolves model ownership
+// before invoking the plugin, so the fallback must claim both shapes or a
+// valid request such as claude-opus-5-medium is rejected as an unknown
+// provider before the executor can normalize it against the live catalog.
+func StableRoutableModelFallbackIDs() []string {
+	variantSuffixes := []string{
+		"-low",
+		"-medium",
+		"-high",
+		"-xhigh",
+		"-max",
+		"-thinking-low",
+		"-thinking-medium",
+		"-thinking-high",
+		"-thinking-xhigh",
+		"-thinking-max",
+		"-longcontext",
+		"-long-context",
+	}
+
+	seen := make(map[string]struct{}, len(stableModelFallbackIDs)*(len(variantSuffixes)*2+2))
+	out := make([]string, 0, len(seen))
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+
+	for _, base := range stableModelFallbackIDs {
+		add(base)
+		add(base + "-fast")
+		for _, suffix := range variantSuffixes {
+			add(base + suffix)
+			add(base + suffix + "-fast")
+		}
+	}
+	return out
+}
+
 // AvailableModelIDs returns the stable primary IDs shown by Cursor's current
 // model picker. Variant slugs remain accepted by resolveRequestedModelFromCatalog
 // but are intentionally not advertised as separate models: Cursor 3.16 sends
