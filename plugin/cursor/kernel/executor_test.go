@@ -571,6 +571,7 @@ func TestExecuteStream_Claude_ForwardsHeartbeatAndDeduplicatesFinalBlob(t *testi
 
 func TestExecuteStream_Claude_HeartbeatOnlyEndsInBandWithoutRetryableCloseError(t *testing.T) {
 	t.Setenv("CURSOR_STREAM_FIRST_OUTPUT_TIMEOUT_MS", "50")
+	t.Setenv("CURSOR_STREAM_HEARTBEAT_PREAMBLE_MS", "0")
 	events := make(chan executor.ChatEvent, 1)
 	events <- buildHeartbeatEvent()
 	defer close(events)
@@ -635,6 +636,63 @@ func TestExecuteStream_Claude_HeartbeatOnlyEndsInBandWithoutRetryableCloseError(
 	}
 	if got := strings.Count(joined, "event: message_start"); got != 1 {
 		t.Fatalf("message_start count = %d, want 1: %s", got, joined)
+	}
+}
+
+func TestExecuteStream_Claude_FastEmptyAfterHeartbeatStaysRetryableBeforePreamble(t *testing.T) {
+	runner := &fakeRunner{events: []executor.ChatEvent{buildHeartbeatEvent()}}
+
+	var (
+		mu          sync.Mutex
+		emitted     [][]byte
+		closedError string
+		done        = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			var req struct {
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("close unmarshal: %v", err)
+			}
+			closedError = req.Error
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return runner, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "fast-empty"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fast-empty stream never closed")
+	}
+
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if joined != "" {
+		t.Fatalf("fast-empty stream committed bytes before retry: %s", joined)
+	}
+	if closedError != emptyUpstreamResponseMessage {
+		t.Fatalf("close error = %q, want %q", closedError, emptyUpstreamResponseMessage)
 	}
 }
 

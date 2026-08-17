@@ -461,7 +461,7 @@ func BuildAnthropicUsage(u *Usage) map[string]any {
 	}
 	return map[string]any{
 		"input_tokens":                input,
-		"output_tokens":               u.OutputTokens,
+		"output_tokens":               NormalizedOutputTokens(u),
 		"cache_read_input_tokens":     u.CacheReadTokens,
 		"cache_creation_input_tokens": u.CacheWriteTokens,
 	}

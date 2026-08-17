@@ -165,10 +165,11 @@ func buildOpenAIUsage(u *Usage) map[string]any {
 	if u == nil {
 		return map[string]any{}
 	}
+	output := NormalizedOutputTokens(u)
 	usage := map[string]any{
 		"prompt_tokens":     u.InputTokens,
-		"completion_tokens": u.OutputTokens,
-		"total_tokens":      u.InputTokens + u.OutputTokens,
+		"completion_tokens": output,
+		"total_tokens":      u.InputTokens + output,
 	}
 	promptDetails := map[string]any{
 		"cached_tokens": u.CacheReadTokens,

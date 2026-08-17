@@ -430,12 +430,13 @@ func buildResponsesUsage(u *Usage) map[string]any {
 	outputDetails := map[string]any{
 		"reasoning_tokens": u.ReasoningTokens,
 	}
+	output := NormalizedOutputTokens(u)
 	return map[string]any{
 		"input_tokens":          u.InputTokens,
 		"input_tokens_details":  inputDetails,
-		"output_tokens":         u.OutputTokens,
+		"output_tokens":         output,
 		"output_tokens_details": outputDetails,
-		"total_tokens":          u.InputTokens + u.OutputTokens,
+		"total_tokens":          u.InputTokens + output,
 	}
 }
 

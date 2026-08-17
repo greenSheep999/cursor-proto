@@ -374,6 +374,48 @@ func TestAnthropicUsageExcludesCacheCreationFromInput(t *testing.T) {
 	}
 }
 
+func TestNormalizeCumulativeOutputUsage(t *testing.T) {
+	t.Run("cumulative Cursor counters are reduced to generated output", func(t *testing.T) {
+		u := &Usage{
+			InputTokens:          1217,
+			OutputTokens:         1487,
+			CacheReadTokens:      294,
+			CacheWriteTokens:     915,
+			ObservedOutputTokens: 278,
+		}
+		got := NormalizedOutputTokens(u)
+		if got != 278 {
+			t.Fatalf("NormalizedOutputTokens() = %d, want 278", got)
+		}
+	})
+
+	t.Run("independent output counters are preserved", func(t *testing.T) {
+		u := &Usage{
+			InputTokens:          26415,
+			OutputTokens:         943,
+			CacheWriteTokens:     26413,
+			ObservedOutputTokens: 584,
+		}
+		got := NormalizedOutputTokens(u)
+		if got != 943 {
+			t.Fatalf("NormalizedOutputTokens() = %d, want 943", got)
+		}
+	})
+
+	t.Run("small cache does not perturb an otherwise plausible output count", func(t *testing.T) {
+		u := &Usage{
+			OutputTokens:         500,
+			CacheReadTokens:      40,
+			CacheWriteTokens:     60,
+			ObservedOutputTokens: 480,
+		}
+		got := NormalizedOutputTokens(u)
+		if got != 500 {
+			t.Fatalf("NormalizedOutputTokens() = %d, want 500", got)
+		}
+	})
+}
+
 // TestAnthropicStreamingMessageDeltaCache verifies the message_delta event
 // on the streaming Anthropic path carries cache_read_input_tokens and
 // cache_creation_input_tokens alongside input/output.

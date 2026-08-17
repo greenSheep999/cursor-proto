@@ -133,6 +133,18 @@ func isEmptyPluginUpstreamResponse(hasOutput bool, usage *translator.Usage) bool
 		usage.ReasoningTokens == 0
 }
 
+func usageWithObservedOutput(usage *translator.Usage, text string) *translator.Usage {
+	if usage == nil || text == "" {
+		return usage
+	}
+	copy := *usage
+	copy.ObservedOutputTokens = countTokens(text)
+	if copy.ObservedOutputTokens == 0 {
+		copy.ObservedOutputTokens = 1
+	}
+	return &copy
+}
+
 // buildOpenAINonStreaming mirrors nonStreamOpenAI in cmd/cursor-proxy.
 // It intentionally omits the cache-simulator logic — the plugin does
 // not have opinions about caching, that's a host-level concern.
@@ -172,6 +184,7 @@ func buildOpenAINonStreaming(model string, tools []executor.ToolDefinition, even
 	if !sawBlob && deltaText != "" {
 		acc.Text = deltaText
 	}
+	acc.Usage = usageWithObservedOutput(acc.Usage, acc.Text)
 	if isEmptyPluginUpstreamResponse(acc.Text != "" || len(acc.ToolCalls) > 0, acc.Usage) {
 		return nil, errEmptyUpstreamResponse
 	}
@@ -254,6 +267,7 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	if !sawBlob && deltaText != "" {
 		assistantText = deltaText
 	}
+	usage = usageWithObservedOutput(usage, assistantText)
 	if isEmptyPluginUpstreamResponse(assistantText != "" || len(toolUses) > 0 || len(serverToolUses) > 0, usage) {
 		return nil, errEmptyUpstreamResponse
 	}
@@ -407,6 +421,19 @@ func streamFirstOutputTimeout() time.Duration {
 	return time.Duration(milliseconds) * time.Millisecond
 }
 
+func streamHeartbeatPreambleDelay() time.Duration {
+	const fallback = 8 * time.Second
+	raw := strings.TrimSpace(os.Getenv("CURSOR_STREAM_HEARTBEAT_PREAMBLE_MS"))
+	if raw == "" {
+		return fallback
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds < 0 {
+		return fallback
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
 const firstOutputTimeoutMessage = "upstream produced no content before first-output timeout"
 
 // emitOpenAIPayload converts the translator's HTTP-ready SSE bytes into the
@@ -489,7 +516,8 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 			}
 		case translator.EventTurnEnded:
 			sawTurnEnd = true
-			lastUsage = trEv.Usage
+			lastUsage = usageWithObservedOutput(trEv.Usage, textState.emitted)
+			trEv.Usage = lastUsage
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emitOpenAIPayload(streamID, payload); err != nil {
 					*errOut = err.Error()
@@ -529,6 +557,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 // the KV-blob vs text-delta fallback rationale.
 func streamClaude(streamID, model string, expectThinkingSignature bool, tools []executor.ToolDefinition, events <-chan executor.ChatEvent, errOut *string) {
 	tr := translator.NewAnthropicStreamWriter(model)
+	startedAt := time.Now()
 	textState := assistantStreamState{}
 	sawOutput := false
 	signatureSent := false
@@ -667,6 +696,14 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 		case translator.EventHeartbeat:
 			if !streamStarted {
+				// Cursor often emits a heartbeat immediately before closing an
+				// empty response. Starting the Anthropic message on that heartbeat
+				// commits HTTP 200; CPA/New API then retries another auth and splices
+				// a second message_start into the same client stream. Give fast-empty
+				// accounts a short retryable window before committing the preamble.
+				if time.Since(startedAt) < streamHeartbeatPreambleDelay() {
+					continue
+				}
 				if payload := tr.Encode(trEv); len(payload) > 0 {
 					if err := emit(streamID, payload); err != nil {
 						*errOut = err.Error()
@@ -696,12 +733,31 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		}
 	}
 	if isEmptyPluginUpstreamResponse(sawOutput, lastUsage) {
+		if streamStarted {
+			// Once a legal Anthropic preamble has reached the client, closing the
+			// host bridge with an error invites downstream retry concatenation.
+			// Finish this one stream in-band instead; callers receive a valid
+			// terminal sequence and never see duplicate message_start frames.
+			if payload := tr.Encode(&translator.Event{Kind: translator.EventTextDelta, Text: emptyUpstreamResponseMessage}); len(payload) > 0 {
+				if err := emit(streamID, payload); err != nil {
+					*errOut = err.Error()
+					return
+				}
+			}
+			if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, StopReason: "error"}); len(payload) > 0 {
+				if err := emit(streamID, payload); err != nil {
+					*errOut = err.Error()
+				}
+			}
+			return
+		}
 		*errOut = emptyUpstreamResponseMessage
 		return
 	}
 	if !flushPendingText() {
 		return
 	}
+	lastUsage = usageWithObservedOutput(lastUsage, textState.emitted)
 	end := &translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}
 	if payload := tr.Encode(end); len(payload) > 0 {
 		if err := emit(streamID, payload); err != nil {

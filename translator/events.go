@@ -76,6 +76,60 @@ type Usage struct {
 	CacheReadTokens  int64
 	CacheWriteTokens int64
 	ReasoningTokens  int64
+
+	// ObservedOutputTokens is a local estimate derived from response text that
+	// was actually emitted to the client. Cursor exposes two TurnEnded shapes:
+	// most accounts report OutputTokens independently, while some include cache
+	// read/write counters in OutputTokens. Zero means no reliable observation is
+	// available, in which case the upstream value must be preserved.
+	ObservedOutputTokens int64
+}
+
+// NormalizedOutputTokens returns the generated-output count represented by u.
+// Cache counters are subtracted only when they form a material part of the raw
+// value and the difference agrees substantially better with the response text
+// observed locally. These guards preserve accounts that report a legitimate
+// independent output count alongside very large cache-write counters.
+func NormalizedOutputTokens(u *Usage) int64 {
+	if u == nil || u.OutputTokens <= 0 {
+		return 0
+	}
+	raw := u.OutputTokens
+	observed := u.ObservedOutputTokens
+	cache := u.CacheReadTokens + u.CacheWriteTokens
+	if observed <= 0 || cache <= 0 || raw <= cache {
+		return raw
+	}
+
+	// A small cache contribution is indistinguishable from ordinary error in
+	// the character-based token estimator, so leave that shape untouched.
+	if cache < (raw+2)/3 {
+		return raw
+	}
+	candidate := raw - cache
+
+	// The estimator is approximate across English, code and CJK. A 2x window
+	// is wide enough for those scripts but rejects unrelated counter shapes.
+	if candidate < (observed+1)/2 || candidate > observed*2 {
+		return raw
+	}
+	if raw < (observed*3+1)/2 {
+		return raw
+	}
+
+	rawErr := absInt64(raw - observed)
+	candidateErr := absInt64(candidate - observed)
+	if candidateErr*2 > rawErr {
+		return raw
+	}
+	return candidate
+}
+
+func absInt64(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // FromServerMessage extracts an Event from one raw AgentServerMessage. Returns

@@ -51,10 +51,11 @@ func GeminiUsageFromTranslator(u *Usage) map[string]any {
 			"totalTokenCount":      0,
 		}
 	}
-	total := u.InputTokens + u.OutputTokens
+	output := NormalizedOutputTokens(u)
+	total := u.InputTokens + output
 	out := map[string]any{
 		"promptTokenCount":     u.InputTokens,
-		"candidatesTokenCount": u.OutputTokens,
+		"candidatesTokenCount": output,
 		"totalTokenCount":      total,
 	}
 	if u.CacheReadTokens > 0 {
