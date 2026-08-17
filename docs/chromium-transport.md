@@ -111,6 +111,7 @@ The sidecar itself is configured with:
 | `CURSOR_CHROMIUM_LISTEN` | `127.0.0.1:18901` | Loopback listen address |
 | `CURSOR_CHROMIUM_MAX_CONCURRENCY` | `8` | Maximum simultaneous browser fetches |
 | `CURSOR_CHROMIUM_REQUEST_LIMIT` | `16777216` | Maximum request body bytes |
+| `CURSOR_CHROMIUM_RESPONSE_START_TIMEOUT_MS` | `20000` | Abort if Cursor returns no response headers within this many milliseconds |
 | `CURSOR_CHROMIUM_EXECUTABLE_PATH` | Playwright default | Explicit Chrome/Chromium executable |
 | `CURSOR_CHROMIUM_SIDECAR_TOKEN` | empty | Optional shared token required from callers |
 
@@ -176,6 +177,13 @@ returns flattened variants without maintaining account-specific mapping files.
   is requested.
 - Browser crashes make `/healthz` fail and the process exits so systemd,
   Docker, or another supervisor can restart it.
+
+The response-start timeout is deliberately shorter than Cloudflare's
+120-second proxy read timeout. If one Cursor account accepts a request but
+never starts a response, the sidecar aborts that browser fetch and returns a
+retryable upstream error while CPA still has time to select another auth
+record. The timer stops when response headers arrive, so it does not cap a
+healthy long-running stream.
 
 Cookies and persistent profiles are intentionally disabled. Live experiments
 show the entitlement does not depend on browser storage, and stateless contexts

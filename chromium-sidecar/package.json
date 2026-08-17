@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/main.mjs",
-    "check": "node --check src/main.mjs"
+    "check": "node --check src/main.mjs && node --check src/browser_fetch.mjs",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "playwright": "1.61.1"

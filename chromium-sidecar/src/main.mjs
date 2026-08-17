@@ -1,9 +1,11 @@
 import http from 'node:http';
 import { chromium } from 'playwright';
+import { browserFetchAndStream } from './browser_fetch.mjs';
 
 const listen = parseListen(process.env.CURSOR_CHROMIUM_LISTEN ?? '127.0.0.1:18901');
 const maxConcurrency = positiveInt(process.env.CURSOR_CHROMIUM_MAX_CONCURRENCY, 8);
 const requestLimit = positiveInt(process.env.CURSOR_CHROMIUM_REQUEST_LIMIT, 16 * 1024 * 1024);
+const responseStartTimeoutMs = positiveInt(process.env.CURSOR_CHROMIUM_RESPONSE_START_TIMEOUT_MS, 20_000);
 const requiredToken = process.env.CURSOR_CHROMIUM_SIDECAR_TOKEN ?? '';
 const executablePath = process.env.CURSOR_CHROMIUM_EXECUTABLE_PATH || undefined;
 let semaphore;
@@ -118,8 +120,20 @@ async function proxyThroughPage(page, request, response, target, body) {
     const chunk = Buffer.from(chunkBase64, 'base64');
     if (!response.write(chunk)) {
       await new Promise((resolve, reject) => {
-        response.once('drain', resolve);
-        response.once('close', () => reject(new Error('downstream closed')));
+        const cleanup = () => {
+          response.off('drain', onDrain);
+          response.off('close', onClose);
+        };
+        const onDrain = () => {
+          cleanup();
+          resolve();
+        };
+        const onClose = () => {
+          cleanup();
+          reject(new Error('downstream closed'));
+        };
+        response.once('drain', onDrain);
+        response.once('close', onClose);
       });
     }
   });
@@ -128,40 +142,11 @@ async function proxyThroughPage(page, request, response, target, body) {
   });
 
   const headers = filterRequestHeaders(request.headers);
-  await page.evaluate(async ({ url, headers, bodyBase64 }) => {
-    const raw = atob(bodyBase64);
-    const body = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i += 1) body[i] = raw.charCodeAt(i);
-
-    const upstream = await fetch(url, {
-      method: 'POST',
-      headers,
-      body,
-      credentials: 'omit',
-      cache: 'no-store',
-    });
-    await globalThis.__cursorSidecarStart(
-      upstream.status,
-      Object.fromEntries(upstream.headers.entries()),
-    );
-    const reader = upstream.body?.getReader();
-    if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        let binary = '';
-        const stride = 0x8000;
-        for (let i = 0; i < value.length; i += stride) {
-          binary += String.fromCharCode(...value.subarray(i, i + stride));
-        }
-        await globalThis.__cursorSidecarChunk(btoa(binary));
-      }
-    }
-    await globalThis.__cursorSidecarEnd();
-  }, {
+  await page.evaluate(browserFetchAndStream, {
     url: target.href,
     headers,
     bodyBase64: body.toString('base64'),
+    responseStartTimeoutMs,
   });
 }
 
