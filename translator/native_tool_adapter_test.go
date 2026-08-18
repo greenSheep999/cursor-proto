@@ -597,3 +597,19 @@ func TestApplyClientToolAlias_NilEventSafe(t *testing.T) {
 	ApplyClientToolAlias(nil, []string{"shell"})
 	// no panic = pass
 }
+
+func TestApplyClientToolAlias_WebSearchIsNotWebFetch(t *testing.T) {
+	ev := &Event{ToolName: "web_search"}
+	ApplyClientToolAlias(ev, []string{"WebSearch", "WebFetch"})
+	if ev.ToolName != "WebSearch" {
+		t.Fatalf("web_search aliased to %q, want WebSearch (not WebFetch)", ev.ToolName)
+	}
+}
+
+func TestApplyClientToolContract_WebSearchFallback(t *testing.T) {
+	ev := &Event{ToolName: "web_search"}
+	ApplyClientToolContract(ev, nil, ToolNameDialectClaudeCode)
+	if ev.ToolName != "WebSearch" {
+		t.Fatalf("Claude Code fallback = %q, want WebSearch", ev.ToolName)
+	}
+}

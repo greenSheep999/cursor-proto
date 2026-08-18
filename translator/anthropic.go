@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -32,9 +33,13 @@ import (
 type AnthropicStreamWriter struct {
 	Model      string
 	ID         string
-	blockOpen  bool
-	blockIndex int
-	sentStart  bool
+	// InputTokens is the request-size estimate published on message_start.
+	// Official Anthropic fills this before the first output token; leaving it
+	// at 0 is a relay fingerprint cctest scores as a stream-structure miss.
+	InputTokens int64
+	blockOpen   bool
+	blockIndex  int
+	sentStart   bool
 	// blockType tracks the type of the currently-open content block
 	// ("text", "thinking", "tool_use", or "" when closed) so we can
 	// close-and-reopen when the stream switches modalities mid-turn.
@@ -65,6 +70,57 @@ func NewAnthropicMessageID() string {
 		random[index] = anthropicIDAlphabet[int(random[index])%len(anthropicIDAlphabet)]
 	}
 	return "msg_01" + string(random)
+}
+
+// NewAnthropicRequestID mints the value for the `request-id` response header.
+// Anthropic returns one on every call and clients echo it back in error
+// reports, so a gateway that omits it leaves callers with no correlation
+// handle. The prefix follows Anthropic's `req_` shape.
+func NewAnthropicRequestID() string {
+	random := make([]byte, 24)
+	if _, err := rand.Read(random); err != nil {
+		return "req_011" + strings.Repeat("0", len(random))
+	}
+	for index := range random {
+		random[index] = anthropicIDAlphabet[int(random[index])%len(anthropicIDAlphabet)]
+	}
+	return "req_011" + string(random)
+}
+
+// providerToolIDInfix is the Vertex/Bedrock marker Cursor embeds in
+// otherwise Anthropic-shaped ids (`toolu_vrtx_01…`, `toolu_bdrk_01…`).
+// Production TokenSheep traces show both; cctest treats either infix as
+// a non-Anthropic channel fingerprint.
+var providerToolIDInfix = regexp.MustCompile(`_(?:vrtx|vertex|bdrk|bedrock|brkt|bdsk|aws|gcp)_`)
+
+// CanonicalAnthropicToolID rewrites a Cursor tool id into the Anthropic
+// Messages shape: `toolu_01…` for client tools and `srvtoolu_01…` for
+// server tools. The mapping is deterministic so a later tool_result can
+// echo the same id.
+func CanonicalAnthropicToolID(id string, server bool) string {
+	id = sanitizeToolCallID(id)
+	if id == "" {
+		return ""
+	}
+	id = providerToolIDInfix.ReplaceAllString(id, "_")
+	switch {
+	case server:
+		if strings.HasPrefix(id, "srvtoolu_") {
+			return id
+		}
+		if strings.HasPrefix(id, "toolu_") {
+			return "srvtoolu_" + strings.TrimPrefix(id, "toolu_")
+		}
+		return "srvtoolu_" + id
+	default:
+		if strings.HasPrefix(id, "srvtoolu_") {
+			id = "toolu_" + strings.TrimPrefix(id, "srvtoolu_")
+		}
+		if strings.HasPrefix(id, "toolu_") {
+			return id
+		}
+		return "toolu_" + id
+	}
 }
 
 // EncodeError emits Anthropic's standard SSE error event. Once HTTP 200 has
@@ -98,9 +154,9 @@ func (w *AnthropicStreamWriter) startFrame() []byte {
 			"content":       []any{},
 			"stop_reason":   nil,
 			"stop_sequence": nil,
-			"usage": map[string]int{
-				"input_tokens":                0,
-				"output_tokens":               0,
+			"usage": map[string]int64{
+				"input_tokens":                w.InputTokens,
+				"output_tokens":               1,
 				"cache_creation_input_tokens": 0,
 				"cache_read_input_tokens":     0,
 			},
@@ -416,10 +472,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			})...)
 		}
 		w.serverToolBlocks = nil
-		usage := map[string]any{"output_tokens": 0}
-		if ev.Usage != nil {
-			usage = BuildAnthropicUsage(ev.Usage)
-		}
+		usage := BuildAnthropicUsage(ev.Usage)
 		if w.webSearchRequests > 0 {
 			usage["server_tool_use"] = map[string]int{"web_search_requests": w.webSearchRequests}
 		}
@@ -430,11 +483,15 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		if ev.StopReason != "" {
 			stopReason = ev.StopReason
 		}
+		var stopSequence any
+		if ev.StopSequence != "" {
+			stopSequence = ev.StopSequence
+		}
 		buf = append(buf, w.frame("message_delta", map[string]any{
 			"type": "message_delta",
 			"delta": map[string]any{
 				"stop_reason":   stopReason,
-				"stop_sequence": nil,
+				"stop_sequence": stopSequence,
 			},
 			"usage": usage,
 		})...)
@@ -474,9 +531,13 @@ func BuildAnthropicUsage(u *Usage) map[string]any {
 	if input < 0 {
 		input = 0
 	}
+	output := NormalizedOutputTokens(u)
+	if u.TruncatedOutputTokens > 0 {
+		output = u.TruncatedOutputTokens
+	}
 	return map[string]any{
 		"input_tokens":                input,
-		"output_tokens":               NormalizedOutputTokens(u),
+		"output_tokens":               output,
 		"cache_read_input_tokens":     u.CacheReadTokens,
 		"cache_creation_input_tokens": u.CacheWriteTokens,
 	}

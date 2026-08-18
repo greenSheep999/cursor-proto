@@ -137,6 +137,7 @@ func clientNameForCursorTool(cursorType string) string {
 //   - glob:  glob / file_search / find_files
 //   - ls:    ls / list_dir / list_directory
 //   - fetch: web_fetch / webfetch / fetch_url / http_get
+//   - search: web_search / websearch
 //
 // A single Cursor default like "bash" from Path C above matches any
 // alias in the "shell" group. When the client declared any of those
@@ -156,8 +157,10 @@ var toolNameAliases = [][]string{
 	{"glob", "file_search", "find_files"},
 	// ls family
 	{"ls", "list_dir", "list_directory", "list_files"},
-	// fetch family
-	{"web_fetch", "webfetch", "fetch_url", "http_get", "web_search"},
+	// fetch family — web_search is a different tool and must not alias here.
+	{"web_fetch", "webfetch", "fetch_url", "http_get"},
+	// search family — Claude Code's client WebSearch, not Anthropic server web_search_*
+	{"web_search", "websearch"},
 }
 
 // ToolNameDialect selects the fallback spelling used when a translated
@@ -177,7 +180,8 @@ var claudeCodeFallbackToolNames = map[string]string{
 	"grep":      "Grep",
 	"glob":      "Glob",
 	"ls":        "LS",
-	"web_fetch": "WebFetch",
+	"web_fetch":  "WebFetch",
+	"web_search": "WebSearch",
 }
 
 // ApplyClientToolContract resolves a tool event through one deep interface:

@@ -5,6 +5,7 @@ package translator
 
 import (
 	"encoding/json"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -29,6 +30,12 @@ const (
 	EventToolCallCompleted
 	EventServerToolStarted
 	EventWebSearchResult
+	// EventServerToolPermission is Cursor asking the client to approve a
+	// native web search/fetch. The plugin remaps it to a client tool_use
+	// when the caller declared WebSearch, or to server_tool_use when the
+	// request is Anthropic server-tool-only so the stream is not silent
+	// until Cursor finishes searching.
+	EventServerToolPermission
 	EventTurnEnded
 	EventStepStarted
 	EventStepCompleted
@@ -59,12 +66,60 @@ type Event struct {
 	// EventTurnEnded with a legal provider reason. Transport and upstream
 	// failures must use the protocol's error event instead.
 	StopReason string
+
+	// StopSequence carries the matched sequence when StopReason is
+	// "stop_sequence"; Anthropic reports null for every other reason.
+	StopSequence string
 }
 
 type WebSearchResult struct {
 	Title string
 	URL   string
 	Chunk string
+}
+
+var markdownLink = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^)\s]+)\)`)
+
+// NormalizeWebSearchResults turns Cursor's collapsed "one blob, empty URL"
+// search payload into Anthropic-shaped per-hit results. Official and cctest
+// both require web_search_result.url to be a real http(s) link.
+func NormalizeWebSearchResults(results []WebSearchResult) []WebSearchResult {
+	if len(results) == 0 {
+		return results
+	}
+	out := make([]WebSearchResult, 0, len(results))
+	for _, result := range results {
+		if strings.TrimSpace(result.URL) != "" {
+			out = append(out, result)
+			continue
+		}
+		extracted := extractMarkdownSearchHits(result.Chunk)
+		if len(extracted) == 0 {
+			out = append(out, result)
+			continue
+		}
+		out = append(out, extracted...)
+	}
+	return out
+}
+
+func extractMarkdownSearchHits(chunk string) []WebSearchResult {
+	matches := markdownLink.FindAllStringSubmatch(chunk, 8)
+	if len(matches) == 0 {
+		return nil
+	}
+	out := make([]WebSearchResult, 0, len(matches))
+	seen := map[string]bool{}
+	for _, match := range matches {
+		title := strings.TrimSpace(match[1])
+		url := strings.TrimSpace(match[2])
+		if url == "" || seen[url] {
+			continue
+		}
+		seen[url] = true
+		out = append(out, WebSearchResult{Title: title, URL: url, Chunk: title})
+	}
+	return out
 }
 
 // Usage aggregates token counters.
@@ -81,6 +136,13 @@ type Usage struct {
 	// read/write counters in OutputTokens. Zero means no reliable observation is
 	// available, in which case the upstream value must be preserved.
 	ObservedOutputTokens int64
+
+	// TruncatedOutputTokens is set when the gateway clipped the assistant text
+	// locally to honour max_tokens or a stop sequence. Cursor still reports the
+	// full generation it billed, but a client must not be told it received more
+	// output than was actually sent, so this value replaces the upstream count.
+	// Zero means no clipping occurred.
+	TruncatedOutputTokens int64
 }
 
 // NormalizedOutputTokens returns the generated-output count represented by u.
@@ -89,7 +151,13 @@ type Usage struct {
 // observed locally. These guards preserve accounts that report a legitimate
 // independent output count alongside very large cache-write counters.
 func NormalizedOutputTokens(u *Usage) int64 {
-	if u == nil || u.OutputTokens <= 0 {
+	if u == nil {
+		return 0
+	}
+	if u.OutputTokens <= 0 {
+		if u.ObservedOutputTokens > 0 {
+			return u.ObservedOutputTokens
+		}
 		return 0
 	}
 	raw := u.OutputTokens
@@ -149,6 +217,9 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 				ToolArgsDelta: encodeMcpArgs(mcp.GetArgs()),
 			}
 		}
+	}
+	if query := m.GetInteractionQuery(); query != nil {
+		return eventFromInteractionQuery(query)
 	}
 	iu := m.GetInteractionUpdate()
 	if iu == nil {
@@ -237,6 +308,7 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 								Chunk: reference.GetChunk(),
 							})
 						}
+						event.WebResults = NormalizeWebSearchResults(event.WebResults)
 					case result.GetError() != nil:
 						event.ToolError = result.GetError().GetError()
 					case result.GetRejected() != nil:
@@ -279,6 +351,41 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	}
 	if iu.GetHeartbeat() != nil {
 		return &Event{Kind: EventHeartbeat}
+	}
+	return nil
+}
+
+func eventFromInteractionQuery(query *cursorpb.AgentV1_InteractionQuery) *Event {
+	if query == nil {
+		return nil
+	}
+	if ws := query.GetWebSearchRequestQuery(); ws != nil {
+		term, callID := "", ""
+		if args := ws.GetArgs(); args != nil {
+			term = args.GetSearchTerm()
+			callID = args.GetToolCallId()
+		}
+		encoded, _ := json.Marshal(map[string]string{"query": term})
+		return &Event{
+			Kind:          EventServerToolPermission,
+			ToolCallID:    sanitizeToolCallID(callID),
+			ToolName:      "web_search",
+			ToolArgsDelta: string(encoded),
+		}
+	}
+	if wf := query.GetWebFetchRequestQuery(); wf != nil {
+		url, callID := "", ""
+		if args := wf.GetArgs(); args != nil {
+			url = args.GetUrl()
+			callID = args.GetToolCallId()
+		}
+		encoded, _ := json.Marshal(map[string]string{"url": url})
+		return &Event{
+			Kind:          EventServerToolPermission,
+			ToolCallID:    sanitizeToolCallID(callID),
+			ToolName:      "web_fetch",
+			ToolArgsDelta: string(encoded),
+		}
 	}
 	return nil
 }
@@ -415,6 +522,9 @@ func extractToolName(tc *cursorpb.AgentV1_ToolCall) string {
 		return clientNameForCursorTool("glob")
 	}
 	if tc.GetFetchToolCall() != nil {
+		return clientNameForCursorTool("fetch")
+	}
+	if tc.GetWebFetchToolCall() != nil {
 		return clientNameForCursorTool("fetch")
 	}
 	if tc.GetEditToolCall() != nil {

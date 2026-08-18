@@ -115,12 +115,51 @@ func TestNewAnthropicMessageIDUsesClaudeShape(t *testing.T) {
 	}
 }
 
+func TestNormalizeWebSearchResultsExpandsCollapsedBlob(t *testing.T) {
+	got := NormalizeWebSearchResults([]WebSearchResult{{
+		Title: "Web search results",
+		URL:   "",
+		Chunk: "Links:\n1. [Time in Tokyo](https://time.is/Tokyo)\n2. [Alarm](https://alarm.now/tokyo/)\n",
+	}})
+	if len(got) != 2 {
+		t.Fatalf("len=%d want 2: %+v", len(got), got)
+	}
+	if got[0].URL != "https://time.is/Tokyo" || got[0].Title != "Time in Tokyo" {
+		t.Fatalf("first hit = %+v", got[0])
+	}
+	if got[1].URL != "https://alarm.now/tokyo/" {
+		t.Fatalf("second hit = %+v", got[1])
+	}
+}
+
+func TestCanonicalAnthropicToolID(t *testing.T) {
+	cases := []struct {
+		id     string
+		server bool
+		want   string
+	}{
+		{"toolu_vrtx_01JurySmHCDBTjuh8LgwtdAZ", false, "toolu_01JurySmHCDBTjuh8LgwtdAZ"},
+		{"toolu_bdrk_014QuhsYS4bAkK5hyQAxoFAY", false, "toolu_014QuhsYS4bAkK5hyQAxoFAY"},
+		{"toolu_vrtx_011mziaTMjdGuZncQr5Y5fUK", true, "srvtoolu_011mziaTMjdGuZncQr5Y5fUK"},
+		{"srvtoolu_search", true, "srvtoolu_search"},
+		{"toolu_01abc", false, "toolu_01abc"},
+		{"1-fc_abc", false, "toolu_1-fc_abc"},
+		{"", false, ""},
+	}
+	for _, tc := range cases {
+		if got := CanonicalAnthropicToolID(tc.id, tc.server); got != tc.want {
+			t.Fatalf("CanonicalAnthropicToolID(%q, server=%v) = %q, want %q", tc.id, tc.server, got, tc.want)
+		}
+	}
+}
+
 func TestAnthropicMessageStartIncludesStableUsageShape(t *testing.T) {
 	w := NewAnthropicStreamWriter("claude-opus-5")
+	w.InputTokens = 12
 	frame := string(w.Encode(&Event{Kind: EventTextDelta, Text: "ok"}))
 	for _, field := range []string{
-		`"input_tokens":0`,
-		`"output_tokens":0`,
+		`"input_tokens":12`,
+		`"output_tokens":1`,
 		`"cache_creation_input_tokens":0`,
 		`"cache_read_input_tokens":0`,
 	} {
@@ -220,6 +259,29 @@ func TestFromServerMessageNativeWebSearch(t *testing.T) {
 	}
 	if completed.WebResults[0].URL != "https://cursor.com" {
 		t.Fatalf("unexpected native web search reference: %#v", completed.WebResults[0])
+	}
+}
+
+func TestFromServerMessageWebSearchPermissionQuery(t *testing.T) {
+	started := FromServerMessage(&cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionQuery{
+			InteractionQuery: &cursorpb.AgentV1_InteractionQuery{
+				Query: &cursorpb.AgentV1_InteractionQuery_WebSearchRequestQuery{
+					WebSearchRequestQuery: &cursorpb.AgentV1_WebSearchRequestQuery{
+						Args: &cursorpb.AgentV1_WebSearchArgs{
+							SearchTerm: "Claude Code CLI tool list",
+							ToolCallId: "srvtoolu_q",
+						},
+					},
+				},
+			},
+		},
+	})
+	if started == nil || started.Kind != EventServerToolPermission || started.ToolName != "web_search" {
+		t.Fatalf("unexpected search permission: %#v", started)
+	}
+	if started.ToolArgsDelta != `{"query":"Claude Code CLI tool list"}` {
+		t.Fatalf("permission args = %s", started.ToolArgsDelta)
 	}
 }
 
@@ -399,6 +461,13 @@ func TestNormalizeCumulativeOutputUsage(t *testing.T) {
 		got := NormalizedOutputTokens(u)
 		if got != 943 {
 			t.Fatalf("NormalizedOutputTokens() = %d, want 943", got)
+		}
+	})
+
+	t.Run("observed tokens fill in when Cursor never sent output_tokens", func(t *testing.T) {
+		u := &Usage{ObservedOutputTokens: 18}
+		if got := NormalizedOutputTokens(u); got != 18 {
+			t.Fatalf("NormalizedOutputTokens() = %d, want 18", got)
 		}
 	})
 
