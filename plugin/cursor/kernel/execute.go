@@ -79,6 +79,9 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	if excluded {
 		return errorEnvelope("model_excluded", fmt.Sprintf("model %s is excluded for this cursor account", shape.Model), true), 0
 	}
+	if skip, msg := quotaSkipFromStorage(req.StorageJSON, shape.Model); skip {
+		return errorEnvelopeQuota(msg), 0
+	}
 
 	runner, _, errClient := runnerFactory(req.AuthID, req.StorageJSON)
 	if errClient != nil {
@@ -86,7 +89,7 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	}
 
 	chatReq := buildChatRequest(shape, req.Headers)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), requestDeadline())
 	defer cancel()
 	events, errRun := runner.RunChat(ctx, chatReq)
 	if errRun != nil {
@@ -94,11 +97,17 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	}
 
 	format := normaliseFormat(req.Format, req.SourceFormat)
-	body, errCollect := collectNonStreaming(format, shape.Model, shape.Tools, events)
+	body, errCollect := collectNonStreaming(format, shape.Model, shape.Tools, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
 	if errCollect != nil {
 		return errorEnvelope("upstream_error", errCollect.Error(), true), 0
 	}
-	headers := map[string][]string{"Content-Type": {"application/json"}}
+	headers := map[string][]string{
+		"Content-Type": {"application/json"},
+		// Anthropic tags every response with request-id and clients surface it
+		// in errors and bug reports. Without one a caller has no handle to
+		// correlate a bad turn with our logs.
+		"request-id": {translator.NewAnthropicRequestID()},
+	}
 	resp := executorResponse{Payload: body, Headers: headers}
 	buf, errMarshal := json.Marshal(resp)
 	if errMarshal != nil {
@@ -109,13 +118,34 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 
 // collectNonStreaming iterates the RunChat channel and produces a
 // full response body in the requested output format.
-func collectNonStreaming(format, model string, tools []executor.ToolDefinition, events <-chan executor.ChatEvent) ([]byte, error) {
+func collectNonStreaming(format, model string, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) ([]byte, error) {
 	switch format {
 	case "claude":
-		return buildClaudeNonStreaming(model, tools, events)
+		return buildClaudeNonStreaming(model, tools, limiter, estimatedInput, events)
 	default:
 		return buildOpenAINonStreaming(model, tools, events)
 	}
+}
+
+// estimateClaudeInputTokens approximates the request size published on
+// Anthropic message_start.usage.input_tokens. Cursor only reports a real
+// input count on TurnEnded, which is too late for the preamble.
+func estimateClaudeInputTokens(shape chatShape) int64 {
+	var b strings.Builder
+	b.WriteString(shape.SystemPrompt)
+	b.WriteString(shape.UserMessage)
+	for _, turn := range shape.History {
+		b.WriteString(turn.Content)
+	}
+	for _, tool := range shape.Tools {
+		b.WriteString(tool.Name)
+		b.WriteString(tool.Description)
+	}
+	n := countTokens(b.String())
+	if n < 1 {
+		return 1
+	}
+	return n
 }
 
 const emptyUpstreamResponseMessage = "empty response from upstream (no content, tool calls, or token usage)"
@@ -134,13 +164,34 @@ func isEmptyPluginUpstreamResponse(hasOutput bool, usage *translator.Usage) bool
 }
 
 func usageWithObservedOutput(usage *translator.Usage, text string) *translator.Usage {
-	if usage == nil || text == "" {
+	if text == "" {
 		return usage
+	}
+	if usage == nil {
+		usage = &translator.Usage{}
 	}
 	copy := *usage
 	copy.ObservedOutputTokens = countTokens(text)
 	if copy.ObservedOutputTokens == 0 {
 		copy.ObservedOutputTokens = 1
+	}
+	return &copy
+}
+
+// usageAfterLimit reports the clipped length instead of the full generation
+// Cursor billed, so a caller that set max_tokens is never told it received
+// more output than the bytes it actually got.
+func usageAfterLimit(usage *translator.Usage, limiter *translator.OutputLimiter) *translator.Usage {
+	if usage == nil || limiter == nil {
+		return usage
+	}
+	if _, _, limited := limiter.StopReason(); !limited {
+		return usage
+	}
+	copy := *usage
+	copy.TruncatedOutputTokens = int64(limiter.EmittedTokens())
+	if copy.TruncatedOutputTokens == 0 {
+		copy.TruncatedOutputTokens = 1
 	}
 	return &copy
 }
@@ -204,7 +255,7 @@ func buildOpenAINonStreaming(model string, tools []executor.ToolDefinition, even
 // buildClaudeNonStreaming mirrors nonStreamAnthropic in cmd/cursor-proxy.
 // Falls back to accumulating text deltas when Cursor never emits a
 // KV blob (see buildOpenAINonStreaming for the rationale).
-func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, events <-chan executor.ChatEvent) ([]byte, error) {
+func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) ([]byte, error) {
 	assistantText := ""
 	sawBlob := false
 	deltaText := ""
@@ -212,7 +263,26 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	var toolUses []map[string]any
 	var serverToolUses []map[string]any
 	webSearchRequests := 0
-	for ev := range events {
+	deadline := time.NewTimer(requestDeadline())
+	defer deadline.Stop()
+	noOutput := time.NewTimer(noOutputDeadline())
+	defer noOutput.Stop()
+	sawSemantic := false
+	for {
+		var ev executor.ChatEvent
+		select {
+		case next, ok := <-events:
+			if !ok {
+				goto collected
+			}
+			ev = next
+		case <-deadline.C:
+			return nil, errors.New(requestDeadlineMessage)
+		case <-noOutput.C:
+			if !sawSemantic {
+				return nil, errors.New(noOutputDeadlineMessage)
+			}
+		}
 		if err := cursorTrailerError(ev); err != nil {
 			return nil, err
 		}
@@ -222,6 +292,7 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
 			assistantText = blob.AssistantText
 			sawBlob = true
+			sawSemantic = true
 			continue
 		}
 		trEv := translateAnthropicPluginEvent(ev.Server, tools)
@@ -231,7 +302,9 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 		switch trEv.Kind {
 		case translator.EventTextDelta:
 			deltaText += trEv.Text
+			sawSemantic = true
 		case translator.EventToolCallStarted:
+			sawSemantic = true
 			var input any = map[string]any{}
 			if trEv.ToolArgsDelta != "" {
 				var parsed any
@@ -246,6 +319,7 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 				"input": input,
 			})
 		case translator.EventServerToolStarted:
+			sawSemantic = true
 			var input any = map[string]any{}
 			if trEv.ToolArgsDelta != "" {
 				_ = json.Unmarshal([]byte(trEv.ToolArgsDelta), &input)
@@ -277,11 +351,30 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 			usage = trEv.Usage
 		}
 	}
+collected:
 	if !sawBlob && deltaText != "" {
 		assistantText = deltaText
 	}
-	usage = usageWithObservedOutput(usage, assistantText)
-	if isEmptyPluginUpstreamResponse(assistantText != "" || len(toolUses) > 0 || len(serverToolUses) > 0, usage) {
+	// Emptiness is judged on the upstream response, before local clipping, so
+	// a max_tokens ceiling of a few tokens is not mistaken for a dead account.
+	upstreamProducedOutput := assistantText != "" || len(toolUses) > 0 || len(serverToolUses) > 0
+	assistantText = limiter.Truncate(assistantText)
+	observed := assistantText
+	for _, tu := range toolUses {
+		if raw, err := json.Marshal(tu); err == nil {
+			observed += string(raw)
+		}
+	}
+	for _, tu := range serverToolUses {
+		if raw, err := json.Marshal(tu); err == nil {
+			observed += string(raw)
+		}
+	}
+	usage = usageAfterLimit(usageWithObservedOutput(usage, observed), limiter)
+	if usage != nil && usage.InputTokens <= 0 && estimatedInput > 0 {
+		usage.InputTokens = estimatedInput
+	}
+	if isEmptyPluginUpstreamResponse(upstreamProducedOutput, usage) {
 		return nil, errEmptyUpstreamResponse
 	}
 	content := []map[string]any{}
@@ -293,6 +386,13 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 	}
 	content = append(content, serverToolUses...)
 	stopReason := translator.AnthropicStopReason(assistantText, len(toolUses) > 0)
+	var stopSequence any
+	if reason, sequence, limited := limiter.StopReason(); limited {
+		stopReason = reason
+		if sequence != "" {
+			stopSequence = sequence
+		}
+	}
 	resp := map[string]any{
 		"id":            translator.NewAnthropicMessageID(),
 		"type":          "message",
@@ -300,15 +400,13 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, even
 		"model":         model,
 		"content":       content,
 		"stop_reason":   stopReason,
-		"stop_sequence": nil,
+		"stop_sequence": stopSequence,
 	}
-	if usage != nil {
-		responseUsage := translator.BuildAnthropicUsage(usage)
-		if webSearchRequests > 0 {
-			responseUsage["server_tool_use"] = map[string]int{"web_search_requests": webSearchRequests}
-		}
-		resp["usage"] = responseUsage
+	responseUsage := translator.BuildAnthropicUsage(usage)
+	if webSearchRequests > 0 {
+		responseUsage["server_tool_use"] = map[string]int{"web_search_requests": webSearchRequests}
 	}
+	resp["usage"] = responseUsage
 	buf, _ := json.Marshal(resp)
 	return buf, nil
 }
@@ -342,6 +440,9 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 	if excluded {
 		return errorEnvelope("model_excluded", fmt.Sprintf("model %s is excluded for this cursor account", shape.Model), true), 0
 	}
+	if skip, msg := quotaSkipFromStorage(req.StorageJSON, shape.Model); skip {
+		return errorEnvelopeQuota(msg), 0
+	}
 
 	runner, _, errClient := runnerFactory(req.AuthID, req.StorageJSON)
 	if errClient != nil {
@@ -359,9 +460,12 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 	}
 
 	format := normaliseFormat(req.Format, req.SourceFormat)
-	headers := map[string][]string{"Content-Type": {"text/event-stream"}}
+	headers := map[string][]string{
+		"Content-Type": {"text/event-stream"},
+		"request-id":   {translator.NewAnthropicRequestID()},
+	}
 
-	go streamEvents(ctx, cancel, req.StreamID, format, shape.Model, shape.IncludeUsage, shape.Thinking, shape.Tools, events)
+	go streamEvents(ctx, cancel, req.StreamID, format, shape.Model, shape.IncludeUsage, shape.Thinking, shape.Tools, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
 
 	// Async streaming: return synchronously with empty chunks. The
 	// host will read chunks off the stream bridge as we emit them.
@@ -377,7 +481,7 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 // streamEvents runs in a background goroutine for the lifetime of one
 // executor.execute_stream call. It pumps Cursor events into the host
 // stream bridge and always closes the stream on exit.
-func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, format, model string, includeUsage, expectThinkingSignature bool, tools []executor.ToolDefinition, events <-chan executor.ChatEvent) {
+func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, format, model string, includeUsage, expectThinkingSignature bool, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) {
 	defer cancel()
 
 	var streamErr string
@@ -391,7 +495,7 @@ func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, form
 
 	switch format {
 	case "claude":
-		streamClaude(streamID, model, expectThinkingSignature, tools, events, &streamErr)
+		streamClaude(streamID, model, expectThinkingSignature, tools, limiter, estimatedInput, events, &streamErr)
 	default:
 		streamOpenAI(streamID, model, includeUsage, tools, events, &streamErr)
 	}
@@ -448,6 +552,51 @@ func streamHeartbeatPreambleDelay() time.Duration {
 }
 
 const firstOutputTimeoutMessage = "upstream produced no content before first-output timeout"
+
+const requestDeadlineMessage = "upstream did not complete the turn before the request deadline"
+
+const noOutputDeadlineMessage = "upstream produced only heartbeats before the no-output deadline"
+
+// defaultRequestDeadline is the outermost wall-clock bound on one turn.
+//
+// Every other timer here can be renewed by upstream activity: the first-output
+// timer resets on heartbeats so long prompt prefill survives, and the executor
+// idle timer resets on any frame. Cursor can hold a run open indefinitely with
+// heartbeats alone — observed with an account whose catalog advertises a model
+// it cannot actually serve, and with a server-side web search that never
+// returns. Without an absolute ceiling those turns hang until the client gives
+// up, which is what a CLI shows as a frozen session.
+const defaultRequestDeadline = 300 * time.Second
+
+func requestDeadline() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("CURSOR_REQUEST_DEADLINE_MS"))
+	if raw == "" {
+		return defaultRequestDeadline
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds <= 0 {
+		return defaultRequestDeadline
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
+// defaultNoOutputDeadline is an absolute bound that heartbeats cannot renew.
+// Production accounts can advertise a model they never generate for; Cursor
+// then emits pings forever. The sliding first-output timer resets on those
+// pings, so a CLI sits on "Cogitating…" until the 5-minute request deadline.
+const defaultNoOutputDeadline = 90 * time.Second
+
+func noOutputDeadline() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("CURSOR_NO_OUTPUT_DEADLINE_MS"))
+	if raw == "" {
+		return defaultNoOutputDeadline
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds <= 0 {
+		return defaultNoOutputDeadline
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
 
 // emitOpenAIPayload converts the translator's HTTP-ready SSE bytes into the
 // payload units expected by CPA's async stream bridge. The host adds the
@@ -572,10 +721,12 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 // streamClaude mirrors streamAnthropic in cmd/cursor-proxy but emits
 // SSE frames through the host stream bridge. See streamOpenAI for
 // the KV-blob vs text-delta fallback rationale.
-func streamClaude(streamID, model string, expectThinkingSignature bool, tools []executor.ToolDefinition, events <-chan executor.ChatEvent, errOut *string) {
+func streamClaude(streamID, model string, expectThinkingSignature bool, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent, errOut *string) {
 	tr := translator.NewAnthropicStreamWriter(model)
+	tr.InputTokens = estimatedInput
 	startedAt := time.Now()
 	textState := assistantStreamState{}
+	var observedOutput strings.Builder
 	sawOutput := false
 	signatureSent := false
 	streamStarted := false
@@ -621,6 +772,28 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		streamStarted = true
 		return true
 	}
+	// outputLimited records that max_tokens or a stop sequence ended the turn.
+	// The event channel keeps being drained afterwards so RunChat's reader
+	// goroutine can finish instead of blocking on an unread send.
+	outputLimited := false
+	admitText := func(delta string) string {
+		if !limiter.Active() {
+			return delta
+		}
+		allowed, done := limiter.Feed(delta)
+		if done {
+			outputLimited = true
+		}
+		return allowed
+	}
+	// The first-output timer is renewed by heartbeats so long prefill survives;
+	// this one never is, so a run Cursor keeps alive without ever finishing
+	// still terminates.
+	turnDeadline := time.NewTimer(requestDeadline())
+	defer turnDeadline.Stop()
+	noOutputTimer := time.NewTimer(noOutputDeadline())
+	defer noOutputTimer.Stop()
+
 	streamEnded := false
 	for !streamEnded {
 		var ev executor.ChatEvent
@@ -631,6 +804,31 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				continue
 			}
 			ev = next
+		case <-noOutputTimer.C:
+			if sawOutput {
+				continue
+			}
+			if streamStarted {
+				if payload := tr.EncodeError("api_error", noOutputDeadlineMessage); len(payload) > 0 {
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+					}
+				}
+				return
+			}
+			*errOut = noOutputDeadlineMessage
+			return
+		case <-turnDeadline.C:
+			if streamStarted {
+				if payload := tr.EncodeError("api_error", requestDeadlineMessage); len(payload) > 0 {
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+					}
+				}
+				return
+			}
+			*errOut = requestDeadlineMessage
+			return
 		case <-firstOutputTimer.C:
 			if streamStarted {
 				// The response is already committed, so downstream failover would
@@ -664,6 +862,11 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		if blob := translator.FromKvBlob(ev.Server); blob != nil {
 			if blob.AssistantText != "" {
 				delta := textState.consumeSnapshot(blob.AssistantText)
+				if !outputLimited {
+					delta = admitText(delta)
+				} else {
+					delta = ""
+				}
 				if delta != "" {
 					markOutput()
 					if expectThinkingSignature && !signatureSent {
@@ -699,7 +902,13 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		}
 		switch trEv.Kind {
 		case translator.EventTextDelta:
-			if delta := textState.consumeDelta(trEv.Text); delta != "" {
+			delta := textState.consumeDelta(trEv.Text)
+			if outputLimited {
+				delta = ""
+			} else {
+				delta = admitText(delta)
+			}
+			if delta != "" {
 				markOutput()
 				if expectThinkingSignature && !signatureSent {
 					pendingText.WriteString(delta)
@@ -750,6 +959,9 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted,
 			translator.EventServerToolStarted, translator.EventWebSearchResult:
+			if trEv.ToolArgsDelta != "" {
+				observedOutput.WriteString(trEv.ToolArgsDelta)
+			}
 			markOutput()
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
@@ -777,11 +989,19 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		*errOut = emptyUpstreamResponseMessage
 		return
 	}
+	if remainder := limiter.Flush(); remainder != "" {
+		pendingText.WriteString(remainder)
+	}
 	if !flushPendingText() {
 		return
 	}
-	lastUsage = usageWithObservedOutput(lastUsage, textState.emitted)
+	emittedText := textState.emitted + observedOutput.String()
+	lastUsage = usageAfterLimit(usageWithObservedOutput(lastUsage, emittedText), limiter)
 	end := &translator.Event{Kind: translator.EventTurnEnded, Usage: lastUsage}
+	if reason, sequence, limited := limiter.StopReason(); limited {
+		end.StopReason = reason
+		end.StopSequence = sequence
+	}
 	if payload := tr.Encode(end); len(payload) > 0 {
 		if err := emit(streamID, payload); err != nil {
 			*errOut = err.Error()
@@ -820,6 +1040,11 @@ func handleExecutorCountTokens(payload []byte) ([]byte, int) {
 	tokens := countTokens(b.String())
 
 	body, errMarshal := json.Marshal(map[string]any{
+		// Anthropic's /v1/messages/count_tokens answers with input_tokens and
+		// nothing else; the OpenAI-shaped keys stay for hosts that pattern-match
+		// on them. Emitting only the latter made the endpoint unusable from an
+		// Anthropic client even where the host routed the path correctly.
+		"input_tokens": tokens,
 		"total_tokens": tokens,
 		"usage": map[string]any{
 			"prompt_tokens":     tokens,

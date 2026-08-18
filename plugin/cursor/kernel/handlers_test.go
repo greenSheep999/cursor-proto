@@ -2,7 +2,9 @@ package kernel
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
@@ -72,6 +74,194 @@ func TestDispatch_ModelForAuthUsesLiveModelsAndProxy(t *testing.T) {
 	}
 }
 
+// withoutCatalogRetries removes the startup-window backoff so failure-path
+// tests assert the outcome without waiting out the retry schedule.
+func withoutCatalogRetries(t *testing.T) {
+	t.Helper()
+	previous := catalogRetrySchedule
+	catalogRetrySchedule = nil
+	t.Cleanup(func() { catalogRetrySchedule = previous })
+}
+
+func TestDispatch_ModelForAuthDoesNotAdvertiseStaticModelsWhenLiveCatalogFails(t *testing.T) {
+	withoutCatalogRetries(t)
+	previous := listModelsForAuth
+	defer func() { listModelsForAuth = previous }()
+
+	listModelsForAuth = func(*auth.Account) ([]string, error) {
+		return nil, errors.New("account catalog unavailable")
+	}
+
+	file := &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:        cpaformat.ProviderType,
+			AccessToken: "tok",
+			Email:       "catalog-failure@example.com",
+		},
+	}
+	storage, err := file.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(authModelRequest{
+		AuthID:       "catalog-failure@example.com",
+		AuthProvider: "cursor",
+		StorageJSON:  storage,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw, rc := dispatch("model.for_auth", payload)
+	if rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	result := unwrapOK(t, raw)
+	models, ok := result["Models"].([]any)
+	if !ok {
+		t.Fatalf("Models has unexpected shape: %T", result["Models"])
+	}
+	if len(models) != 0 {
+		t.Fatalf("failed account advertised %d models; want zero so CPA removes it from model shards", len(models))
+	}
+}
+
+// forAuthPayload builds a model.for_auth request for one account id.
+func forAuthPayload(t *testing.T, authID string) []byte {
+	t.Helper()
+	file := &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:        cpaformat.ProviderType,
+			AccessToken: "tok",
+			Email:       authID,
+		},
+	}
+	storage, err := file.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(authModelRequest{
+		AuthID:       authID,
+		AuthProvider: "cursor",
+		StorageJSON:  storage,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func forAuthModelIDs(t *testing.T, payload []byte) []string {
+	t.Helper()
+	raw, rc := dispatch("model.for_auth", payload)
+	if rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	models, ok := unwrapOK(t, raw)["Models"].([]any)
+	if !ok {
+		t.Fatal("Models has unexpected shape")
+	}
+	ids := make([]string, 0, len(models))
+	for _, model := range models {
+		ids = append(ids, model.(map[string]any)["ID"].(string))
+	}
+	return ids
+}
+
+// The Chromium sidecar joins CPA's network namespace, so AvailableModels is
+// refused for the first moments after a restart. Without a retry CPA registers
+// an empty shard and every request fails with "unknown provider".
+func TestDispatch_ModelForAuthRetriesThroughStartupWindow(t *testing.T) {
+	previousSchedule := catalogRetrySchedule
+	catalogRetrySchedule = []time.Duration{time.Millisecond, time.Millisecond}
+	defer func() { catalogRetrySchedule = previousSchedule }()
+
+	previous := listModelsForAuth
+	defer func() { listModelsForAuth = previous }()
+
+	attempts := 0
+	listModelsForAuth = func(*auth.Account) ([]string, error) {
+		attempts++
+		if attempts < 3 {
+			return nil, errors.New("dial tcp 127.0.0.1:18901: connect: connection refused")
+		}
+		return []string{"claude-opus-4-8"}, nil
+	}
+
+	ids := forAuthModelIDs(t, forAuthPayload(t, "startup-window@example.com"))
+	if len(ids) != 1 || ids[0] != "claude-opus-4-8" {
+		t.Fatalf("models = %v, want the catalog from the successful retry", ids)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want the call retried until it succeeded", attempts)
+	}
+}
+
+// A blip after startup must not remove a healthy account from routing.
+func TestDispatch_ModelForAuthFallsBackToLastKnownCatalog(t *testing.T) {
+	withoutCatalogRetries(t)
+	previous := listModelsForAuth
+	defer func() { listModelsForAuth = previous }()
+
+	payload := forAuthPayload(t, "cached-catalog@example.com")
+
+	listModelsForAuth = func(*auth.Account) ([]string, error) {
+		return []string{"claude-opus-4-8", "claude-sonnet-5"}, nil
+	}
+	if ids := forAuthModelIDs(t, payload); len(ids) != 2 {
+		t.Fatalf("warm-up returned %v", ids)
+	}
+
+	listModelsForAuth = func(*auth.Account) ([]string, error) {
+		return nil, errors.New("sidecar restarting")
+	}
+	ids := forAuthModelIDs(t, payload)
+	if len(ids) != 2 || ids[0] != "claude-opus-4-8" {
+		t.Fatalf("models = %v, want the last known good catalog", ids)
+	}
+}
+
+func TestDispatch_ModelForAuthDoesNotAdvertiseStaticModelsForEmptyLiveCatalog(t *testing.T) {
+	withoutCatalogRetries(t)
+	previous := listModelsForAuth
+	defer func() { listModelsForAuth = previous }()
+
+	listModelsForAuth = func(*auth.Account) ([]string, error) { return nil, nil }
+
+	file := &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:        cpaformat.ProviderType,
+			AccessToken: "tok",
+			Email:       "empty-catalog@example.com",
+		},
+	}
+	storage, err := file.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(authModelRequest{
+		AuthID:       "empty-catalog@example.com",
+		AuthProvider: "cursor",
+		StorageJSON:  storage,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw, rc := dispatch("model.for_auth", payload)
+	if rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	result := unwrapOK(t, raw)
+	models, ok := result["Models"].([]any)
+	if !ok {
+		t.Fatalf("Models has unexpected shape: %T", result["Models"])
+	}
+	if len(models) != 0 {
+		t.Fatalf("empty-catalog account advertised %d models; want zero", len(models))
+	}
+}
+
 func TestDispatch_Register(t *testing.T) {
 	raw, rc := dispatch("plugin.register", nil)
 	if rc != 0 {
@@ -138,8 +328,8 @@ func TestDispatch_RegisterReportsCurrentPluginVersion(t *testing.T) {
 		t.Fatalf("rc = %d", rc)
 	}
 	m := unwrapOK(t, raw)
-	if got := m["metadata"].(map[string]any)["Version"]; got != "0.8.13" {
-		t.Fatalf("metadata.Version = %v, want 0.8.13", got)
+	if got := m["metadata"].(map[string]any)["Version"]; got != pluginVersion {
+		t.Fatalf("metadata.Version = %v, want %s", got, pluginVersion)
 	}
 }
 

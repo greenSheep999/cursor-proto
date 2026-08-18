@@ -2,10 +2,12 @@ package kernel
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
@@ -13,7 +15,7 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-const pluginVersion = "0.8.13"
+const pluginVersion = "0.8.19"
 
 // registerResult is the JSON returned for plugin.register / plugin.reconfigure.
 func registerResult() string {
@@ -98,34 +100,86 @@ var listModelsForAuth = func(acc *auth.Account) ([]string, error) {
 	return executor.RoutableModelIDs(resp), nil
 }
 
+// catalogRetrySchedule spaces retries of a failed live catalog read.
+//
+// The Chromium sidecar joins CPA's network namespace, so it cannot be ready
+// before CPA is: every deploy has a window where AvailableModels is refused.
+// CPA registers model shards once at startup, so a single failed read there
+// leaves an account advertising nothing and every request answered with
+// "unknown provider for model ...". Retrying across that window is what makes
+// a restart self-heal instead of needing a second manual restart.
+var catalogRetrySchedule = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
+
+// lastKnownCatalog remembers the newest successful catalog per auth so a
+// transient failure after startup degrades to the previous answer rather than
+// silently removing the account from routing.
+var lastKnownCatalog sync.Map // authID -> []string
+
+func listModelsForAuthWithRetry(authID string, acc *auth.Account) ([]string, error) {
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		names, err := listModelsForAuth(acc)
+		if err == nil && len(names) > 0 {
+			lastKnownCatalog.Store(authID, names)
+			return names, nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = errEmptyCatalog
+		}
+		if attempt >= len(catalogRetrySchedule) {
+			return nil, lastErr
+		}
+		time.Sleep(catalogRetrySchedule[attempt])
+	}
+}
+
+var errEmptyCatalog = errors.New("account catalog is empty")
+
+// cachedCatalog returns the last catalog this auth reported successfully.
+func cachedCatalog(authID string) ([]string, bool) {
+	value, ok := lastKnownCatalog.Load(authID)
+	if !ok {
+		return nil, false
+	}
+	names, ok := value.([]string)
+	return names, ok && len(names) > 0
+}
+
 func handleModelsForAuth(payload []byte) ([]byte, int) {
 	var req authModelRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
-		// Malformed request from host — record the reason so operators
-		// don't see a mysterious "static-fallback advertised" line
-		// against a healthy account.
-		return okEnvelopeJSON(staticModelsResult()), 0
+		// model.static declares provider-wide model ownership. model.for_auth
+		// must never reuse that list as an account capability fallback: doing
+		// so registers every advanced model against an account whose catalog
+		// could not even be read, and CPA will keep routing requests to it.
+		return okEnvelopeJSON(modelsResult(nil)), 0
 	}
 	file, err := cpaformat.Unmarshal(req.StorageJSON)
 	if err != nil {
 		reportModelForAuthFallback(req.AuthID, "unmarshal_storage", err)
-		return okEnvelopeJSON(staticModelsResult()), 0
+		return okEnvelopeJSON(modelsResult(nil)), 0
 	}
 	acc, err := file.ToAccount()
 	if err != nil {
 		reportModelForAuthFallback(req.AuthID, "to_account", err)
-		return okEnvelopeJSON(staticModelsResult()), 0
+		return okEnvelopeJSON(modelsResult(nil)), 0
 	}
-	names, err := listModelsForAuth(acc)
+	names, err := listModelsForAuthWithRetry(req.AuthID, acc)
 	if err != nil {
-		reportModelForAuthFallback(req.AuthID, "list_models", err)
-		return okEnvelopeJSON(staticModelsResult()), 0
+		reason := "list_models"
+		if errors.Is(err, errEmptyCatalog) {
+			reason = "empty_catalog"
+		}
+		if cached, ok := cachedCatalog(req.AuthID); ok {
+			reportModelForAuthFallback(req.AuthID, reason+"_using_cached", err)
+			return okEnvelopeJSON(modelsResult(filterModelsForQuota(req.AuthID, acc, cached))), 0
+		}
+		reportModelForAuthFallback(req.AuthID, reason, err)
+		return okEnvelopeJSON(modelsResult(nil)), 0
 	}
-	if len(names) == 0 {
-		reportModelForAuthFallback(req.AuthID, "empty_catalog", nil)
-		return okEnvelopeJSON(staticModelsResult()), 0
-	}
-	return okEnvelopeJSON(modelsResult(names)), 0
+	return okEnvelopeJSON(modelsResult(filterModelsForQuota(req.AuthID, acc, names))), 0
 }
 
 // reportModelForAuthFallback surfaces the reason CPA's model.for_auth call

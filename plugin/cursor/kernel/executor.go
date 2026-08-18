@@ -270,6 +270,19 @@ type chatShape struct {
 	Attachments  []executor.Attachment
 	WebSearch    bool
 	WebFetch     bool
+
+	// Cursor's protocol has no field for either control, so they are enforced
+	// locally by translator.OutputLimiter on the way back out.
+	MaxTokens     int
+	StopSequences []string
+}
+
+// outputLimiter builds the generation-control enforcer for this request.
+func (s chatShape) outputLimiter() *translator.OutputLimiter {
+	return &translator.OutputLimiter{
+		MaxTokens:     s.MaxTokens,
+		StopSequences: s.StopSequences,
+	}
 }
 
 // parseOpenAIPayload converts an OpenAI Chat Completion request body
@@ -403,8 +416,10 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
 		} `json:"messages"`
-		Stream   bool `json:"stream"`
-		Thinking *struct {
+		Stream        bool     `json:"stream"`
+		MaxTokens     int      `json:"max_tokens"`
+		StopSequences []string `json:"stop_sequences"`
+		Thinking      *struct {
 			Type string `json:"type"`
 		} `json:"thinking"`
 		OutputConfig *struct {
@@ -433,11 +448,13 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 		return chatShape{}, errors.New("claude payload has no user message")
 	}
 	shape := chatShape{
-		Model:        req.Model,
-		SystemPrompt: systemPrompt,
-		UserMessage:  flattenClaudeContent(req.Messages[lastUserIdx].Content),
-		Stream:       req.Stream,
-		Attachments:  extractClaudeAttachments(req.Messages[lastUserIdx].Content),
+		Model:         req.Model,
+		SystemPrompt:  systemPrompt,
+		UserMessage:   continueFromToolResults(flattenClaudeContent(req.Messages[lastUserIdx].Content)),
+		Stream:        req.Stream,
+		Attachments:   extractClaudeAttachments(req.Messages[lastUserIdx].Content),
+		MaxTokens:     req.MaxTokens,
+		StopSequences: req.StopSequences,
 	}
 	if req.Thinking != nil {
 		shape.Thinking = strings.EqualFold(strings.TrimSpace(req.Thinking.Type), "adaptive") ||
@@ -500,6 +517,30 @@ func flattenClaudeSystem(raw json.RawMessage) string {
 			out.WriteByte('\n')
 		}
 		out.WriteString(text)
+	}
+	return out.String()
+}
+
+// continueFromToolResults rewrites a user turn that is only tool_result
+// blocks into an explicit continuation prompt. Anthropic's second tool
+// turn has no user text; leaving the raw JSON as UserMessage makes some
+// models re-call the same tool instead of answering.
+func continueFromToolResults(content string) string {
+	fragments := executor.ParseContentFragments(content)
+	if len(fragments) == 0 {
+		return content
+	}
+	for _, fragment := range fragments {
+		if fragment.Kind != executor.ContentToolResult {
+			return content
+		}
+	}
+	var out strings.Builder
+	out.WriteString("Continue from these tool results. Do not call the same tool again unless the result is insufficient.\n")
+	for _, fragment := range fragments {
+		out.WriteString("\n")
+		out.WriteString(fragment.Transcript())
+		out.WriteByte('\n')
 	}
 	return out.String()
 }
@@ -774,16 +815,25 @@ func firstHeader(h map[string][]string, name string) string {
 
 func translatePluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition) *translator.Event {
 	event := translator.FromServerMessage(server)
-	if event == nil || len(tools) == 0 {
+	if event == nil {
+		return nil
+	}
+	names := declaredToolNames(tools)
+	event = rewriteNativeWebSearchForClient(event, names)
+	if event == nil {
+		return nil
+	}
+	if len(names) == 0 {
+		// See translatePluginEventForDialect: a tool call the caller never
+		// declared cannot be executed or answered, so it must not be surfaced.
+		if isClientToolEvent(event.Kind) {
+			return nil
+		}
 		return event
 	}
-	names := make([]string, 0, len(tools))
-	for _, tool := range tools {
-		if name := strings.TrimSpace(tool.Name); name != "" {
-			names = append(names, name)
-		}
+	if isClientToolEvent(event.Kind) {
+		translator.ApplyClientToolAlias(event, names)
 	}
-	translator.ApplyClientToolAlias(event, names)
 	return event
 }
 
@@ -798,14 +848,141 @@ func translatePluginEventForDialect(server *cursorpb.AgentV1_AgentServerMessage,
 	if event == nil {
 		return nil
 	}
+	names := declaredToolNames(tools)
+	event = rewriteNativeWebSearchForClient(event, names)
+	if event == nil {
+		return nil
+	}
+	canonicalizeAnthropicToolEvent(event)
+	if len(names) == 0 && isClientToolEvent(event.Kind) {
+		// Cursor runs its own native tools while working a turn. Surfacing one
+		// as a client `tool_use` when the caller declared no tools hands back a
+		// call it cannot execute and has no id to answer, which a strict client
+		// rejects. Server tools (web search) are a different contract and pass
+		// through untouched.
+		return nil
+	}
+	if isClientToolEvent(event.Kind) {
+		translator.ApplyClientToolContract(event, names, dialect)
+	}
+	return event
+}
+
+func declaredToolNames(tools []executor.ToolDefinition) []string {
 	names := make([]string, 0, len(tools))
 	for _, tool := range tools {
 		if name := strings.TrimSpace(tool.Name); name != "" {
 			names = append(names, name)
 		}
 	}
-	translator.ApplyClientToolContract(event, names, dialect)
-	return event
+	return names
+}
+
+// rewriteNativeWebSearchForClient converts Cursor's native search into a
+// client tool_use when the caller declared WebSearch. Claude Code executes
+// that tool itself; leaving it as server_tool_use keeps the HTTP stream open
+// while Cursor searches (or waits for an approval we already sent).
+func rewriteNativeWebSearchForClient(event *translator.Event, names []string) *translator.Event {
+	if event == nil {
+		return nil
+	}
+	searchName := declaredClientToolName(names, "websearch", "web_search")
+	fetchName := declaredClientToolName(names, "webfetch", "web_fetch")
+	switch event.Kind {
+	case translator.EventServerToolPermission:
+		switch strings.ToLower(event.ToolName) {
+		case "web_search":
+			if searchName == "" {
+				// Anthropic server-tool request: announce server_tool_use as
+				// soon as Cursor asks permission so the stream is not silent
+				// for the whole search. The later ToolCallStarted with the
+				// same id is dropped by the Anthropic writer.
+				event.Kind = translator.EventServerToolStarted
+				event.ToolName = "web_search"
+				return event
+			}
+			event.Kind = translator.EventToolCallStarted
+			event.ToolName = searchName
+			return event
+		case "web_fetch":
+			if fetchName == "" {
+				// A search-only Anthropic request must not grow a matching
+				// web_fetch server_tool_use. Cursor often asks to fetch the
+				// first hit; announcing that without a result fails strict
+				// stream checkers.
+				return nil
+			}
+			event.Kind = translator.EventToolCallStarted
+			event.ToolName = fetchName
+			return event
+		default:
+			return nil
+		}
+	case translator.EventServerToolStarted:
+		if isUndeclaredFetchEvent(event, fetchName) {
+			return nil
+		}
+		if searchName != "" && strings.EqualFold(event.ToolName, "web_search") {
+			event.Kind = translator.EventToolCallStarted
+			event.ToolName = searchName
+		}
+		return event
+	case translator.EventWebSearchResult:
+		if searchName != "" {
+			return nil
+		}
+		return event
+	default:
+		if isUndeclaredFetchEvent(event, fetchName) {
+			return nil
+		}
+		return event
+	}
+}
+
+func isUndeclaredFetchEvent(event *translator.Event, fetchName string) bool {
+	if event == nil || fetchName != "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(event.ToolName)) {
+	case "web_fetch", "webfetch", "fetch", "web_fetch_tool_call", "webfetchtoolcall", "fetchtoolcall":
+		return true
+	default:
+		return false
+	}
+}
+
+func canonicalizeAnthropicToolEvent(event *translator.Event) {
+	if event == nil || event.ToolCallID == "" {
+		return
+	}
+	server := event.Kind == translator.EventServerToolStarted ||
+		event.Kind == translator.EventWebSearchResult ||
+		event.Kind == translator.EventServerToolPermission
+	event.ToolCallID = translator.CanonicalAnthropicToolID(event.ToolCallID, server)
+}
+
+func declaredClientToolName(names []string, aliases ...string) string {
+	want := make(map[string]bool, len(aliases))
+	for _, alias := range aliases {
+		want[strings.ToLower(alias)] = true
+	}
+	for _, name := range names {
+		trimmed := strings.TrimSpace(name)
+		if want[strings.ToLower(trimmed)] {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func isClientToolEvent(kind translator.EventKind) bool {
+	switch kind {
+	case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
+		return true
+	default:
+		return false
+	}
 }
 
 func translateAnthropicPluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition) *translator.Event {

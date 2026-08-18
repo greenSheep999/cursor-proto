@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
+	"github.com/router-for-me/cursor-proto/translator"
 )
 
 // installFakes wires the runnerFactory and hostCallInvoker to the
@@ -217,8 +220,155 @@ func TestTranslatePluginEventRestoresDeclaredToolCase(t *testing.T) {
 	}
 }
 
-func TestTranslateClaudePluginEventUsesCanonicalCaseForLazyNativeTool(t *testing.T) {
-	server := &cursorpb.AgentV1_AgentServerMessage{
+// withShortRequestDeadline shrinks the outermost turn bound so deadline tests
+// finish quickly.
+func withShortRequestDeadline(t *testing.T, d time.Duration) {
+	t.Helper()
+	previous := os.Getenv("CURSOR_REQUEST_DEADLINE_MS")
+	os.Setenv("CURSOR_REQUEST_DEADLINE_MS", strconv.Itoa(int(d/time.Millisecond)))
+	t.Cleanup(func() {
+		if previous == "" {
+			os.Unsetenv("CURSOR_REQUEST_DEADLINE_MS")
+			return
+		}
+		os.Setenv("CURSOR_REQUEST_DEADLINE_MS", previous)
+	})
+}
+
+// Cursor can hold a run open with heartbeats and never produce content — seen
+// with accounts whose catalog advertises a model they cannot serve. Without an
+// absolute ceiling the caller hangs instead of getting an error it can retry.
+func TestBuildClaudeNonStreamingStopsAtRequestDeadline(t *testing.T) {
+	withShortRequestDeadline(t, 150*time.Millisecond)
+
+	events := make(chan executor.ChatEvent) // never sends, never closes
+	done := make(chan error, 1)
+	go func() {
+		_, err := buildClaudeNonStreaming("claude-fable-5", nil, &translator.OutputLimiter{}, 1, events)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "request deadline") {
+			t.Fatalf("err = %v, want the request-deadline error", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("collector hung past the request deadline")
+	}
+}
+
+// Once the envelope is committed the deadline must close the stream through
+// Anthropic's error event rather than leaving the client waiting.
+func TestStreamClaudeStopsWhenOnlyHeartbeatsArrive(t *testing.T) {
+	t.Setenv("CURSOR_NO_OUTPUT_DEADLINE_MS", "200")
+	t.Setenv("CURSOR_REQUEST_DEADLINE_MS", "5000")
+	t.Setenv("CURSOR_STREAM_HEARTBEAT_PREAMBLE_MS", "0")
+
+	var emitted [][]byte
+	var mu sync.Mutex
+	defer installFakes(t, nil, func(method string, payload []byte) ([]byte, error) {
+		if method == "host.stream.emit" {
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		}
+		return []byte(`{"ok":true}`), nil
+	})()
+
+	events := make(chan executor.ChatEvent, 8)
+	go func() {
+		for i := 0; i < 20; i++ {
+			events <- buildHeartbeatEvent()
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+
+	var streamErr string
+	done := make(chan struct{})
+	go func() {
+		streamClaude("s1", "claude-fable-5", false, nil, &translator.OutputLimiter{}, 1, events, &streamErr)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("heartbeat-only stream hung past the no-output deadline")
+	}
+	if streamErr != "" && !strings.Contains(streamErr, "no-output") && !strings.Contains(streamErr, "heartbeat") {
+		// emit path may have succeeded; the error event is enough
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	joined := ""
+	for _, payload := range emitted {
+		joined += string(payload)
+	}
+	if !strings.Contains(joined, `"type":"error"`) && !strings.Contains(streamErr, "no-output") {
+		t.Fatalf("heartbeat-only stream did not fail closed; err=%q frames=%q", streamErr, joined)
+	}
+}
+
+func TestStreamClaudeStopsAtRequestDeadlineAfterCommit(t *testing.T) {
+	withShortRequestDeadline(t, 400*time.Millisecond)
+
+	var emitted [][]byte
+	var mu sync.Mutex
+	defer installFakes(t, nil, func(method string, payload []byte) ([]byte, error) {
+		if method == "host.stream.emit" {
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		}
+		return []byte(`{"ok":true}`), nil
+	})()
+
+	// Committed but never finished: exactly the shape a stalled Cursor run has.
+	events := make(chan executor.ChatEvent, 1)
+	events <- buildTextDeltaEvent("hello")
+
+	var streamErr string
+	done := make(chan struct{})
+	go func() {
+		streamClaude("s1", "claude-fable-5", false, nil, &translator.OutputLimiter{}, 1, events, &streamErr)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream hung past the request deadline")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	joined := ""
+	for _, payload := range emitted {
+		joined += string(payload)
+	}
+	if !strings.Contains(joined, "message_start") {
+		t.Fatalf("stream never committed; frames = %q", joined)
+	}
+	if !strings.Contains(joined, `"type":"error"`) {
+		t.Fatalf("committed stream did not end with an error event; frames = %q", joined)
+	}
+}
+
+func globToolCallServerMessage() *cursorpb.AgentV1_AgentServerMessage {
+	return &cursorpb.AgentV1_AgentServerMessage{
 		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
 			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
 				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallStarted{
@@ -233,16 +383,227 @@ func TestTranslateClaudePluginEventUsesCanonicalCaseForLazyNativeTool(t *testing
 			},
 		},
 	}
-	event := translateAnthropicPluginEvent(server, nil)
+}
+
+func webSearchToolCallServerMessage() *cursorpb.AgentV1_AgentServerMessage {
+	return &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallStarted{
+					ToolCallStarted: &cursorpb.AgentV1_ToolCallStartedUpdate{
+						CallId: "srvtoolu_search",
+						ToolCall: &cursorpb.AgentV1_ToolCall{
+							Tool: &cursorpb.AgentV1_ToolCall_WebSearchToolCall{
+								WebSearchToolCall: &cursorpb.AgentV1_WebSearchToolCall{
+									Args: &cursorpb.AgentV1_WebSearchArgs{
+										SearchTerm: "Claude Code CLI tool list",
+										ToolCallId: "srvtoolu_search",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func webSearchQueryServerMessage() *cursorpb.AgentV1_AgentServerMessage {
+	return &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionQuery{
+			InteractionQuery: &cursorpb.AgentV1_InteractionQuery{
+				Id: 7,
+				Query: &cursorpb.AgentV1_InteractionQuery_WebSearchRequestQuery{
+					WebSearchRequestQuery: &cursorpb.AgentV1_WebSearchRequestQuery{
+						Args: &cursorpb.AgentV1_WebSearchArgs{
+							SearchTerm: "Claude Code CLI tool list",
+							ToolCallId: "srvtoolu_query",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestTranslateClaudePluginEventUsesCanonicalCaseForLazyNativeTool(t *testing.T) {
+	server := globToolCallServerMessage()
+	declared := []executor.ToolDefinition{{Name: "Glob"}}
+
+	event := translateAnthropicPluginEvent(server, declared)
 	if event == nil {
 		t.Fatal("expected tool event")
 	}
 	if event.ToolName != "Glob" {
 		t.Fatalf("tool name = %q, want Claude Code canonical Glob", event.ToolName)
 	}
-	generic := translatePluginEvent(server, nil)
+	generic := translatePluginEvent(server, []executor.ToolDefinition{{Name: "glob"}})
 	if generic == nil || generic.ToolName != "glob" {
 		t.Fatalf("generic/OpenAI fallback = %+v, want lowercase semantic glob", generic)
+	}
+}
+
+// Anthropic's contract is that tool_use.name is one of the names the caller
+// declared this turn. Cursor runs native tools regardless, and forwarding one
+// to a caller that declared none produces a call it cannot execute — observed
+// against a live account as a stray tool_use inside a WebSearch-only request.
+func TestTranslateClaudePluginEventDropsNativeToolWhenCallerDeclaredNone(t *testing.T) {
+	server := globToolCallServerMessage()
+
+	if event := translateAnthropicPluginEvent(server, nil); event != nil {
+		t.Fatalf("emitted undeclared tool %q; want the event dropped", event.ToolName)
+	}
+	if event := translatePluginEvent(server, nil); event != nil {
+		t.Fatalf("generic path emitted undeclared tool %q; want the event dropped", event.ToolName)
+	}
+}
+
+// Claude Code's WebSearch is a client tool. Cursor still emits a native
+// WebSearchToolCall; forwarding that as Anthropic server_tool_use makes the
+// CLI wait in-stream for a result we never produce, which is the hang shown
+// as "Searching…" / "Cogitating…". Remap it to tool_use so the CLI executes.
+func TestTranslateClaudePluginEventRemapsNativeWebSearchToDeclaredClientTool(t *testing.T) {
+	event := translateAnthropicPluginEvent(webSearchToolCallServerMessage(), []executor.ToolDefinition{{Name: "WebSearch"}})
+	if event == nil {
+		t.Fatal("expected client tool_use for declared WebSearch")
+	}
+	if event.Kind != translator.EventToolCallStarted {
+		t.Fatalf("kind = %v, want EventToolCallStarted so Claude Code can run the search", event.Kind)
+	}
+	if event.ToolName != "WebSearch" {
+		t.Fatalf("tool name = %q, want declared WebSearch", event.ToolName)
+	}
+	if !strings.Contains(event.ToolArgsDelta, "Claude Code CLI tool list") {
+		t.Fatalf("args = %q, want the search term", event.ToolArgsDelta)
+	}
+}
+
+func TestTranslateClaudePluginEventRemapsSearchPermissionToDeclaredClientTool(t *testing.T) {
+	event := translateAnthropicPluginEvent(webSearchQueryServerMessage(), []executor.ToolDefinition{{Name: "WebSearch"}})
+	if event == nil {
+		t.Fatal("expected client tool_use from InteractionQuery")
+	}
+	if event.Kind != translator.EventToolCallStarted || event.ToolName != "WebSearch" {
+		t.Fatalf("event = %+v, want tool_use WebSearch", event)
+	}
+}
+
+func TestTranslateClaudePluginEventKeepsNativeWebSearchAsServerToolWhenUndeclared(t *testing.T) {
+	event := translateAnthropicPluginEvent(webSearchToolCallServerMessage(), nil)
+	if event == nil {
+		t.Fatal("server-tool-only requests must still surface native web search")
+	}
+	if event.Kind != translator.EventServerToolStarted {
+		t.Fatalf("kind = %v, want EventServerToolStarted for Anthropic web_search_*", event.Kind)
+	}
+	if event.ToolName != "web_search" {
+		t.Fatalf("tool name = %q, want web_search", event.ToolName)
+	}
+}
+
+func TestTranslateClaudePluginEventDropsUndeclaredFetchToolCall(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_ToolCallStarted{
+					ToolCallStarted: &cursorpb.AgentV1_ToolCallStartedUpdate{
+						CallId: "toolu_fetch",
+						ToolCall: &cursorpb.AgentV1_ToolCall{
+							Tool: &cursorpb.AgentV1_ToolCall_FetchToolCall{
+								FetchToolCall: &cursorpb.AgentV1_FetchToolCall{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if event := translateAnthropicPluginEvent(server, []executor.ToolDefinition{{Name: "get_weather"}}); event != nil {
+		t.Fatalf("undeclared fetch leaked as %+v", event)
+	}
+}
+
+func TestEstimateClaudeInputTokensIsAtLeastOne(t *testing.T) {
+	if got := estimateClaudeInputTokens(chatShape{}); got != 1 {
+		t.Fatalf("empty shape = %d, want 1", got)
+	}
+	if got := estimateClaudeInputTokens(chatShape{UserMessage: "What is the weather in San Francisco?"}); got < 2 {
+		t.Fatalf("prompt estimate = %d, want a non-trivial count", got)
+	}
+}
+
+func TestTranslateClaudePluginEventDropsUndeclaredFetchPermission(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionQuery{
+			InteractionQuery: &cursorpb.AgentV1_InteractionQuery{
+				Query: &cursorpb.AgentV1_InteractionQuery_WebFetchRequestQuery{
+					WebFetchRequestQuery: &cursorpb.AgentV1_WebFetchRequestQuery{
+						Args: &cursorpb.AgentV1_WebFetchArgs{Url: "https://example.com", ToolCallId: "srvtoolu_fetch"},
+					},
+				},
+			},
+		},
+	}
+	if event := translateAnthropicPluginEvent(server, nil); event != nil {
+		t.Fatalf("undeclared fetch leaked as %+v", event)
+	}
+}
+
+func TestTranslateClaudePluginEventAnnouncesSearchPermissionAsServerTool(t *testing.T) {
+	event := translateAnthropicPluginEvent(webSearchQueryServerMessage(), nil)
+	if event == nil {
+		t.Fatal("server-tool path dropped the permission query; want an early server_tool_use")
+	}
+	if event.Kind != translator.EventServerToolStarted || event.ToolName != "web_search" {
+		t.Fatalf("event = %+v, want server_tool_use web_search", event)
+	}
+	if event.ToolCallID != "srvtoolu_query" {
+		t.Fatalf("id = %q, want srvtoolu_query", event.ToolCallID)
+	}
+}
+
+func TestTranslateClaudePluginEventStripsBedrockToolID(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_ExecServerMessage{
+			ExecServerMessage: &cursorpb.AgentV1_ExecServerMessage{
+				Message: &cursorpb.AgentV1_ExecServerMessage_McpArgs{
+					McpArgs: &cursorpb.AgentV1_McpArgs{
+						ToolName:   "get_weather",
+						ToolCallId: "toolu_bdrk_014QuhsYS4bAkK5hyQAxoFAY",
+					},
+				},
+			},
+		},
+	}
+	event := translateAnthropicPluginEvent(server, []executor.ToolDefinition{{Name: "get_weather"}})
+	if event == nil {
+		t.Fatal("expected tool event")
+	}
+	if event.ToolCallID != "toolu_014QuhsYS4bAkK5hyQAxoFAY" {
+		t.Fatalf("id = %q, want Bedrock infix stripped", event.ToolCallID)
+	}
+}
+
+func TestTranslateClaudePluginEventStripsVertexToolID(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_ExecServerMessage{
+			ExecServerMessage: &cursorpb.AgentV1_ExecServerMessage{
+				Message: &cursorpb.AgentV1_ExecServerMessage_McpArgs{
+					McpArgs: &cursorpb.AgentV1_McpArgs{
+						ToolName:   "get_weather",
+						ToolCallId: "toolu_vrtx_01JurySmHCDBTjuh8LgwtdAZ",
+					},
+				},
+			},
+		},
+	}
+	event := translateAnthropicPluginEvent(server, []executor.ToolDefinition{{Name: "get_weather"}})
+	if event == nil {
+		t.Fatal("expected tool event")
+	}
+	if event.ToolCallID != "toolu_01JurySmHCDBTjuh8LgwtdAZ" {
+		t.Fatalf("id = %q, want Vertex infix stripped", event.ToolCallID)
 	}
 }
 
@@ -849,7 +1210,7 @@ func TestBuildClaudeNonStreamingSurfacesCursorTrailerError(t *testing.T) {
 	}
 	close(events)
 
-	_, err := buildClaudeNonStreaming("claude-opus-5", nil, events)
+	_, err := buildClaudeNonStreaming("claude-opus-5", nil, &translator.OutputLimiter{}, 1, events)
 	if err == nil {
 		t.Fatal("expected Cursor trailer error")
 	}
@@ -1087,6 +1448,26 @@ func TestParseClaudePayload_PreservesToolUseAndToolResultHistory(t *testing.T) {
 	}
 }
 
+func TestParseClaudePayload_ContinuesFromToolResultOnlyTurn(t *testing.T) {
+	shape, err := parseClaudePayload([]byte(`{
+		"model":"claude-opus-5",
+		"messages":[
+			{"role":"user","content":"Check Paris weather."},
+			{"role":"assistant","content":[{"type":"tool_use","id":"toolu_123","name":"get_weather","input":{"city":"Paris"}}]},
+			{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"Sunny, 21 C."}]}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if !strings.Contains(shape.UserMessage, "tool_result") || !strings.Contains(shape.UserMessage, "Sunny, 21 C.") {
+		t.Fatalf("tool-result-only user turn was not rewritten: %q", shape.UserMessage)
+	}
+	if strings.HasPrefix(strings.TrimSpace(shape.UserMessage), `{"type":"tool_result"`) {
+		t.Fatalf("raw tool_result JSON left as UserMessage: %q", shape.UserMessage)
+	}
+}
+
 // TestParseClaudePayload_ArrayContent covers the content-block path
 // so we do not lose it on refactor.
 func TestParseClaudePayload_ArrayContent(t *testing.T) {
@@ -1129,6 +1510,50 @@ func TestParseClaudePayload_PreservesImageAndDocumentAttachments(t *testing.T) {
 	}
 	if got := shape.Attachments[1]; got.Kind != "document" || got.Filename != "report.pdf" || string(got.Data) != "pdf" {
 		t.Fatalf("document attachment = %+v", got)
+	}
+}
+
+func TestParseClaudePayload_ClientWebSearchIsNotServerTool(t *testing.T) {
+	shape, err := parseClaudePayload([]byte(`{
+		"model":"claude-fable-5",
+		"tools":[{"name":"WebSearch","description":"Search the web","input_schema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}}],
+		"messages":[{"role":"user","content":"search"}]
+	}`))
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if shape.WebSearch {
+		t.Fatal("Claude Code WebSearch must stay a client tool, not Cursor native search")
+	}
+	if len(shape.Tools) != 1 || shape.Tools[0].Name != "WebSearch" {
+		t.Fatalf("tools = %+v, want declared WebSearch", shape.Tools)
+	}
+	req := buildChatRequest(shape, nil)
+	if req.WebSearch {
+		t.Fatal("ChatRequest.WebSearch = true; that keeps the SSE open waiting for Cursor")
+	}
+}
+
+func TestTranslateClaudePluginEventRemapsWebSearchForAnyModel(t *testing.T) {
+	// Remap is keyed off the caller's tools[], never the model id. Switching
+	// Claude Code from fable-5 to opus-4-8 / sonnet-5 / composer must not
+	// change the name the CLI dispatches on.
+	for _, model := range []string{"claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "composer-2.5"} {
+		shape, err := parseClaudePayload([]byte(`{
+			"model":"` + model + `",
+			"tools":[{"name":"WebSearch","input_schema":{"type":"object"}}],
+			"messages":[{"role":"user","content":"search"}]
+		}`))
+		if err != nil {
+			t.Fatalf("%s parse: %v", model, err)
+		}
+		if shape.WebSearch || buildChatRequest(shape, nil).WebSearch {
+			t.Fatalf("%s treated client WebSearch as a Cursor server tool", model)
+		}
+		event := translateAnthropicPluginEvent(webSearchToolCallServerMessage(), shape.Tools)
+		if event == nil || event.Kind != translator.EventToolCallStarted || event.ToolName != "WebSearch" {
+			t.Fatalf("%s remap = %+v, want tool_use WebSearch", model, event)
+		}
 	}
 }
 

@@ -28,9 +28,10 @@ type envelope struct {
 }
 
 type envelopeError struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Retryable bool   `json:"retryable,omitempty"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Retryable  bool   `json:"retryable,omitempty"`
+	HTTPStatus int    `json:"http_status,omitempty"`
 }
 
 // StreamEmitter is invoked by the streaming handlers whenever the
@@ -196,4 +197,14 @@ func ErrorEnvelope(code, message string, retryable bool) []byte {
 // "is package kernel" stays minimal.
 func errorEnvelope(code, message string, retryable bool) []byte {
 	return ErrorEnvelope(code, message, retryable)
+}
+
+func errorEnvelopeQuota(message string) []byte {
+	buf, _ := json.Marshal(envelope{OK: false, Error: &envelopeError{
+		Code:       "quota_exhausted",
+		Message:    message,
+		Retryable:  true,
+		HTTPStatus: 429,
+	}})
+	return buf
 }
