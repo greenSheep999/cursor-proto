@@ -9,6 +9,7 @@ captures/*.har
 .cursor-token
 *.token
 *.cursor-token
+accounts/*.json
 
 # Environment
 .env
