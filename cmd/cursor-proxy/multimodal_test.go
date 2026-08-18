@@ -33,7 +33,7 @@ func TestFlattenAnthropicContentWithAttachments(t *testing.T) {
 }
 
 func TestPrepareDocumentAttachmentsInlinesTextDocuments(t *testing.T) {
-	text, attachments := prepareDocumentAttachments("summarize", []executor.Attachment{
+	text, attachments := executor.PrepareDocumentAttachments("summarize", []executor.Attachment{
 		{Kind: "image", MimeType: "image/png", Data: []byte("image")},
 		{Kind: "document", Filename: "notes.txt", MimeType: "text/plain", Data: []byte("DOCUMENT_SECRET_7391")},
 	})

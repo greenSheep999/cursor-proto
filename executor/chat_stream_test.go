@@ -180,6 +180,39 @@ func TestBidiAppendUsesConnectEnvelope(t *testing.T) {
 	}
 }
 
+func TestReadSSEStream_DoesNotApproveClientWebSearch(t *testing.T) {
+	msg := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionQuery{
+			InteractionQuery: &cursorpb.AgentV1_InteractionQuery{
+				Id: 7,
+				Query: &cursorpb.AgentV1_InteractionQuery_WebSearchRequestQuery{
+					WebSearchRequestQuery: &cursorpb.AgentV1_WebSearchRequestQuery{
+						Args: &cursorpb.AgentV1_WebSearchArgs{SearchTerm: "query"},
+					},
+				},
+			},
+		},
+	}
+	approved := false
+	events := make(chan ChatEvent, 4)
+	done := make(chan struct{})
+	go func() {
+		readSSEStream(frameForTest(t, msg), events, false, true, func(*cursorpb.AgentV1_InteractionQuery) error {
+			approved = true
+			return nil
+		}, false)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("client-tool WebSearch should auto-stop instead of waiting for Cursor")
+	}
+	if approved {
+		t.Fatal("approved Cursor native search; Claude Code must execute WebSearch itself")
+	}
+}
+
 func TestReadSSEStream_DoesNotStopForEnabledWebSearch(t *testing.T) {
 	msg := &cursorpb.AgentV1_AgentServerMessage{
 		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{

@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -16,8 +20,9 @@ import (
 )
 
 // HistoryTurn is a single prior turn in a multi-turn conversation. Only the
-// "user" and "assistant" roles are supported today; tool turns are omitted
-// because the executor does not yet drive Cursor's tool-call surface.
+// "user" and "assistant" roles are first-class; Anthropic tool_use /
+// tool_result blocks are carried inside those turns as flattened JSON and
+// restored onto Cursor ConversationHistory tool messages.
 type HistoryTurn struct {
 	Role    string // "user" | "assistant"
 	Content string
@@ -109,6 +114,11 @@ type ChatRequest struct {
 	// backend remembers prior turns on its own.
 	OmitSplicedHistory bool
 
+	// OmitHostContextNotice disables the `<host_context>` block that RunChat
+	// normally injects to correct Cursor's IDE environment description. Set it
+	// when the goal is to observe Cursor's unmodified behaviour.
+	OmitHostContextNotice bool
+
 	// OmitConversationHistoryWire skips populating
 	// UserMessageAction.ConversationHistory. History is still consumed by
 	// the splice step (unless OmitSplicedHistory is also set), so callers
@@ -193,6 +203,12 @@ func (c *Client) prepareChatRequest(req *ChatRequest, acc *auth.Account) (string
 		req.resolvedModel = resolvedModel
 	}
 
+	// Attachments are normalized before any prompt assembly so the shapes
+	// Cursor cannot answer (binary documents, sub-4px images) never reach the
+	// wire builder. See PrepareDocumentAttachments and NormalizeImageAttachments.
+	req.UserMessage, req.Attachments = PrepareDocumentAttachments(req.UserMessage, req.Attachments)
+	req.Attachments = NormalizeImageAttachments(req.Attachments)
+
 	// If the caller supplied a SystemPrompt, prepend it to the user turn.
 	// Cursor's backend rejects custom_system_prompt outright; splicing works
 	// because the model treats the leading block as high-priority instruction.
@@ -213,6 +229,13 @@ func (c *Client) prepareChatRequest(req *ChatRequest, acc *auth.Account) (string
 	// by OmitConversationHistoryWire (consumed in chat_build.go).
 	if len(req.History) > 0 && !req.OmitSplicedHistory {
 		req.UserMessage = spliceHistory(req.History, req.UserMessage)
+	}
+
+	// Applied last so it lands above the system prompt and transcript, where
+	// it can outrank the IDE environment Cursor's own prompt describes.
+	// Probes that want to observe Cursor's unmodified behaviour opt out.
+	if !req.OmitHostContextNotice {
+		req.UserMessage = spliceHostContextNotice(req.UserMessage)
 	}
 
 	// Build the full AgentRunRequest and wrap it as AgentClientMessage.run_request.
@@ -280,6 +303,48 @@ const postAssistantGrace = 1 * time.Second
 // arriving — protects against a server that never sends turn_ended.
 const heartbeatDeadline = 60 * time.Second
 
+// defaultStreamIdleTimeout bounds the gap between any two upstream frames.
+//
+// Cursor can stop mid-turn without a trailer or turn_ended — most reliably
+// after a server-side web search begins, where the run goes silent and never
+// resumes. body.Read then blocks forever, so the caller only escapes by
+// abandoning the request. Every other deadline here is one-shot and armed by a
+// specific event, which leaves exactly this gap uncovered. A sliding timer
+// resets on any upstream activity, so a slow-but-alive search is untouched
+// while a dead one terminates.
+const defaultStreamIdleTimeout = 120 * time.Second
+
+// defaultServerToolResultTimeout bounds how long we wait after Cursor starts
+// a native web search when the caller asked for Anthropic's server tool. The
+// idle watchdog resets on heartbeats, so a search that never returns would
+// otherwise hold the stream open until the request deadline.
+const defaultServerToolResultTimeout = 60 * time.Second
+
+func serverToolResultTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("CURSOR_SERVER_TOOL_RESULT_TIMEOUT_MS"))
+	if raw == "" {
+		return defaultServerToolResultTimeout
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds < 0 {
+		return defaultServerToolResultTimeout
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
+// streamIdleTimeout allows operators to widen or disable (0) the sliding gap.
+func streamIdleTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("CURSOR_STREAM_IDLE_TIMEOUT_MS"))
+	if raw == "" {
+		return defaultStreamIdleTimeout
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds < 0 {
+		return defaultStreamIdleTimeout
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
 func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, autoStopOnToolCall bool, approveInteraction func(*cursorpb.AgentV1_InteractionQuery) error, keepServerToolsOpen bool) {
 	defer close(out)
 	defer body.Close()
@@ -298,8 +363,55 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 		}()
 	}
 
+	// The watchdog closes the body on a stalled upstream, which unblocks the
+	// Read below; stopIdleWatchdog retires it once the stream ends normally.
+	lastActivity := &atomic.Int64{}
+	lastActivity.Store(time.Now().UnixNano())
+	stopIdleWatchdog := make(chan struct{})
+	defer close(stopIdleWatchdog)
+	if idle := streamIdleTimeout(); idle > 0 {
+		go func() {
+			ticker := time.NewTicker(idle / 4)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopIdleWatchdog:
+					return
+				case <-deadline:
+					return
+				case <-ticker.C:
+					if time.Since(time.Unix(0, lastActivity.Load())) >= idle {
+						body.Close()
+						return
+					}
+				}
+			}
+		}()
+	}
+
 	turnEnded := false
 	sawAssistant := false
+	var serverToolResultOnce bool
+	armServerToolResultTimeout := func() {
+		if serverToolResultOnce {
+			return
+		}
+		if wait := serverToolResultTimeout(); wait > 0 {
+			serverToolResultOnce = true
+			go func() {
+				timer := time.NewTimer(wait)
+				defer timer.Stop()
+				select {
+				case <-stopIdleWatchdog:
+					return
+				case <-deadline:
+					return
+				case <-timer.C:
+					body.Close()
+				}
+			}()
+		}
+	}
 
 	buf := make([]byte, 0, 8192)
 	tmp := make([]byte, 4096)
@@ -311,6 +423,7 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 		}
 		n, err := body.Read(tmp)
 		if n > 0 {
+			lastActivity.Store(time.Now().UnixNano())
 			buf = append(buf, tmp[:n]...)
 			for {
 				payload, isTrailer, rest, ok := splitConnectFrame(buf)
@@ -341,13 +454,20 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 					}
 					if ev.Server != nil {
 						msg = ev.Server
-						if query := msg.GetInteractionQuery(); query != nil && approveInteraction != nil {
-							if query.GetWebSearchRequestQuery() != nil || query.GetWebFetchRequestQuery() != nil {
+						if query := msg.GetInteractionQuery(); query != nil {
+							webQuery := query.GetWebSearchRequestQuery() != nil || query.GetWebFetchRequestQuery() != nil
+							if webQuery && keepServerToolsOpen && approveInteraction != nil {
 								if err := approveInteraction(query); err != nil {
 									ev.Status = &TrailerStatus{Code: 13, Message: err.Error()}
 									out <- ev
 									return
 								}
+							}
+							// Claude Code's WebSearch/WebFetch are client tools. Approving
+							// Cursor's native search here starts a server-side run the CLI
+							// cannot finish, which is the "Searching… Cogitating…" hang.
+							if webQuery && !keepServerToolsOpen && autoStopOnToolCall {
+								setDeadline(postAssistantGrace)
 							}
 						}
 						// Watch for terminal signals so we can close eagerly
@@ -382,6 +502,9 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 						//      OpenAI-compat callers hanging until the 60s
 						//      heartbeat deadline (see cursor3.11/v0.3.2).
 						serverToolCall := keepServerToolsOpen && isServerWebToolCall(msg)
+						if serverToolCall {
+							armServerToolResultTimeout()
+						}
 						if autoStopOnToolCall && !serverToolCall &&
 							(msg.GetExecServerMessage().GetMcpArgs() != nil ||
 								msg.GetInteractionUpdate().GetToolCallStarted() != nil) {

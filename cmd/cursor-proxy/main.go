@@ -779,7 +779,6 @@ func anthropicMessagesHandler(c *executor.Client, cacheStore *simcache.Store) ht
 			return
 		}
 		userText, attachments := flattenAnthropicContentWithAttachments(req.Messages[lastUserIdx].Content)
-		userText, attachments = prepareDocumentAttachments(userText, attachments)
 		history := make([]executor.HistoryTurn, 0, lastUserIdx)
 		for _, m := range req.Messages[:lastUserIdx] {
 			if m.Role != "user" && m.Role != "assistant" {

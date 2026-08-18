@@ -1,6 +1,8 @@
 package executor
 
 import (
+	"strings"
+
 	"github.com/router-for-me/cursor-proto/auth"
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
 )
@@ -176,10 +178,9 @@ func buildSelectedContext(attachments []Attachment) *cursorpb.AgentV1_SelectedCo
 // Cursor ConversationHistory message. Returns nil when there is nothing to
 // send so single-turn callers stay wire-compatible.
 //
-// The mapping is deliberately minimal — Cursor's schema supports reasoning,
-// redacted-reasoning, tool calls, and image attachments per turn, but the
-// OpenAI/Anthropic proxy surface only exposes plain user/assistant text, so
-// each historical turn maps to a single text content block.
+// Tool_use / tool_result JSON that the Anthropic parser flattened into a
+// turn is restored onto ConversationHistoryToolCall / ToolMessage so a
+// later Cursor run can see the tool chain instead of opaque text.
 func buildConversationHistory(turns []HistoryTurn) *cursorpb.AgentV1_ConversationHistory {
 	if len(turns) == 0 {
 		return nil
@@ -191,27 +192,11 @@ func buildConversationHistory(turns []HistoryTurn) *cursorpb.AgentV1_Conversatio
 		}
 		switch t.Role {
 		case "user":
-			userMsg := &cursorpb.AgentV1_ConversationHistoryUserMessage{
-				Content: []*cursorpb.AgentV1_ConversationHistoryUserContent{{
-					Content: &cursorpb.AgentV1_ConversationHistoryUserContent_Text{
-						Text: &cursorpb.AgentV1_ConversationHistoryTextContent{Text: t.Content},
-					},
-				}},
-			}
-			msgs = append(msgs, &cursorpb.AgentV1_ConversationHistoryMessage{
-				Message: &cursorpb.AgentV1_ConversationHistoryMessage_User{User: userMsg},
-			})
+			msgs = append(msgs, conversationHistoryFromUser(t.Content)...)
 		case "assistant":
-			asstMsg := &cursorpb.AgentV1_ConversationHistoryAssistantMessage{
-				Content: []*cursorpb.AgentV1_ConversationHistoryAssistantContent{{
-					Content: &cursorpb.AgentV1_ConversationHistoryAssistantContent_Text{
-						Text: &cursorpb.AgentV1_ConversationHistoryTextContent{Text: t.Content},
-					},
-				}},
+			if msg := conversationHistoryFromAssistant(t.Content); msg != nil {
+				msgs = append(msgs, msg)
 			}
-			msgs = append(msgs, &cursorpb.AgentV1_ConversationHistoryMessage{
-				Message: &cursorpb.AgentV1_ConversationHistoryMessage_Assistant{Assistant: asstMsg},
-			})
 		}
 	}
 	if len(msgs) == 0 {
@@ -249,6 +234,120 @@ func buildPrependUserMessages(turns []HistoryTurn) []*cursorpb.AgentV1_UserMessa
 		out = append(out, &cursorpb.AgentV1_UserMessage{Text: text})
 	}
 	return out
+}
+
+func conversationHistoryFromUser(content string) []*cursorpb.AgentV1_ConversationHistoryMessage {
+	fragments := ParseContentFragments(content)
+	if len(fragments) == 0 {
+		return []*cursorpb.AgentV1_ConversationHistoryMessage{userHistoryText(content)}
+	}
+	var msgs []*cursorpb.AgentV1_ConversationHistoryMessage
+	var text strings.Builder
+	flushText := func() {
+		if text.Len() == 0 {
+			return
+		}
+		msgs = append(msgs, userHistoryText(text.String()))
+		text.Reset()
+	}
+	for _, fragment := range fragments {
+		switch fragment.Kind {
+		case ContentToolResult:
+			flushText()
+			result := fragment.Result
+			if result == "" {
+				result = fragment.Text
+			}
+			msgs = append(msgs, &cursorpb.AgentV1_ConversationHistoryMessage{
+				Message: &cursorpb.AgentV1_ConversationHistoryMessage_Tool{
+					Tool: &cursorpb.AgentV1_ConversationHistoryToolMessage{
+						ToolCallId: fragment.ToolID,
+						ToolName:   fragment.ToolName,
+						IsError:    ptr(fragment.IsError),
+						Content: []*cursorpb.AgentV1_ConversationHistoryToolResultContent{{
+							Content: &cursorpb.AgentV1_ConversationHistoryToolResultContent_Text{
+								Text: &cursorpb.AgentV1_ConversationHistoryTextContent{Text: result},
+							},
+						}},
+					},
+				},
+			})
+		default:
+			if text.Len() > 0 {
+				text.WriteByte('\n')
+			}
+			text.WriteString(fragment.Transcript())
+		}
+	}
+	flushText()
+	return msgs
+}
+
+func conversationHistoryFromAssistant(content string) *cursorpb.AgentV1_ConversationHistoryMessage {
+	fragments := ParseContentFragments(content)
+	if len(fragments) == 0 {
+		return assistantHistoryText(content)
+	}
+	var parts []*cursorpb.AgentV1_ConversationHistoryAssistantContent
+	for _, fragment := range fragments {
+		switch fragment.Kind {
+		case ContentToolUse:
+			parts = append(parts, &cursorpb.AgentV1_ConversationHistoryAssistantContent{
+				Content: &cursorpb.AgentV1_ConversationHistoryAssistantContent_ToolCall{
+					ToolCall: &cursorpb.AgentV1_ConversationHistoryToolCall{
+						ToolCallId: fragment.ToolID,
+						ToolName:   fragment.ToolName,
+						ArgsJson:   fragment.ArgsJSON,
+					},
+				},
+			})
+		default:
+			if fragment.Text == "" {
+				continue
+			}
+			parts = append(parts, &cursorpb.AgentV1_ConversationHistoryAssistantContent{
+				Content: &cursorpb.AgentV1_ConversationHistoryAssistantContent_Text{
+					Text: &cursorpb.AgentV1_ConversationHistoryTextContent{Text: fragment.Text},
+				},
+			})
+		}
+	}
+	if len(parts) == 0 {
+		return assistantHistoryText(content)
+	}
+	return &cursorpb.AgentV1_ConversationHistoryMessage{
+		Message: &cursorpb.AgentV1_ConversationHistoryMessage_Assistant{
+			Assistant: &cursorpb.AgentV1_ConversationHistoryAssistantMessage{Content: parts},
+		},
+	}
+}
+
+func userHistoryText(text string) *cursorpb.AgentV1_ConversationHistoryMessage {
+	return &cursorpb.AgentV1_ConversationHistoryMessage{
+		Message: &cursorpb.AgentV1_ConversationHistoryMessage_User{
+			User: &cursorpb.AgentV1_ConversationHistoryUserMessage{
+				Content: []*cursorpb.AgentV1_ConversationHistoryUserContent{{
+					Content: &cursorpb.AgentV1_ConversationHistoryUserContent_Text{
+						Text: &cursorpb.AgentV1_ConversationHistoryTextContent{Text: text},
+					},
+				}},
+			},
+		},
+	}
+}
+
+func assistantHistoryText(text string) *cursorpb.AgentV1_ConversationHistoryMessage {
+	return &cursorpb.AgentV1_ConversationHistoryMessage{
+		Message: &cursorpb.AgentV1_ConversationHistoryMessage_Assistant{
+			Assistant: &cursorpb.AgentV1_ConversationHistoryAssistantMessage{
+				Content: []*cursorpb.AgentV1_ConversationHistoryAssistantContent{{
+					Content: &cursorpb.AgentV1_ConversationHistoryAssistantContent_Text{
+						Text: &cursorpb.AgentV1_ConversationHistoryTextContent{Text: text},
+					},
+				}},
+			},
+		},
+	}
 }
 
 func ptr[T any](v T) *T { return &v }

@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"strings"
 	"testing"
 
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
@@ -53,6 +54,62 @@ func TestBuildAgentRunRequest_EnablesNativeWebTools(t *testing.T) {
 	if !ctx.GetWebSearchEnabled() || !ctx.GetWebFetchEnabled() {
 		t.Fatalf("native web flags not enabled: search=%v fetch=%v", ctx.GetWebSearchEnabled(), ctx.GetWebFetchEnabled())
 	}
+}
+
+func TestBuildConversationHistory_ToolUseAndResult(t *testing.T) {
+	hist := buildConversationHistory([]HistoryTurn{
+		{Role: "user", Content: "Check Shanghai weather."},
+		{Role: "assistant", Content: "I'll check.\n" + `{"type":"tool_use","id":"toolu_123","name":"get_weather","input":{"city":"Shanghai"}}`},
+		{Role: "user", Content: `{"type":"tool_result","tool_use_id":"toolu_123","content":"Sunny, 28 C."}`},
+	})
+	if hist == nil || len(hist.Messages) != 3 {
+		t.Fatalf("history messages = %+v, want 3", hist)
+	}
+	asst := hist.Messages[1].GetAssistant()
+	if asst == nil || len(asst.Content) != 2 {
+		t.Fatalf("assistant content = %+v", asst)
+	}
+	if asst.Content[0].GetText().GetText() != "I'll check." {
+		t.Fatalf("assistant text = %q", asst.Content[0].GetText().GetText())
+	}
+	call := asst.Content[1].GetToolCall()
+	if call.GetToolName() != "get_weather" || call.GetToolCallId() != "toolu_123" {
+		t.Fatalf("tool call = %+v", call)
+	}
+	if call.GetArgsJson() != `{"city":"Shanghai"}` {
+		t.Fatalf("args = %q", call.GetArgsJson())
+	}
+	tool := hist.Messages[2].GetTool()
+	if tool == nil || tool.GetToolCallId() != "toolu_123" {
+		t.Fatalf("tool message = %+v", tool)
+	}
+	if tool.GetContent()[0].GetText().GetText() != "Sunny, 28 C." {
+		t.Fatalf("tool result text = %q", tool.GetContent()[0].GetText().GetText())
+	}
+}
+
+func TestParseContentFragmentsAndContinuation(t *testing.T) {
+	raw := `{"type":"tool_result","tool_use_id":"toolu_123","content":"Sunny, 28 C."}`
+	got := ParseContentFragments(raw)
+	if len(got) != 1 || got[0].Kind != ContentToolResult || got[0].Result != "Sunny, 28 C." {
+		t.Fatalf("fragments = %+v", got)
+	}
+	transcript := spliceHistory([]HistoryTurn{
+		{Role: "assistant", Content: `{"type":"tool_use","id":"toolu_123","name":"get_weather","input":{"city":"Paris"}}`},
+		{Role: "user", Content: raw},
+	}, "summarize")
+	if !containsAll(transcript, "[tool_use name=get_weather id=toolu_123]", "[tool_result id=toolu_123]", "Sunny, 28 C.") {
+		t.Fatalf("transcript = %q", transcript)
+	}
+}
+
+func containsAll(s string, needles ...string) bool {
+	for _, needle := range needles {
+		if !strings.Contains(s, needle) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestBuildAgentRunRequest_UsesRoutedRequestedModel(t *testing.T) {
