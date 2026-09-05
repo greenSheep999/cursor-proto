@@ -220,8 +220,16 @@ def build_ref_map(js: str):
     or                       XXX=<ns>.makeEnum("...",[...])
     """
     ref = {}
+    # No \b before the capture group: \b is a word-boundary assertion, and "$"
+    # is not a word character, so "\b\$Bt" never matches when the binding is
+    # preceded by "," or ";" (i.e. almost always in minified output). Cursor's
+    # minifier emits more and more $-prefixed names in each release — 3 such
+    # bindings were missed in 3.15.19, 126 in 3.17.21, and 197 in 3.19.7 — and
+    # every miss silently degrades that field to `bytes` in the generated Go.
+    # Anchor on the assignment shape instead; a leading identifier character
+    # that got absorbed into the group would not form a valid binding anyway.
     pat = re.compile(
-        r'\b([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$]*\.make(?:MessageType|Enum)\(\s*"([a-zA-Z_][\w.]*)"'
+        r'([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$]*\.make(?:MessageType|Enum)\(\s*"([a-zA-Z_][\w.]*)"'
     )
     for m in pat.finditer(js):
         var, tn = m.group(1), m.group(2)
