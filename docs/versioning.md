@@ -72,11 +72,11 @@ Response shape (stable, additive):
 
 ```json
 {
-  "cursor_line":           "3.16",
-  "impersonated_version":  "3.16.17",
-  "impersonated_commit":   "6b2afae0257df2bb5e1835f15165dc2f0de056b0",
-  "release_hash":          "6b2afae0257df2bb5e1835f15165dc2f0de056b2",
-  "proto_version":         "cursor3.16/v0.8.2"
+  "cursor_line":           "3.19",
+  "impersonated_version":  "3.19.7",
+  "impersonated_commit":   "90de2327392570a5f5f625c656c6749d228e6430",
+  "release_hash":          "90de2327392570a5f5f625c656c6749d228e6437",
+  "proto_version":         "cursor3.19/v0.9.0"
 }
 ```
 
@@ -99,6 +99,9 @@ cursor3.11/v0.2.0    # first release impersonating Cursor 3.11.x
 cursor3.11/v0.2.1    # patch on the 3.11 line
 cursor3.15/v0.4.0    # first release impersonating Cursor 3.15.x
 cursor3.16/v0.7.0    # first release impersonating Cursor 3.16.x
+cursor3.17/v0.9.0    # first release impersonating Cursor 3.17.x
+cursor3.18/v0.9.0    # first release impersonating Cursor 3.18.x
+cursor3.19/v0.9.0    # first release impersonating Cursor 3.19.x (current main)
 ```
 
 **Rules**:
@@ -120,7 +123,7 @@ cursor3.16/v0.7.0    # first release impersonating Cursor 3.16.x
 ## Branch model
 
 - `main` — always tracks the **latest supported Cursor version**. Right
-  now that's `cursor3.16`; before that it was `cursor3.15`.
+  now that's `cursor3.19`; before that it was `cursor3.16`.
 - `release/cursor-3.10`, `release/cursor-3.11`, … — long-lived
   maintenance branches, one per Cursor version we still ship. Only
   accepts bug fixes and safety patches; never rebased.

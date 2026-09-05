@@ -8,7 +8,7 @@ Built by rebuilding Cursor's private wire protocol from the shipped
 `workbench.desktop.main.js` (~40 MB) — proto schemas, checksum algorithm,
 machine-id derivation, session identifiers, and header set.
 
-**Currently impersonates Cursor 3.16.17** on `main`. Older supported lines stay
+**Currently impersonates Cursor 3.19.7** on `main`. Older supported lines stay
 on their `release/cursor-<X.Y>` branches. See [docs/versioning.md](docs/versioning.md)
 for the release contract and how downstream consumers should pin.
 
@@ -224,7 +224,7 @@ cursor-proto/
 ## Prerequisites
 
 - Go 1.24+
-- Cursor 3.10.20 installed and signed in (the tools read your access token from
+- Cursor installed and signed in (the tools read your access token from
   Cursor's SQLite storage: `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`)
 - macOS (Linux + Windows machine-id support is scaffolded but untested)
 - CGO enabled (for `mattn/go-sqlite3` — the SQLite reader used by `test-connect`)
