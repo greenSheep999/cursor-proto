@@ -135,6 +135,27 @@ func TestAnthropicNativeWebSearchShape(t *testing.T) {
 	}
 }
 
+func TestAnthropicNativeWebSearchSynthesizesResultWhenUpstreamTimesOut(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-opus-4-8")
+	_ = w.Encode(&Event{
+		Kind:          EventServerToolStarted,
+		ToolCallID:    "srvtoolu_01orphan",
+		ToolName:      "web_search",
+		ToolArgsDelta: `{"query":"today"}`,
+	})
+	end := string(w.Encode(&Event{Kind: EventTurnEnded}))
+	for _, expected := range []string{
+		`"type":"web_search_tool_result"`,
+		`"tool_use_id":"srvtoolu_01orphan"`,
+		`"error_code":"unavailable"`,
+		`"web_search_requests":1`,
+	} {
+		if !strings.Contains(end, expected) {
+			t.Fatalf("missing %s in synthesized search result: %s", expected, end)
+		}
+	}
+}
+
 func TestAnthropicErrorEventShape(t *testing.T) {
 	w := NewAnthropicStreamWriter("claude-opus-5")
 	body := string(w.EncodeError("timeout_error", "upstream timed out"))

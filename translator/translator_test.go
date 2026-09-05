@@ -63,6 +63,64 @@ func TestAnthropicStreamShape(t *testing.T) {
 	}
 }
 
+func TestAnthropicWebSearchResultCarriesPageAge(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-sonnet-5")
+	// Kick off with a server_tool_use frame so blockIndex advances into
+	// the tool-block index space; then feed a web search result.
+	_ = w.Encode(&Event{Kind: EventServerToolStarted, ToolCallID: "srvtoolu_01", ToolName: "web_search"})
+	frame := string(w.Encode(&Event{
+		Kind:       EventWebSearchResult,
+		ToolCallID: "srvtoolu_01",
+		ToolName:   "web_search",
+		WebResults: []WebSearchResult{
+			{URL: "https://example.com/a", Title: "A", Chunk: "chunk-A"},
+		},
+	}))
+	if !strings.Contains(frame, `"page_age":null`) {
+		t.Fatalf("web_search_result missing page_age nullable field:\n%s", frame)
+	}
+	if !strings.Contains(frame, `"encrypted_content":"chunk-A"`) ||
+		!strings.Contains(frame, `"url":"https://example.com/a"`) ||
+		!strings.Contains(frame, `"title":"A"`) {
+		t.Fatalf("web_search_result missing canonical fields:\n%s", frame)
+	}
+}
+
+func TestAnthropicWebSearchEmitsCitationsDeltaOnTextClose(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-sonnet-5")
+	// Preamble: server_tool_use → web_search_tool_result → text → close via TurnEnded.
+	_ = w.Encode(&Event{Kind: EventServerToolStarted, ToolCallID: "srvtoolu_02", ToolName: "web_search"})
+	_ = w.Encode(&Event{
+		Kind:       EventWebSearchResult,
+		ToolCallID: "srvtoolu_02",
+		ToolName:   "web_search",
+		WebResults: []WebSearchResult{
+			{URL: "https://one.example", Title: "One", Chunk: "c1"},
+			{URL: "https://two.example", Title: "Two", Chunk: "c2"},
+		},
+	})
+	_ = w.Encode(&Event{Kind: EventTextDelta, Text: "Cited answer."})
+	tail := string(w.Encode(&Event{Kind: EventTurnEnded, Usage: &Usage{InputTokens: 1, OutputTokens: 1}}))
+	// Both citations must appear inside the tail (before the final
+	// content_block_stop and message_delta).
+	if !strings.Contains(tail, `"type":"citations_delta"`) {
+		t.Fatalf("missing citations_delta on text-block close:\n%s", tail)
+	}
+	if !strings.Contains(tail, `"type":"web_search_result_location"`) {
+		t.Fatalf("citation missing web_search_result_location type:\n%s", tail)
+	}
+	if !strings.Contains(tail, `"encrypted_index":"srvtoolu_02#0"`) ||
+		!strings.Contains(tail, `"encrypted_index":"srvtoolu_02#1"`) {
+		t.Fatalf("expected two encrypted_index citations bound to srvtoolu_02:\n%s", tail)
+	}
+	// Citations must be emitted BEFORE the text block's content_block_stop.
+	stopIdx := strings.Index(tail, `"type":"content_block_stop"`)
+	firstCiteIdx := strings.Index(tail, `"type":"citations_delta"`)
+	if firstCiteIdx < 0 || stopIdx < 0 || firstCiteIdx > stopIdx {
+		t.Fatalf("citations_delta must precede content_block_stop:\n%s", tail)
+	}
+}
+
 func TestAnthropicHeartbeatStartsStreamBeforePing(t *testing.T) {
 	w := NewAnthropicStreamWriter("claude-opus-5")
 	frame := string(w.Encode(&Event{Kind: EventHeartbeat}))
@@ -138,9 +196,9 @@ func TestCanonicalAnthropicToolID(t *testing.T) {
 		server bool
 		want   string
 	}{
-		{"toolu_vrtx_01JurySmHCDBTjuh8LgwtdAZ", false, "toolu_01JurySmHCDBTjuh8LgwtdAZ"},
-		{"toolu_bdrk_014QuhsYS4bAkK5hyQAxoFAY", false, "toolu_014QuhsYS4bAkK5hyQAxoFAY"},
-		{"toolu_vrtx_011mziaTMjdGuZncQr5Y5fUK", true, "srvtoolu_011mziaTMjdGuZncQr5Y5fUK"},
+		{"toolu_vrtx_01JurySmHCDBTjuh8LgwtdAZ", false, "toolu_vrtx_01JurySmHCDBTjuh8LgwtdAZ"},
+		{"toolu_bdrk_014QuhsYS4bAkK5hyQAxoFAY", false, "toolu_bdrk_014QuhsYS4bAkK5hyQAxoFAY"},
+		{"toolu_vrtx_011mziaTMjdGuZncQr5Y5fUK", true, "srvtoolu_vrtx_011mziaTMjdGuZncQr5Y5fUK"},
 		{"srvtoolu_search", true, "srvtoolu_search"},
 		{"toolu_01abc", false, "toolu_01abc"},
 		{"1-fc_abc", false, "toolu_1-fc_abc"},

@@ -34,6 +34,21 @@ const mcpProviderIdentifier = "cursor-tools"
 
 const externalToolPrefix = "mcp_"
 
+func mcpToolDescription(clientName, description string) string {
+	clientName = strings.TrimSpace(clientName)
+	description = strings.TrimSpace(description)
+	if clientName == "" {
+		return description
+	}
+	if description == "" {
+		return "Client tool " + clientName + ". Call this tool as " + SanitizeMcpToolName(clientName) + "."
+	}
+	if strings.HasPrefix(description, clientName) {
+		return description
+	}
+	return clientName + " (call as " + SanitizeMcpToolName(clientName) + "): " + description
+}
+
 // SanitizeMcpToolName returns the wire name for a caller-supplied tool. It
 // places every external tool in a dedicated namespace so it cannot collide
 // with Cursor's built-in tools. Some built-in-looking names fail explicitly,
@@ -96,7 +111,7 @@ func buildMcpToolDefinitions(tools []ToolDefinition) ([]*cursorpb.AgentV1_McpToo
 		}
 		out = append(out, &cursorpb.AgentV1_McpToolDefinition{
 			Name:               safe,
-			Description:        t.Description,
+			Description:        mcpToolDescription(t.Name, t.Description),
 			InputSchema:        schemaBytes,
 			ProviderIdentifier: mcpProviderIdentifier,
 			ToolName:           safe,
@@ -126,7 +141,8 @@ func buildMcpInstructions(tools []ToolDefinition) *cursorpb.AgentV1_McpInstructi
 	sort.Strings(names)
 
 	var b strings.Builder
-	b.WriteString("Available MCP tools:\n")
+	b.WriteString("Available MCP tools. The wire name is mcp_<ClientName>. ")
+	b.WriteString("If the user or system prompt says Glob, Grep, WebFetch, WebSearch, Bash, Read, Write, Edit, or Task, call the matching mcp_* name.\n")
 	for _, n := range names {
 		b.WriteString("- ")
 		b.WriteString(n)
@@ -134,7 +150,7 @@ func buildMcpInstructions(tools []ToolDefinition) *cursorpb.AgentV1_McpInstructi
 		b.WriteString(byName[n])
 		b.WriteString("\n")
 	}
-	b.WriteString("\nCall tools using their exact name and JSON arguments.")
+	b.WriteString("\nCall tools using the mcp_ name and JSON arguments.")
 
 	// The generated proto exposes field 1 as `ServerName` and field 3 as
 	// `ServerIdentifier`. The JS reference (which is the source of truth for

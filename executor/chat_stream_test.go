@@ -75,7 +75,7 @@ func TestReadSSEStream_AutoStopOnToolCall_McpArgs(t *testing.T) {
 
 // frameForTest wraps a proto message in one Connect frame (1-byte flags + 4B
 // big-endian length + payload). Matches splitConnectFrame's expectations.
-func frameForTest(t *testing.T, msg proto.Message) io.ReadCloser {
+func connectFrameBytes(t *testing.T, msg proto.Message) []byte {
 	t.Helper()
 	payload, err := proto.Marshal(msg)
 	if err != nil {
@@ -85,7 +85,44 @@ func frameForTest(t *testing.T, msg proto.Message) io.ReadCloser {
 	buf[0] = 0x00
 	binary.BigEndian.PutUint32(buf[1:5], uint32(len(payload)))
 	copy(buf[5:], payload)
-	return io.NopCloser(bytes.NewReader(buf))
+	return buf
+}
+
+func frameForTest(t *testing.T, msg proto.Message) io.ReadCloser {
+	t.Helper()
+	return io.NopCloser(bytes.NewReader(connectFrameBytes(t, msg)))
+}
+
+// heartbeatAfterFrame yields one Connect frame, then keeps repeating a
+// heartbeat frame until Close. That is the live hang: Cursor approves
+// search, then only pings, and the idle watchdog keeps resetting.
+type heartbeatAfterFrame struct {
+	first     []byte
+	heartbeat []byte
+	closed    chan struct{}
+}
+
+func (h *heartbeatAfterFrame) Read(p []byte) (int, error) {
+	if len(h.first) > 0 {
+		n := copy(p, h.first)
+		h.first = h.first[n:]
+		return n, nil
+	}
+	select {
+	case <-h.closed:
+		return 0, io.EOF
+	case <-time.After(15 * time.Millisecond):
+		return copy(p, h.heartbeat), nil
+	}
+}
+
+func (h *heartbeatAfterFrame) Close() error {
+	select {
+	case <-h.closed:
+	default:
+		close(h.closed)
+	}
+	return nil
 }
 
 // runReadSSE drives readSSEStream against `body` and drains the event channel
@@ -210,6 +247,61 @@ func TestReadSSEStream_DoesNotApproveClientWebSearch(t *testing.T) {
 	}
 	if approved {
 		t.Fatal("approved Cursor native search; Claude Code must execute WebSearch itself")
+	}
+}
+
+func TestReadSSEStream_ServerSearchPermissionTimesOutWithoutResult(t *testing.T) {
+	t.Setenv("CURSOR_SERVER_TOOL_RESULT_TIMEOUT_MS", "80")
+	t.Setenv("CURSOR_STREAM_IDLE_TIMEOUT_MS", "5000")
+
+	query := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionQuery{
+			InteractionQuery: &cursorpb.AgentV1_InteractionQuery{
+				Id: 9,
+				Query: &cursorpb.AgentV1_InteractionQuery_WebSearchRequestQuery{
+					WebSearchRequestQuery: &cursorpb.AgentV1_WebSearchRequestQuery{
+						Args: &cursorpb.AgentV1_WebSearchArgs{SearchTerm: "tokyo date"},
+					},
+				},
+			},
+		},
+	}
+	heartbeat := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionUpdate{
+			InteractionUpdate: &cursorpb.AgentV1_InteractionUpdate{
+				Message: &cursorpb.AgentV1_InteractionUpdate_Heartbeat{
+					Heartbeat: &cursorpb.AgentV1_HeartbeatUpdate{},
+				},
+			},
+		},
+	}
+	body := &heartbeatAfterFrame{
+		first:     connectFrameBytes(t, query),
+		heartbeat: connectFrameBytes(t, heartbeat),
+		closed:    make(chan struct{}),
+	}
+
+	approved := false
+	events := make(chan ChatEvent, 8)
+	done := make(chan struct{})
+	go func() {
+		for range events {
+		}
+	}()
+	go func() {
+		readSSEStream(body, events, false, true, func(*cursorpb.AgentV1_InteractionQuery) error {
+			approved = true
+			return nil
+		}, true)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("server-tool search kept the SSE open after permission + heartbeats; result timeout must arm on the approval")
+	}
+	if !approved {
+		t.Fatal("native web search was not approved")
 	}
 }
 

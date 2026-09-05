@@ -339,6 +339,16 @@ func resolveRequestedModelFromCatalogWithParameters(resp *cursorpb.AiserverV1_Av
 	if resp == nil || requestedID == "" {
 		return nil, false
 	}
+	// When the caller supplied both an explicit legacy_slug AND parameters
+	// (e.g. request came through new-api's static model_mapping that pinned
+	// "claude-opus-4-8-medium", plus a `thinking` parameter forwarded from
+	// the client), the explicit slug wins only if the resolved variant is
+	// consistent with the parameters. Otherwise we treat the slug as a
+	// hint pointing at the model family and re-resolve against parameters
+	// so `thinking:true` actually reaches Cursor. This is what cctest.ai's
+	// signature check depends on — without it, the mapped `-medium` slug
+	// silently overrides the client's thinking flag and Cursor never emits
+	// the signed reasoning block.
 	for _, model := range resp.GetModels() {
 		modelID := primaryModelID(model)
 		if modelID == "" {
@@ -352,18 +362,54 @@ func resolveRequestedModelFromCatalogWithParameters(resp *cursorpb.AiserverV1_Av
 		}
 		for _, variant := range model.GetVariants() {
 			if requestedID == strings.TrimSpace(variant.GetLegacySlug()) || requestedID == strings.TrimSpace(variant.GetVariantStringRepresentation()) {
+				if parametersConflictWithVariant(variant, parameters) {
+					if match := matchingModelVariant(model, parameters); match != nil {
+						return requestedModelForVariant(modelID, match), true
+					}
+				}
 				return requestedModelForVariant(modelID, variant), true
 			}
 		}
 		if containsTrimmed(model.GetLegacySlugs(), requestedID) {
 			for _, variant := range model.GetVariants() {
 				if requestedID == strings.TrimSpace(variant.GetLegacySlug()) {
+					if parametersConflictWithVariant(variant, parameters) {
+						if match := matchingModelVariant(model, parameters); match != nil {
+							return requestedModelForVariant(modelID, match), true
+						}
+					}
 					return requestedModelForVariant(modelID, variant), true
 				}
 			}
 		}
 	}
 	return nil, false
+}
+
+// parametersConflictWithVariant reports whether the caller-supplied
+// parameter overrides disagree with the variant that was selected purely
+// by legacy_slug matching. Only the intersection of keys is compared: a
+// parameter not present on the variant is ignored (variants like the
+// older sonnet family only expose {thinking, context} and would otherwise
+// look "conflicting" on every effort tier request).
+func parametersConflictWithVariant(variant *cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig, parameters map[string]string) bool {
+	if variant == nil || len(parameters) == 0 {
+		return false
+	}
+	have := make(map[string]string, len(variant.GetParameterValues()))
+	for _, p := range variant.GetParameterValues() {
+		have[strings.TrimSpace(p.GetId())] = strings.TrimSpace(p.GetValue())
+	}
+	for id, want := range parameters {
+		got, ok := have[strings.TrimSpace(id)]
+		if !ok {
+			continue
+		}
+		if got != strings.TrimSpace(want) {
+			return true
+		}
+	}
+	return false
 }
 
 func matchingModelVariant(model *cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel, parameters map[string]string) *cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig {

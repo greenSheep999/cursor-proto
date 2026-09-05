@@ -136,6 +136,17 @@ func TestBuildMcpInstructionsShape(t *testing.T) {
 		!strings.Contains(instr.Instructions, "mcp_TodoWrite") {
 		t.Errorf("missing tool names in instructions:\n%s", instr.Instructions)
 	}
+	if !strings.Contains(instr.Instructions, "mcp_<ClientName>") ||
+		!strings.Contains(instr.Instructions, "Glob") {
+		t.Errorf("missing client-name alias hint:\n%s", instr.Instructions)
+	}
+}
+
+func TestMcpToolDescriptionAliasesClientName(t *testing.T) {
+	got := mcpToolDescription("Glob", "Find files by pattern")
+	if !strings.Contains(got, "Glob") || !strings.Contains(got, "mcp_Glob") {
+		t.Fatalf("description = %q, want Glob aliased to mcp_Glob", got)
+	}
 }
 
 func TestBuildMcpInstructionsEmpty(t *testing.T) {

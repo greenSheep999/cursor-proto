@@ -38,6 +38,9 @@ def post(payload, timeout=None):
                 "x-api-key": API_KEY,
                 "authorization": f"Bearer {API_KEY}",
                 "anthropic-version": "2023-06-01",
+                "user-agent": os.environ.get(
+                    "PROBE_USER_AGENT", "claude-cli/2.1.231 (external, cli)"
+                ),
             },
         ),
         timeout=timeout or TIMEOUT,
@@ -475,6 +478,151 @@ def check_document():
     )
 
 
+def check_protocol():
+    """协议合规性: request-id header + Anthropic error envelope."""
+    problems = []
+    with post({
+        "model": MODEL,
+        "max_tokens": 32,
+        "stream": False,
+        "messages": [{"role": "user", "content": "Reply OK"}],
+    }) as response:
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        body = json.loads(response.read())
+    req_id = headers.get("request-id") or headers.get("x-request-id") or ""
+    if not str(req_id).startswith("req_"):
+        problems.append(f"request-id is {req_id!r}, want req_*")
+    if body.get("type") != "message":
+        problems.append(f"top-level type={body.get('type')!r}")
+    try:
+        post({
+            "model": "definitely-not-a-real-model-xyz",
+            "max_tokens": 16,
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        problems.append("invalid model returned HTTP 200")
+    except urllib.error.HTTPError as error:
+        try:
+            err_body = json.loads(error.read())
+        except json.JSONDecodeError:
+            problems.append("error body is not JSON")
+        else:
+            if err_body.get("type") != "error":
+                problems.append(f"error type={err_body.get('type')!r}")
+            inner = err_body.get("error")
+            if not isinstance(inner, dict) or "type" not in inner or "message" not in inner:
+                problems.append(f"error object shape wrong: {inner!r}")
+    return {"request_id": req_id, "problems": problems}
+
+
+def check_fingerprint():
+    """LLM 指纹验证: identity + case-split reasoning that Claude gets right."""
+    problems = []
+    with post({
+        "model": MODEL,
+        "max_tokens": 256,
+        "stream": False,
+        "messages": [{
+            "role": "user",
+            "content": (
+                "Who trained you, and what alignment method is your creator known for? "
+                "One short sentence."
+            ),
+        }],
+    }) as response:
+        identity = "".join(
+            b.get("text", "") for b in json.loads(response.read()).get("content", [])
+            if b.get("type") == "text"
+        ).lower()
+    if "anthropic" not in identity:
+        problems.append(f"did not identify Anthropic: {identity[:140]!r}")
+    if not any(k in identity for k in ("constitutional", "rlhf", "rlaif", "hhh")):
+        problems.append(f"no training-method signal: {identity[:140]!r}")
+
+    with post({
+        "model": MODEL,
+        "max_tokens": 256,
+        "stream": False,
+        "messages": [{
+            "role": "user",
+            "content": (
+                "Anna is looking at Bob, and Bob is looking at Chloe. Anna is married, "
+                "Chloe is not. Is a married person looking at an unmarried person? "
+                "Answer yes, no, or cannot be determined, then one sentence."
+            ),
+        }],
+    }) as response:
+        reason = "".join(
+            b.get("text", "") for b in json.loads(response.read()).get("content", [])
+            if b.get("type") == "text"
+        ).lower()
+    if "yes" not in reason[:400]:
+        problems.append(f"failed case-split reasoning: {reason[:160]!r}")
+    return {"identity": identity[:160], "reason": reason[:160], "problems": problems}
+
+
+def check_knowledge():
+    """知识库检测: Claude-family facts, not a Cursor/GPT persona."""
+    with post({
+        "model": MODEL,
+        "max_tokens": 256,
+        "stream": False,
+        "messages": [{
+            "role": "user",
+            "content": (
+                "Name the company that created you and the family name of your models "
+                "(Claude). Do not mention any IDE or coding assistant brand. "
+                "One short sentence."
+            ),
+        }],
+    }) as response:
+        text = "".join(
+            b.get("text", "") for b in json.loads(response.read()).get("content", [])
+            if b.get("type") == "text"
+        )
+    lower = text.lower()
+    problems = []
+    if "anthropic" not in lower and "claude" not in lower:
+        problems.append(f"no Claude/Anthropic knowledge mark: {text[:160]!r}")
+    leaked = [m for m in ("cursor", "windsurf", "copilot", "gpt-4", "openai") if m in lower]
+    if leaked:
+        problems.append(f"wrong-family brand leaked: {leaked}; {text[:160]!r}")
+    return {"text": text[:200], "problems": problems}
+
+
+def check_token_inject():
+    """Token 注入: tiny prompt must not grow a hidden system prompt or leak it."""
+    with post({
+        "model": MODEL,
+        "max_tokens": 64,
+        "stream": False,
+        "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+    }) as response:
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        body = json.loads(response.read())
+    usage = body.get("usage") or {}
+    input_tokens = int(usage.get("input_tokens") or 0)
+    text = "".join(
+        b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"
+    )
+    problems = []
+    # A one-word user turn is a handful of tokens. Anything in the thousands
+    # is a relay-injected system/harness prompt (Cursor IDE wrapper).
+    if input_tokens > 200:
+        problems.append(f"input_tokens={input_tokens} for a 2-word prompt (hidden injection)")
+    leak_markers = ["cursor", "<user_query>", "workspace", "ask mode", "agent mode"]
+    hit = [m for m in leak_markers if m.lower() in text.lower()]
+    if hit:
+        problems.append(f"injected system prompt leaked: {hit}; {text[:160]!r}")
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": usage.get("output_tokens"),
+        "request_id": headers.get("request-id") or headers.get("x-request-id"),
+        "text": text[:80],
+        "problems": problems,
+    }
+
+
 def check_signature():
     """签名校验: thinking blocks must carry an unmodified signature_delta."""
     started = time.monotonic()
@@ -516,15 +664,18 @@ def check_signature():
 
 
 CHECKS = {
-    "stream": ("流结构校验/协议合规性", check_stream_structure),
+    "fingerprint": ("LLM 指纹验证", check_fingerprint),
     "nonstream": ("非流结构校验", check_nonstream_structure),
-    "tools": ("工具调用", check_tool_calling),
-    "structured": ("结构化输出", check_structured_output),
-    "websearch": ("WebSearch", check_websearch),
-    "image": ("图片识别 (base64)", check_image),
-    "image_url": ("图片识别 (url)", check_image_url),
-    "document": ("文档识别", check_document),
     "signature": ("签名校验", check_signature),
+    "tools": ("工具调用", check_tool_calling),
+    "knowledge": ("知识库检测", check_knowledge),
+    "image": ("图片识别", check_image),
+    "stream": ("流结构校验", check_stream_structure),
+    "websearch": ("WebSearch", check_websearch),
+    "structured": ("结构化输出", check_structured_output),
+    "token_inject": ("Token 注入", check_token_inject),
+    "document": ("文档识别", check_document),
+    "protocol": ("协议合规性", check_protocol),
 }
 
 

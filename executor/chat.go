@@ -317,8 +317,10 @@ const defaultStreamIdleTimeout = 120 * time.Second
 // defaultServerToolResultTimeout bounds how long we wait after Cursor starts
 // a native web search when the caller asked for Anthropic's server tool. The
 // idle watchdog resets on heartbeats, so a search that never returns would
-// otherwise hold the stream open until the request deadline.
-const defaultServerToolResultTimeout = 60 * time.Second
+// otherwise hold the stream open until the request deadline. Keep this under
+// typical client/cctest abort windows; live successful searches finish in
+// well under this.
+const defaultServerToolResultTimeout = 45 * time.Second
 
 func serverToolResultTimeout() time.Duration {
 	raw := strings.TrimSpace(os.Getenv("CURSOR_SERVER_TOOL_RESULT_TIMEOUT_MS"))
@@ -462,6 +464,11 @@ func readSSEStream(body io.ReadCloser, out chan<- ChatEvent, autoStopOnTurnEnd, 
 									out <- ev
 									return
 								}
+								// Cursor often keeps heartbeating after the
+								// approval and never emits ToolCallStarted.
+								// Arm the result watchdog here or the idle
+								// timer resets forever and the client hangs.
+								armServerToolResultTimeout()
 							}
 							// Claude Code's WebSearch/WebFetch are client tools. Approving
 							// Cursor's native search here starts a server-side run the CLI

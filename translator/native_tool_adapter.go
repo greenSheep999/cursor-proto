@@ -174,12 +174,12 @@ const (
 )
 
 var claudeCodeFallbackToolNames = map[string]string{
-	"bash":      "Bash",
-	"read":      "Read",
-	"write":     "Write",
-	"grep":      "Grep",
-	"glob":      "Glob",
-	"ls":        "LS",
+	"bash":       "Bash",
+	"read":       "Read",
+	"write":      "Write",
+	"grep":       "Grep",
+	"glob":       "Glob",
+	"ls":         "LS",
 	"web_fetch":  "WebFetch",
 	"web_search": "WebSearch",
 }

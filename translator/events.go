@@ -291,6 +291,9 @@ func FromServerMessage(m *cursorpb.AgentV1_AgentServerMessage) *Event {
 	if c := iu.GetToolCallCompleted(); c != nil {
 		tc := c.GetToolCall()
 		if tc != nil {
+			if fetch := fetchResultEvent(c.GetCallId(), tc); fetch != nil {
+				return fetch
+			}
 			if webSearch := tc.GetWebSearchToolCall(); webSearch != nil {
 				callID := pickFirstNonEmpty(c.GetCallId(), webSearch.GetArgs().GetToolCallId())
 				event := &Event{
@@ -386,6 +389,65 @@ func eventFromInteractionQuery(query *cursorpb.AgentV1_InteractionQuery) *Event 
 			ToolName:      "web_fetch",
 			ToolArgsDelta: string(encoded),
 		}
+	}
+	return nil
+}
+
+func fetchResultEvent(callID string, tc *cursorpb.AgentV1_ToolCall) *Event {
+	if tc == nil {
+		return nil
+	}
+	if fetch := tc.GetFetchToolCall(); fetch != nil {
+		id := pickFirstNonEmpty(callID, fetch.GetArgs().GetToolCallId())
+		event := &Event{
+			Kind:       EventWebSearchResult,
+			ToolCallID: sanitizeToolCallID(id),
+			ToolName:   "web_fetch",
+		}
+		if result := fetch.GetResult(); result != nil {
+			switch {
+			case result.GetSuccess() != nil:
+				success := result.GetSuccess()
+				event.WebResults = []WebSearchResult{{
+					URL:   success.GetUrl(),
+					Title: success.GetUrl(),
+					Chunk: success.GetContent(),
+				}}
+			case result.GetError() != nil:
+				event.ToolError = result.GetError().GetError()
+				event.WebResults = []WebSearchResult{{URL: result.GetError().GetUrl()}}
+			}
+		} else if args := fetch.GetArgs(); args != nil {
+			event.WebResults = []WebSearchResult{{URL: args.GetUrl()}}
+		}
+		return event
+	}
+	if fetch := tc.GetWebFetchToolCall(); fetch != nil {
+		id := pickFirstNonEmpty(callID, fetch.GetArgs().GetToolCallId())
+		event := &Event{
+			Kind:       EventWebSearchResult,
+			ToolCallID: sanitizeToolCallID(id),
+			ToolName:   "web_fetch",
+		}
+		if result := fetch.GetResult(); result != nil {
+			switch {
+			case result.GetSuccess() != nil:
+				success := result.GetSuccess()
+				event.WebResults = []WebSearchResult{{
+					URL:   success.GetUrl(),
+					Title: success.GetUrl(),
+					Chunk: success.GetMarkdown(),
+				}}
+			case result.GetError() != nil:
+				event.ToolError = result.GetError().GetError()
+				event.WebResults = []WebSearchResult{{URL: result.GetError().GetUrl()}}
+			case result.GetRejected() != nil:
+				event.ToolError = result.GetRejected().GetReason()
+			}
+		} else if args := fetch.GetArgs(); args != nil {
+			event.WebResults = []WebSearchResult{{URL: args.GetUrl()}}
+		}
+		return event
 	}
 	return nil
 }

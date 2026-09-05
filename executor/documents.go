@@ -45,7 +45,7 @@ func PrepareDocumentAttachments(userText string, attachments []Attachment) (stri
 			continue
 		}
 		if len(text) > maxInlinedDocumentText {
-			text = text[:maxInlinedDocumentText] + "\n[document truncated]"
+			text = truncateUTF8ByBytes(text, maxInlinedDocumentText) + "\n[document truncated]"
 		}
 		documents = append(documents, fmt.Sprintf("<document filename=\"%s\">\n%s\n</document>",
 			html.EscapeString(documentFilename(attachment)), text))
@@ -60,6 +60,20 @@ func PrepareDocumentAttachments(userText string, attachments []Attachment) (stri
 	}
 	parts = append(parts, documents...)
 	return strings.Join(parts, "\n\n"), kept
+}
+
+func truncateUTF8ByBytes(text string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+	end := maxBytes
+	for end > 0 && !utf8.RuneStart(text[end]) {
+		end--
+	}
+	return text[:end]
 }
 
 func documentFilename(attachment Attachment) string {

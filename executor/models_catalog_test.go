@@ -154,13 +154,43 @@ func TestResolveRequestedModelMatchesLiveVariantParameters(t *testing.T) {
 	})
 }
 
-func TestResolveRequestedModelExplicitVariantWinsOverParameters(t *testing.T) {
+// TestResolveRequestedModelExplicitVariantHonoursParameterOverride pins the
+// cctest.ai-driven fix: an upstream router (like new-api's static
+// model_mapping) that rewrites the client's `claude-opus-4-8` request to
+// the concrete slug `claude-opus-4-8-medium` must not silently strip a
+// thinking=true parameter the client also sent. The signature check
+// depends on Cursor actually running the thinking variant; if we honour
+// the slug verbatim, Cursor returns a text-only block and the check
+// fails. When the slug's parameter values conflict with the caller's
+// overrides on any shared key, we re-resolve against the parameters and
+// pick the variant the caller actually wanted.
+func TestResolveRequestedModelExplicitVariantHonoursParameterOverride(t *testing.T) {
 	got, ok := resolveRequestedModelFromCatalogWithParameters(modelCatalogFixture(), "claude-opus-4-8-medium", map[string]string{
 		"thinking": "true",
 		"effort":   "high",
 	})
 	if !ok {
-		t.Fatal("expected explicit variant to resolve")
+		t.Fatal("expected variant to resolve")
+	}
+	assertRequestedParameters(t, got, map[string]string{
+		"thinking": "true",
+		"context":  "300k",
+		"effort":   "high",
+		"fast":     "false",
+	})
+}
+
+// TestResolveRequestedModelExplicitVariantPreservedWhenParametersAgree
+// confirms the compatibility path: a slug + parameters that are simply
+// redundant (thinking=false requested against the -medium slug that is
+// already thinking=false) must resolve to the slug's own variant, not
+// spin off into a re-scan.
+func TestResolveRequestedModelExplicitVariantPreservedWhenParametersAgree(t *testing.T) {
+	got, ok := resolveRequestedModelFromCatalogWithParameters(modelCatalogFixture(), "claude-opus-4-8-medium", map[string]string{
+		"thinking": "false",
+	})
+	if !ok {
+		t.Fatal("expected variant to resolve")
 	}
 	assertRequestedParameters(t, got, map[string]string{
 		"thinking": "false",
