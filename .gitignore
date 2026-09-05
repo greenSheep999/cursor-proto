@@ -72,6 +72,22 @@ captures/wb-*.js.gz
 /*.png
 
 # ============================================================================
+# Phase verification logs. These are one-shot transcripts from manual
+# end-to-end runs and embed real account emails plus token metadata, so
+# they must never be tracked in a public repo. Keep locally while a phase
+# is in flight; the durable record belongs in docs/ or a test.
+# ============================================================================
+phase-*-verify.log
+
+# Ad-hoc Playwright/CDP login probes driven while reverse-engineering the
+# web-session auth flow. They read credentials from the environment and are
+# rewritten on every investigation, so they stay local.
+.tmp-cursor-*.js
+
+# Local review write-ups (point-in-time audits, not part of the shipped docs).
+review/
+
+# ============================================================================
 # OS junk
 # ============================================================================
 .DS_Store
