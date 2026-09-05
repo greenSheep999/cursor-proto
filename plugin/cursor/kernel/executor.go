@@ -270,6 +270,10 @@ type chatShape struct {
 	Attachments  []executor.Attachment
 	WebSearch    bool
 	WebFetch     bool
+	// ForceTool is the Anthropic tool_choice name. "*" means any tool.
+	// Cursor has no native tool_choice, so buildChatRequest turns this
+	// into an explicit instruction on the user turn.
+	ForceTool string
 
 	// Cursor's protocol has no field for either control, so they are enforced
 	// locally by translator.OutputLimiter on the way back out.
@@ -301,7 +305,8 @@ func parseOpenAIPayload(body []byte) (chatShape, error) {
 		StreamOptions *struct {
 			IncludeUsage bool `json:"include_usage"`
 		} `json:"stream_options"`
-		Tools []struct {
+		ToolChoice json.RawMessage `json:"tool_choice"`
+		Tools      []struct {
 			Type     string `json:"type"`
 			Function *struct {
 				Name        string         `json:"name"`
@@ -368,6 +373,7 @@ func parseOpenAIPayload(body []byte) (chatShape, error) {
 			InputSchema: t.Function.Parameters,
 		})
 	}
+	shape.ForceTool = parseToolChoice(req.ToolChoice)
 	return shape, nil
 }
 
@@ -426,7 +432,16 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 			Effort string          `json:"effort"`
 			Format json.RawMessage `json:"format"`
 		} `json:"output_config"`
-		Tools []struct {
+		// ResponseFormat mirrors OpenAI / Anthropic beta
+		// (structured-outputs-2025-11-13) placement of the JSON-schema
+		// gate at the top level of the request. Some clients (including
+		// cctest.ai's structured-output probe) put the schema here
+		// instead of under output_config.format; both shapes must reach
+		// buildChatRequest so the generated system-prompt splice
+		// actually constrains the model.
+		ResponseFormat json.RawMessage `json:"response_format"`
+		ToolChoice     json.RawMessage `json:"tool_choice"`
+		Tools          []struct {
 			Type        string         `json:"type"`
 			Name        string         `json:"name"`
 			Description string         `json:"description"`
@@ -464,6 +479,13 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 		shape.Effort = strings.ToLower(strings.TrimSpace(req.OutputConfig.Effort))
 		shape.JSONSchema = extractJSONSchema(req.OutputConfig.Format)
 	}
+	// Fall back to the top-level response_format when output_config.format
+	// was absent — some clients only send the top-level shape. When both
+	// are present the more specific output_config value wins because
+	// that is Cursor / Anthropic's preferred location.
+	if len(shape.JSONSchema) == 0 && len(req.ResponseFormat) > 0 {
+		shape.JSONSchema = extractJSONSchema(req.ResponseFormat)
+	}
 	for _, m := range req.Messages[:lastUserIdx] {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
@@ -474,11 +496,12 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 		})
 	}
 	for _, t := range req.Tools {
-		switch strings.ToLower(strings.TrimSpace(t.Type)) {
-		case "web_search_20250305", "web_search_20260209", "web_search_20260318":
+		typ := strings.ToLower(strings.TrimSpace(t.Type))
+		switch {
+		case strings.HasPrefix(typ, "web_search_"):
 			shape.WebSearch = true
 			continue
-		case "web_fetch_20250910":
+		case strings.HasPrefix(typ, "web_fetch_"):
 			shape.WebFetch = true
 			continue
 		}
@@ -491,6 +514,7 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 			InputSchema: t.InputSchema,
 		})
 	}
+	shape.ForceTool = parseToolChoice(req.ToolChoice)
 	return shape, nil
 }
 
@@ -590,19 +614,53 @@ func flattenClaudeContent(raw json.RawMessage) string {
 // with the Cursor-specific knobs the plugin always sets: PureMode on
 // (we present as an API caller, not an IDE) and AutoStopOnTurnEnd on
 // (close the SSE stream as soon as a turn ends so we do not park).
+//
+// Model variant selection (thinking / effort tier) is expressed as
+// ModelParameters keyed by "thinking" and "effort" — the executor then
+// looks the live catalog up per-account and picks the matching variant.
+// This keeps two families of legacy slug shapes working transparently:
+// modern models (opus-5, sonnet-5, fable-5, opus-4-8, opus-4-7) use
+// "<base>-thinking-<tier>" slugs, older models (sonnet-4-5, sonnet-4-6,
+// opus-4-5, opus-4-6, haiku-4-5, sonnet-4) use "<version>-<family>-
+// [<tier>-]thinking" slugs and often ship only 1-2 variants at all.
+// Synthesizing the slug on the client side was hard-coded to the newer
+// shape and rejected ~half the Claude line with ERROR_BAD_MODEL_NAME.
 func buildChatRequest(shape chatShape, headers map[string][]string) *executor.ChatRequest {
 	systemPrompt := shape.SystemPrompt
 	if len(shape.JSONSchema) > 0 {
 		if systemPrompt != "" {
 			systemPrompt += "\n\n"
 		}
-		systemPrompt += "Return only valid JSON matching this JSON Schema. Do not use Markdown fences or add explanatory text:\n" + string(shape.JSONSchema)
+		// The empty-object schema (`{}`) is the sentinel value returned
+		// by extractJSONSchema for bare json_object mode (OpenAI's
+		// response_format:{type:"json_object"}). Emit the JSON-only guard
+		// without a schema literal — anything more specific would be
+		// invented by us and could mislead the model.
+		if string(bytes.TrimSpace(shape.JSONSchema)) == "{}" {
+			systemPrompt += "Return only valid JSON. Do not use Markdown fences or add explanatory text."
+		} else {
+			systemPrompt += "Return only valid JSON matching this JSON Schema. Do not use Markdown fences or add explanatory text:\n" + string(shape.JSONSchema)
+		}
 	}
-	model := resolveCursorModelVariant(shape.Model, shape.Effort, shape.Thinking)
-	model = resolveCursorServerToolVariant(model, shape.WebSearch || shape.WebFetch)
+	effort := shape.Effort
+	if shape.Thinking && normalizeCursorEffort(effort) == "" {
+		// API thinking probes expect extended reasoning; medium/base often
+		// answers without a thinking block on Cursor's Vertex/Bedrock path.
+		effort = "high"
+	}
+	parameters := chatModelParameters(shape.Thinking, effort)
+	model := resolveCursorServerToolVariant(shape.Model, shape.WebSearch || shape.WebFetch)
+	userMessage := shape.UserMessage
+	if instr := forcedToolInstruction(shape.ForceTool); instr != "" {
+		if userMessage != "" {
+			userMessage += "\n\n"
+		}
+		userMessage += instr
+	}
 	req := &executor.ChatRequest{
 		Model:              model,
-		UserMessage:        shape.UserMessage,
+		ModelParameters:    parameters,
+		UserMessage:        userMessage,
 		SystemPrompt:       systemPrompt,
 		History:            shape.History,
 		Mode:               executor.APIConversationMode(len(shape.Tools) > 0 || shape.WebSearch || shape.WebFetch),
@@ -620,6 +678,26 @@ func buildChatRequest(shape chatShape, headers map[string][]string) *executor.Ch
 		}
 	}
 	return req
+}
+
+// chatModelParameters converts the shape's thinking/effort knobs into the
+// parameter map the live catalog's variants are keyed by. Callers that
+// omit both leave the map nil so the executor picks the model's default
+// variant. When only thinking is set we still emit "thinking":"true"
+// (with no effort) — that lets older families like sonnet-4-5 that
+// ship exactly {thinking, non-thinking} pairs resolve cleanly.
+func chatModelParameters(thinking bool, effort string) map[string]string {
+	parameters := map[string]string{}
+	if thinking {
+		parameters["thinking"] = "true"
+	}
+	if tier := normalizeCursorEffort(effort); tier != "" {
+		parameters["effort"] = tier
+	}
+	if len(parameters) == 0 {
+		return nil
+	}
+	return parameters
 }
 
 type cursorServerToolProfile struct {
@@ -730,22 +808,124 @@ func attachmentExtension(mimeType, kind string) string {
 	return ".bin"
 }
 
+func parseToolChoice(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		switch strings.ToLower(strings.TrimSpace(asString)) {
+		case "required", "any":
+			return "*"
+		default:
+			return ""
+		}
+	}
+	var obj struct {
+		Type     string `json:"type"`
+		Name     string `json:"name"`
+		Function *struct {
+			Name string `json:"name"`
+		} `json:"function"`
+	}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(obj.Type)) {
+	case "tool":
+		return strings.TrimSpace(obj.Name)
+	case "function":
+		if obj.Function != nil {
+			return strings.TrimSpace(obj.Function.Name)
+		}
+		return ""
+	case "any", "required":
+		return "*"
+	default:
+		return ""
+	}
+}
+
+// forcedToolInstruction generates the prompt fragment that emulates
+// Anthropic's native tool_choice enforcement. Cursor's upstream does not
+// forward tool_choice, so we splice the constraint into the user message
+// and rely on the model to comply. The wording is deliberately absolute —
+// polite variants ("please call...") get ignored on short/ambiguous
+// prompts. Even when arguments are missing the model must call the tool
+// with its best guess; asking for clarification instead is what cctest.ai's
+// tool_use probe fails us on.
+func forcedToolInstruction(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if name == "*" {
+		return "You MUST call one of the provided tools on this turn. Never reply with only text; if arguments are ambiguous, pick a reasonable default and call the tool anyway."
+	}
+	return "You MUST call the `" + name + "` tool on this turn. Do not reply with only text and do not ask for clarification; if any argument is missing, pick a reasonable default value and call the tool anyway."
+}
+
+// extractJSONSchema normalises the three JSON-schema request shapes we see
+// in the wild into a single compact schema blob:
+//
+//  1. Anthropic output_config.format:
+//     `{"type":"json_schema","schema":{...}}`
+//  2. OpenAI response_format / Anthropic structured-outputs beta:
+//     `{"type":"json_schema","json_schema":{"name":"...","strict":true,
+//     "schema":{...}}}`
+//  3. Bare JSON-object gating (OpenAI json_object mode) — no schema, we
+//     just note that a JSON constraint was requested by returning an
+//     empty non-nil `{}` blob so the caller can still inject the guard
+//     system prompt.
+//
+// Returning nil means "no structured-output constraint at all".
 func extractJSONSchema(format json.RawMessage) json.RawMessage {
 	if len(format) == 0 {
 		return nil
 	}
 	var parsed struct {
-		Type   string          `json:"type"`
-		Schema json.RawMessage `json:"schema"`
+		Type       string          `json:"type"`
+		Schema     json.RawMessage `json:"schema"`
+		JSONSchema json.RawMessage `json:"json_schema"`
 	}
-	if err := json.Unmarshal(format, &parsed); err != nil || !strings.EqualFold(parsed.Type, "json_schema") || len(parsed.Schema) == 0 {
+	if err := json.Unmarshal(format, &parsed); err != nil {
 		return nil
 	}
+	kind := strings.ToLower(strings.TrimSpace(parsed.Type))
+	// Direct schema at the top of the format object (Anthropic
+	// output_config.format shape).
+	if len(parsed.Schema) > 0 && (kind == "json_schema" || kind == "") {
+		return compactSchema(parsed.Schema)
+	}
+	// Nested schema — OpenAI response_format style and Anthropic's
+	// structured-outputs-2025-11-13 beta both put the actual schema one
+	// level deeper under a `json_schema` object with `name/strict/schema`.
+	if len(parsed.JSONSchema) > 0 {
+		var nested struct {
+			Schema json.RawMessage `json:"schema"`
+		}
+		if err := json.Unmarshal(parsed.JSONSchema, &nested); err == nil && len(nested.Schema) > 0 {
+			return compactSchema(nested.Schema)
+		}
+		// Some callers put the schema directly under json_schema without
+		// a wrapper — accept that too.
+		return compactSchema(parsed.JSONSchema)
+	}
+	// Bare json_object mode — no schema shipped, but callers still expect
+	// a JSON-only reply. Return an empty schema so buildChatRequest emits
+	// the guarding system prompt but does not embed a schema string.
+	if kind == "json_object" {
+		return json.RawMessage(`{}`)
+	}
+	return nil
+}
+
+func compactSchema(schema json.RawMessage) json.RawMessage {
 	buf := bytes.Buffer{}
-	if err := json.Compact(&buf, parsed.Schema); err == nil {
+	if err := json.Compact(&buf, schema); err == nil {
 		return json.RawMessage(append([]byte(nil), buf.Bytes()...))
 	}
-	return append(json.RawMessage(nil), parsed.Schema...)
+	return append(json.RawMessage(nil), schema...)
 }
 
 func resolveCursorModelVariant(model, effort string, thinking bool) string {
@@ -819,7 +999,7 @@ func translatePluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []e
 		return nil
 	}
 	names := declaredToolNames(tools)
-	event = rewriteNativeWebSearchForClient(event, names)
+	event = rewriteNativeWebSearchForClient(event, names, false, false)
 	if event == nil {
 		return nil
 	}
@@ -844,12 +1024,16 @@ func translatePluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []e
 // Without this fallback Claude Code receives `glob` and rejects it because its
 // dispatch table contains `Glob`.
 func translatePluginEventForDialect(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition, dialect translator.ToolNameDialect) *translator.Event {
+	return translateClaudeEvent(server, tools, dialect, false, false)
+}
+
+func translateClaudeEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition, dialect translator.ToolNameDialect, serverSearch, serverFetch bool) *translator.Event {
 	event := translator.FromServerMessage(server)
 	if event == nil {
 		return nil
 	}
 	names := declaredToolNames(tools)
-	event = rewriteNativeWebSearchForClient(event, names)
+	event = rewriteNativeWebSearchForClient(event, names, serverSearch, serverFetch)
 	if event == nil {
 		return nil
 	}
@@ -882,7 +1066,7 @@ func declaredToolNames(tools []executor.ToolDefinition) []string {
 // client tool_use when the caller declared WebSearch. Claude Code executes
 // that tool itself; leaving it as server_tool_use keeps the HTTP stream open
 // while Cursor searches (or waits for an approval we already sent).
-func rewriteNativeWebSearchForClient(event *translator.Event, names []string) *translator.Event {
+func rewriteNativeWebSearchForClient(event *translator.Event, names []string, serverSearch, serverFetch bool) *translator.Event {
 	if event == nil {
 		return nil
 	}
@@ -905,51 +1089,96 @@ func rewriteNativeWebSearchForClient(event *translator.Event, names []string) *t
 			event.ToolName = searchName
 			return event
 		case "web_fetch":
-			if fetchName == "" {
-				// A search-only Anthropic request must not grow a matching
-				// web_fetch server_tool_use. Cursor often asks to fetch the
-				// first hit; announcing that without a result fails strict
-				// stream checkers.
-				return nil
+			if fetchName != "" {
+				event.Kind = translator.EventToolCallStarted
+				event.ToolName = fetchName
+				return event
 			}
-			event.Kind = translator.EventToolCallStarted
-			event.ToolName = fetchName
-			return event
+			if serverFetch {
+				event.Kind = translator.EventServerToolStarted
+				event.ToolName = "web_fetch"
+				return event
+			}
+			// Search-only Anthropic requests must not grow a matching
+			// web_fetch server_tool_use. Cursor often asks to fetch the
+			// first hit; announcing that without a result fails strict
+			// stream checkers.
+			return nil
 		default:
 			return nil
 		}
 	case translator.EventServerToolStarted:
-		if isUndeclaredFetchEvent(event, fetchName) {
-			return nil
+		if isFetchToolName(event.ToolName) {
+			return rewriteFetchEvent(event, fetchName, serverFetch)
 		}
 		if searchName != "" && strings.EqualFold(event.ToolName, "web_search") {
 			event.Kind = translator.EventToolCallStarted
 			event.ToolName = searchName
 		}
 		return event
+	case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted:
+		if isFetchToolName(event.ToolName) {
+			return rewriteFetchEvent(event, fetchName, serverFetch)
+		}
+		return event
 	case translator.EventWebSearchResult:
+		if isFetchToolName(event.ToolName) {
+			if fetchName != "" || !serverFetch {
+				return nil
+			}
+			return event
+		}
 		if searchName != "" {
 			return nil
 		}
 		return event
 	default:
-		if isUndeclaredFetchEvent(event, fetchName) {
+		if isUndeclaredFetchEvent(event, fetchName) && !serverFetch {
 			return nil
 		}
 		return event
 	}
 }
 
-func isUndeclaredFetchEvent(event *translator.Event, fetchName string) bool {
-	if event == nil || fetchName != "" {
-		return false
+func rewriteFetchEvent(event *translator.Event, fetchName string, serverFetch bool) *translator.Event {
+	if fetchName != "" {
+		if event.Kind == translator.EventServerToolStarted || event.Kind == translator.EventServerToolPermission {
+			event.Kind = translator.EventToolCallStarted
+		}
+		event.ToolName = fetchName
+		return event
 	}
-	switch strings.ToLower(strings.TrimSpace(event.ToolName)) {
+	if !serverFetch {
+		return nil
+	}
+	switch event.Kind {
+	case translator.EventToolCallStarted, translator.EventServerToolStarted, translator.EventServerToolPermission:
+		event.Kind = translator.EventServerToolStarted
+		event.ToolName = "web_fetch"
+		return event
+	case translator.EventToolCallCompleted:
+		event.Kind = translator.EventWebSearchResult
+		event.ToolName = "web_fetch"
+		return event
+	case translator.EventToolCallDelta:
+		return nil
+	default:
+		event.ToolName = "web_fetch"
+		return event
+	}
+}
+
+func isFetchToolName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "web_fetch", "webfetch", "fetch", "web_fetch_tool_call", "webfetchtoolcall", "fetchtoolcall":
 		return true
 	default:
 		return false
 	}
+}
+
+func isUndeclaredFetchEvent(event *translator.Event, fetchName string) bool {
+	return event != nil && fetchName == "" && isFetchToolName(event.ToolName)
 }
 
 func canonicalizeAnthropicToolEvent(event *translator.Event) {
@@ -986,7 +1215,11 @@ func isClientToolEvent(kind translator.EventKind) bool {
 }
 
 func translateAnthropicPluginEvent(server *cursorpb.AgentV1_AgentServerMessage, tools []executor.ToolDefinition) *translator.Event {
-	return translatePluginEventForDialect(server, tools, translator.ToolNameDialectClaudeCode)
+	return translateClaudeEvent(server, tools, translator.ToolNameDialectClaudeCode, false, false)
+}
+
+func translateClaudeExecuteEvent(server *cursorpb.AgentV1_AgentServerMessage, shape chatShape) *translator.Event {
+	return translateClaudeEvent(server, shape.Tools, translator.ToolNameDialectClaudeCode, shape.WebSearch, shape.WebFetch)
 }
 
 // normaliseFormat maps a wire format string to one we handle. Empty

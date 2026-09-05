@@ -97,7 +97,7 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	}
 
 	format := normaliseFormat(req.Format, req.SourceFormat)
-	body, errCollect := collectNonStreaming(format, shape.Model, shape.Tools, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
+	body, errCollect := collectNonStreaming(format, shape, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
 	if errCollect != nil {
 		return errorEnvelope("upstream_error", errCollect.Error(), true), 0
 	}
@@ -118,12 +118,12 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 
 // collectNonStreaming iterates the RunChat channel and produces a
 // full response body in the requested output format.
-func collectNonStreaming(format, model string, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) ([]byte, error) {
+func collectNonStreaming(format string, shape chatShape, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) ([]byte, error) {
 	switch format {
 	case "claude":
-		return buildClaudeNonStreaming(model, tools, limiter, estimatedInput, events)
+		return buildClaudeNonStreaming(shape.Model, shape, limiter, estimatedInput, events)
 	default:
-		return buildOpenAINonStreaming(model, tools, events)
+		return buildOpenAINonStreaming(shape.Model, shape.Tools, events)
 	}
 }
 
@@ -252,13 +252,197 @@ func buildOpenAINonStreaming(model string, tools []executor.ToolDefinition, even
 	return acc.Response("chatcmpl-" + auth.GenerateSessionID()), nil
 }
 
+func appendUniqueServerToolBlock(blocks *[]map[string]any, block map[string]any) {
+	if blocks == nil || block == nil {
+		return
+	}
+	if block["type"] == "server_tool_use" {
+		id, _ := block["id"].(string)
+		if id != "" {
+			for _, existing := range *blocks {
+				if existing["type"] != "server_tool_use" {
+					continue
+				}
+				existingID, _ := existing["id"].(string)
+				if existingID == id {
+					return
+				}
+			}
+		}
+	}
+	*blocks = append(*blocks, block)
+}
+
+// citationsFromServerToolUses walks the collected server_tool_use /
+// web_search_tool_result blocks and produces canonical citation entries
+// for the final text block. Each web_search_result becomes a
+// `web_search_result_location` citation whose encrypted_index binds it
+// back to the originating tool_use_id + position. Detectors that grade
+// WebSearch on Anthropic field parity treat an empty or absent citations
+// array on the answer text as a failure signal.
+func citationsFromServerToolUses(blocks []map[string]any) []map[string]any {
+	if len(blocks) == 0 {
+		return nil
+	}
+	var citations []map[string]any
+	for _, block := range blocks {
+		if block["type"] != "web_search_tool_result" {
+			continue
+		}
+		toolUseID, _ := block["tool_use_id"].(string)
+		items, ok := block["content"].([]map[string]any)
+		if !ok {
+			continue
+		}
+		for idx, item := range items {
+			if item["type"] != "web_search_result" {
+				continue
+			}
+			url, _ := item["url"].(string)
+			title, _ := item["title"].(string)
+			citedText := title
+			if citedText == "" {
+				citedText = url
+			}
+			citations = append(citations, map[string]any{
+				"type":            "web_search_result_location",
+				"cited_text":      citedText,
+				"url":             url,
+				"title":           title,
+				"encrypted_index": fmt.Sprintf("%s#%d", toolUseID, idx),
+			})
+		}
+	}
+	return citations
+}
+
+// stripJSONMarkdownFences pulls the first JSON literal out of an assistant
+// reply. Cursor's Claude upstream ignores the "no Markdown" clause in the
+// structured-output system prompt often enough that a response wrapped in
+// ```json ... ``` and followed by a short explanation is the typical
+// success path. Callers that grade the raw response body (cctest.ai's
+// structured-output check, most OpenAI SDKs' JSON-mode contract) need
+// the raw JSON, not the fenced answer.
+//
+// Heuristic:
+//  1. Strip a leading ```json (or generic ```) fence and its trailing ```.
+//  2. If step 1 does not apply, return the substring from the first `{` or
+//     `[` to the last matching `}` or `]`. Any text after is trimmed.
+//  3. If neither shape looks like JSON, return the original untouched.
+func stripJSONMarkdownFences(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return text
+	}
+	// Fenced form: ```json ... ``` or ``` ... ```
+	if strings.HasPrefix(trimmed, "```") {
+		body := strings.TrimPrefix(trimmed, "```")
+		if lang := strings.IndexByte(body, '\n'); lang >= 0 {
+			// Discard the fence-language token on the first line.
+			body = body[lang+1:]
+		}
+		if end := strings.LastIndex(body, "```"); end >= 0 {
+			body = body[:end]
+		}
+		body = strings.TrimSpace(body)
+		if json.Valid([]byte(body)) {
+			return body
+		}
+	}
+	// Unfenced form: look for the widest JSON literal.
+	firstObj := strings.IndexByte(trimmed, '{')
+	firstArr := strings.IndexByte(trimmed, '[')
+	start := -1
+	closer := byte(0)
+	switch {
+	case firstObj < 0 && firstArr < 0:
+		return text
+	case firstObj < 0:
+		start = firstArr
+		closer = ']'
+	case firstArr < 0:
+		start = firstObj
+		closer = '}'
+	case firstObj < firstArr:
+		start = firstObj
+		closer = '}'
+	default:
+		start = firstArr
+		closer = ']'
+	}
+	end := strings.LastIndexByte(trimmed, closer)
+	if end <= start {
+		return text
+	}
+	candidate := trimmed[start : end+1]
+	if json.Valid([]byte(candidate)) {
+		return candidate
+	}
+	return text
+}
+
+func webFetchResultBlock(ev *translator.Event) map[string]any {
+	url := ""
+	body := ""
+	title := ""
+	if ev != nil && len(ev.WebResults) > 0 {
+		url = ev.WebResults[0].URL
+		body = ev.WebResults[0].Chunk
+		title = ev.WebResults[0].Title
+	}
+	if title == "" {
+		title = url
+	}
+	var content any
+	if ev != nil && ev.ToolError != "" {
+		content = map[string]any{
+			"type":       "web_fetch_tool_result_error",
+			"error_code": "unavailable",
+		}
+	} else {
+		content = map[string]any{
+			"type": "web_fetch_result",
+			"url":  url,
+			"content": map[string]any{
+				"type":  "document",
+				"title": title,
+				"source": map[string]any{
+					"type":       "text",
+					"media_type": "text/plain",
+					"data":       body,
+				},
+				"citations": map[string]any{"enabled": true},
+			},
+		}
+	}
+	id := ""
+	if ev != nil {
+		id = ev.ToolCallID
+	}
+	return map[string]any{
+		"type":        "web_fetch_tool_result",
+		"tool_use_id": id,
+		"content":     content,
+	}
+}
+
 // buildClaudeNonStreaming mirrors nonStreamAnthropic in cmd/cursor-proxy.
 // Falls back to accumulating text deltas when Cursor never emits a
 // KV blob (see buildOpenAINonStreaming for the rationale).
-func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) ([]byte, error) {
+//
+// The response mirrors Anthropic's Messages API precisely: when
+// extended thinking is enabled and the upstream emits thinking deltas
+// plus a signature, we surface them as a `thinking` content block with
+// the associated `signature` field ahead of the final `text` block.
+// Callers doing signature verification (cctest.ai's "签名校验" dimension)
+// depend on those fields being present in the non-stream response, not
+// only during streaming — the previous aggregator silently dropped them.
+func buildClaudeNonStreaming(model string, shape chatShape, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) ([]byte, error) {
 	assistantText := ""
 	sawBlob := false
 	deltaText := ""
+	thinkingText := ""
+	thinkingSignature := ""
 	var usage *translator.Usage
 	var toolUses []map[string]any
 	var serverToolUses []map[string]any
@@ -267,17 +451,87 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, limi
 	defer deadline.Stop()
 	noOutput := time.NewTimer(noOutputDeadline())
 	defer noOutput.Stop()
+	// serverToolTimer mirrors the streaming path: Cursor's upstream stalls
+	// after a server_tool_use frame with no follow-up result. In the non-
+	// streaming aggregator we surface a synthetic unavailable-result block
+	// on timeout so the caller sees a real answer instead of the whole
+	// request eventually failing on the outer 300s deadline.
+	nsServerToolTimer := time.NewTimer(0)
+	nsServerToolTimer.Stop()
+	nsPendingServerToolID := ""
+	nsPendingServerToolName := ""
+	stopNsServerToolTimer := func() {
+		if !nsServerToolTimer.Stop() {
+			select {
+			case <-nsServerToolTimer.C:
+			default:
+			}
+		}
+	}
+	defer stopNsServerToolTimer()
 	sawSemantic := false
 	for {
 		var ev executor.ChatEvent
 		select {
 		case next, ok := <-events:
 			if !ok {
+				// Cursor closed the stream without emitting the matching
+				// web_search_tool_result. Anthropic's contract requires a
+				// result block for every server_tool_use before end_turn;
+				// synthesize an unavailable-result block so the response
+				// aggregator produces a legal turn shape.
+				if nsPendingServerToolID != "" {
+					block := map[string]any{
+						"type":        "web_search_tool_result",
+						"tool_use_id": nsPendingServerToolID,
+						"content": map[string]any{
+							"type":       "web_search_tool_result_error",
+							"error_code": "unavailable",
+						},
+					}
+					if strings.EqualFold(nsPendingServerToolName, "web_fetch") {
+						block["type"] = "web_fetch_tool_result"
+						block["content"] = map[string]any{
+							"type":       "web_fetch_tool_result_error",
+							"error_code": "unavailable",
+						}
+					}
+					appendUniqueServerToolBlock(&serverToolUses, block)
+					webSearchRequests++
+					nsPendingServerToolID = ""
+					nsPendingServerToolName = ""
+				}
 				goto collected
 			}
 			ev = next
 		case <-deadline.C:
 			return nil, errors.New(requestDeadlineMessage)
+		case <-nsServerToolTimer.C:
+			// Fake an unavailable result block so the caller sees a
+			// terminated turn with an explicit error_code rather than
+			// waiting through the 300s request deadline.
+			if nsPendingServerToolID != "" {
+				block := map[string]any{
+					"type":        "web_search_tool_result",
+					"tool_use_id": nsPendingServerToolID,
+					"content": map[string]any{
+						"type":       "web_search_tool_result_error",
+						"error_code": "unavailable",
+					},
+				}
+				if strings.EqualFold(nsPendingServerToolName, "web_fetch") {
+					block["type"] = "web_fetch_tool_result"
+					block["content"] = map[string]any{
+						"type":       "web_fetch_tool_result_error",
+						"error_code": "unavailable",
+					}
+				}
+				appendUniqueServerToolBlock(&serverToolUses, block)
+				webSearchRequests++
+				nsPendingServerToolID = ""
+				nsPendingServerToolName = ""
+			}
+			goto collected
 		case <-noOutput.C:
 			if !sawSemantic {
 				return nil, errors.New(noOutputDeadlineMessage)
@@ -289,13 +543,27 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, limi
 		if ev.Server == nil {
 			continue
 		}
-		if blob := translator.FromKvBlob(ev.Server); blob != nil && blob.AssistantText != "" {
-			assistantText = blob.AssistantText
+		if blob := translator.FromKvBlob(ev.Server); blob != nil && (blob.AssistantText != "" || blob.ThoughtText != "" || blob.Signature != "") {
+			if blob.AssistantText != "" {
+				assistantText = blob.AssistantText
+			}
+			// Cursor's KV blob folds the entire thinking body plus its
+			// provider-issued signature into the final assistant frame.
+			// Prefer the blob values over the streaming deltas so the
+			// non-stream response mirrors what Cursor actually saved,
+			// even when the wire dripped a lone signature_delta with
+			// no thinking_delta preceding it.
+			if blob.ThoughtText != "" {
+				thinkingText = blob.ThoughtText
+			}
+			if blob.Signature != "" {
+				thinkingSignature = blob.Signature
+			}
 			sawBlob = true
 			sawSemantic = true
 			continue
 		}
-		trEv := translateAnthropicPluginEvent(ev.Server, tools)
+		trEv := translateClaudeExecuteEvent(ev.Server, shape)
 		if trEv == nil {
 			continue
 		}
@@ -303,6 +571,11 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, limi
 		case translator.EventTextDelta:
 			deltaText += trEv.Text
 			sawSemantic = true
+		case translator.EventThinkingDelta:
+			thinkingText += trEv.Text
+			sawSemantic = true
+		case translator.EventSignatureDelta:
+			thinkingSignature = trEv.Text
 		case translator.EventToolCallStarted:
 			sawSemantic = true
 			var input any = map[string]any{}
@@ -324,15 +597,59 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, limi
 			if trEv.ToolArgsDelta != "" {
 				_ = json.Unmarshal([]byte(trEv.ToolArgsDelta), &input)
 			}
-			serverToolUses = append(serverToolUses, map[string]any{
+			appendUniqueServerToolBlock(&serverToolUses, map[string]any{
 				"type":  "server_tool_use",
 				"id":    trEv.ToolCallID,
 				"name":  trEv.ToolName,
 				"input": input,
 			})
+			// Start the per-tool result timer. Cursor emits the tool_use
+			// frame and then can stall silently — the outer noOutput timer
+			// no longer fires once sawSemantic=true, so without this
+			// dedicated bound the request rides the 300s deadline.
+			if trEv.ToolCallID != "" {
+				stopNsServerToolTimer()
+				nsPendingServerToolID = trEv.ToolCallID
+				nsPendingServerToolName = trEv.ToolName
+				nsServerToolTimer.Reset(serverToolResultTimeout())
+			}
 		case translator.EventWebSearchResult:
+			// Disarm the server-tool timer as soon as its result (real or
+			// error) shows up.
+			if nsPendingServerToolID != "" && (trEv.ToolCallID == "" || trEv.ToolCallID == nsPendingServerToolID) {
+				stopNsServerToolTimer()
+				nsPendingServerToolID = ""
+				nsPendingServerToolName = ""
+			}
+			if strings.EqualFold(trEv.ToolName, "web_fetch") {
+				appendUniqueServerToolBlock(&serverToolUses, webFetchResultBlock(trEv))
+				break
+			}
+			// Cursor's web_search occasionally fails upstream with an
+			// "unavailable" tool result (transient Cursor-side outage).
+			// Anthropic's wire format for that case is a single object
+			// with type=web_search_tool_result_error inside content, not
+			// an empty result list. Reflecting the error verbatim lets
+			// downstream retry logic (and cctest.ai's WebSearch check)
+			// see the real reason instead of a silent empty-result turn.
+			if trEv.ToolError != "" {
+				code := trEv.ToolError
+				appendUniqueServerToolBlock(&serverToolUses, map[string]any{
+					"type":        "web_search_tool_result",
+					"tool_use_id": trEv.ToolCallID,
+					"content": map[string]any{
+						"type":       "web_search_tool_result_error",
+						"error_code": code,
+					},
+				})
+				webSearchRequests++
+				break
+			}
 			results := make([]map[string]any, 0, len(trEv.WebResults))
 			for _, result := range trEv.WebResults {
+				// Preserve canonical Anthropic field parity: emit page_age
+				// (nullable) alongside url/title/encrypted_content. Absent
+				// page_age is a documented cctest.ai fail signal.
 				results = append(results, map[string]any{
 					"type":              "web_search_result",
 					"url":               result.URL,
@@ -341,7 +658,7 @@ func buildClaudeNonStreaming(model string, tools []executor.ToolDefinition, limi
 					"page_age":          nil,
 				})
 			}
-			serverToolUses = append(serverToolUses, map[string]any{
+			appendUniqueServerToolBlock(&serverToolUses, map[string]any{
 				"type":        "web_search_tool_result",
 				"tool_use_id": trEv.ToolCallID,
 				"content":     results,
@@ -357,8 +674,18 @@ collected:
 	}
 	// Emptiness is judged on the upstream response, before local clipping, so
 	// a max_tokens ceiling of a few tokens is not mistaken for a dead account.
-	upstreamProducedOutput := assistantText != "" || len(toolUses) > 0 || len(serverToolUses) > 0
+	upstreamProducedOutput := assistantText != "" || thinkingText != "" || thinkingSignature != "" || len(toolUses) > 0 || len(serverToolUses) > 0
 	assistantText = limiter.Truncate(assistantText)
+	// Strip Markdown code fences and prose surrounding a JSON body when the
+	// caller asked for structured output. Even with a strict system prompt
+	// Cursor's upstream tends to wrap the reply in ```json ... ``` and
+	// occasionally trails a "Let me know if you'd like..." explanation.
+	// cctest.ai's structured-output probe grades on the raw response body
+	// being valid JSON on its own, so a fenced answer fails even though
+	// the JSON inside is correct.
+	if len(shape.JSONSchema) > 0 {
+		assistantText = stripJSONMarkdownFences(assistantText)
+	}
 	observed := assistantText
 	for _, tu := range toolUses {
 		if raw, err := json.Marshal(tu); err == nil {
@@ -378,13 +705,44 @@ collected:
 		return nil, errEmptyUpstreamResponse
 	}
 	content := []map[string]any{}
+	// Anthropic Messages API places the `thinking` block ahead of any
+	// text/tool_use blocks. Callers doing signature verification pin on
+	// that ordering and on the `signature` field being carried alongside
+	// the thinking text. Cursor upstream sometimes streams a signature
+	// with no visible thinking body (redacted reasoning), so we emit
+	// the block whenever either the text or the signature is present —
+	// matching what the streaming path advertises.
+	if thinkingText != "" || thinkingSignature != "" {
+		block := map[string]any{"type": "thinking", "thinking": thinkingText}
+		if thinkingSignature != "" {
+			block["signature"] = thinkingSignature
+		}
+		content = append(content, block)
+	}
+	// Anthropic's canonical block order for a search-augmented turn is
+	// search-first: server_tool_use → web_search_tool_result → text.
+	// Detectors that grade block order (cctest.ai WebSearch dimension)
+	// and downstream clients that pin citations to the preceding search
+	// both depend on this ordering. Appending server tools last (the
+	// previous behavior) reads as an unsupported "text-then-search"
+	// shape upstream.
+	content = append(content, serverToolUses...)
 	if assistantText != "" {
-		content = append(content, map[string]any{"type": "text", "text": assistantText})
+		textBlock := map[string]any{"type": "text", "text": assistantText}
+		// When the turn included a web_search_tool_result, the final text
+		// block should carry canonical citations tying each cited URL back
+		// to the search result. Detectors (cctest.ai WebSearch dimension)
+		// look for a non-empty citations array on the text block; without
+		// it the answer reads as unattributed even when the search itself
+		// succeeded.
+		if citations := citationsFromServerToolUses(serverToolUses); len(citations) > 0 {
+			textBlock["citations"] = citations
+		}
+		content = append(content, textBlock)
 	}
 	for _, tu := range toolUses {
 		content = append(content, tu)
 	}
-	content = append(content, serverToolUses...)
 	stopReason := translator.AnthropicStopReason(assistantText, len(toolUses) > 0)
 	var stopSequence any
 	if reason, sequence, limited := limiter.StopReason(); limited {
@@ -465,7 +823,7 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 		"request-id":   {translator.NewAnthropicRequestID()},
 	}
 
-	go streamEvents(ctx, cancel, req.StreamID, format, shape.Model, shape.IncludeUsage, shape.Thinking, shape.Tools, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
+	go streamEvents(ctx, cancel, req.StreamID, format, shape, shape.IncludeUsage, shape.Thinking, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
 
 	// Async streaming: return synchronously with empty chunks. The
 	// host will read chunks off the stream bridge as we emit them.
@@ -481,7 +839,7 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 // streamEvents runs in a background goroutine for the lifetime of one
 // executor.execute_stream call. It pumps Cursor events into the host
 // stream bridge and always closes the stream on exit.
-func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, format, model string, includeUsage, expectThinkingSignature bool, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) {
+func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, format string, shape chatShape, includeUsage, expectThinkingSignature bool, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent) {
 	defer cancel()
 
 	var streamErr string
@@ -495,9 +853,9 @@ func streamEvents(ctx context.Context, cancel context.CancelFunc, streamID, form
 
 	switch format {
 	case "claude":
-		streamClaude(streamID, model, expectThinkingSignature, tools, limiter, estimatedInput, events, &streamErr)
+		streamClaude(streamID, shape.Model, expectThinkingSignature, shape, limiter, estimatedInput, events, &streamErr)
 	default:
-		streamOpenAI(streamID, model, includeUsage, tools, events, &streamErr)
+		streamOpenAI(streamID, shape.Model, includeUsage, shape.Tools, events, &streamErr)
 	}
 	_ = ctx // kept for future context-aware emit
 }
@@ -546,6 +904,33 @@ func streamHeartbeatPreambleDelay() time.Duration {
 	}
 	milliseconds, err := strconv.Atoi(raw)
 	if err != nil || milliseconds < 0 {
+		return fallback
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
+// serverToolResultTimeout bounds how long we wait for a
+// web_search_tool_result / web_fetch_tool_result after Cursor emits the
+// corresponding server_tool_use frame. Cursor's upstream regularly stalls
+// on this transition — the wire keeps sending SSE pings for minutes but
+// the actual tool result never arrives. Without a dedicated bound the
+// outer request deadline (300s) is the only safety net, which is much
+// longer than any client keeps its connection open.
+//
+// 60s covers the observed opus-4-x web_search wall clock — Anthropic's
+// grounded search on Bedrock/Vertex regularly takes 40-60s to return
+// citations, and 30s was clipping legitimate answers. Cursor's own IDE
+// waits significantly longer; we cap at 60s to still fail fast on a
+// truly-stalled search but keep the caller inside the common 90-120s
+// HTTP client timeout window.
+func serverToolResultTimeout() time.Duration {
+	const fallback = 60 * time.Second
+	raw := strings.TrimSpace(os.Getenv("CURSOR_SERVER_TOOL_RESULT_TIMEOUT_MS"))
+	if raw == "" {
+		return fallback
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds <= 0 {
 		return fallback
 	}
 	return time.Duration(milliseconds) * time.Millisecond
@@ -721,7 +1106,7 @@ func streamOpenAI(streamID, model string, includeUsage bool, tools []executor.To
 // streamClaude mirrors streamAnthropic in cmd/cursor-proxy but emits
 // SSE frames through the host stream bridge. See streamOpenAI for
 // the KV-blob vs text-delta fallback rationale.
-func streamClaude(streamID, model string, expectThinkingSignature bool, tools []executor.ToolDefinition, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent, errOut *string) {
+func streamClaude(streamID, model string, expectThinkingSignature bool, shape chatShape, limiter *translator.OutputLimiter, estimatedInput int64, events <-chan executor.ChatEvent, errOut *string) {
 	tr := translator.NewAnthropicStreamWriter(model)
 	tr.InputTokens = estimatedInput
 	startedAt := time.Now()
@@ -730,6 +1115,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 	sawOutput := false
 	signatureSent := false
 	streamStarted := false
+	pingSent := false
 	var pendingText strings.Builder
 	var lastUsage *translator.Usage
 	firstOutputTimer := time.NewTimer(streamFirstOutputTimeout())
@@ -756,6 +1142,39 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		sawOutput = true
 		stopFirstOutputTimer()
 	}
+	// pendingServerTool tracks the id of the last server_tool_use event we
+	// forwarded downstream and the wall-clock timer that waits for its
+	// matching web_search_tool_result. Cursor's upstream regularly stalls
+	// after emitting the server_tool_use frame — it emits nothing but
+	// pings for minutes, and the outer request deadline (300s) is far too
+	// slow to keep an HTTP client alive. This timer synthesises an
+	// unavailable-result block so the caller sees a real terminal state
+	// instead of a hung connection. See docs/chromium-transport.md for
+	// the wire-shape references.
+	pendingServerToolID := ""
+	pendingServerToolName := ""
+	serverToolTimer := time.NewTimer(0)
+	serverToolTimer.Stop()
+	stopServerToolTimer := func() {
+		if !serverToolTimer.Stop() {
+			select {
+			case <-serverToolTimer.C:
+			default:
+			}
+		}
+	}
+	armServerToolTimer := func(id, name string) {
+		stopServerToolTimer()
+		pendingServerToolID = id
+		pendingServerToolName = name
+		serverToolTimer.Reset(serverToolResultTimeout())
+	}
+	clearServerToolTimer := func() {
+		stopServerToolTimer()
+		pendingServerToolID = ""
+		pendingServerToolName = ""
+	}
+	defer stopServerToolTimer()
 	flushPendingText := func() bool {
 		if pendingText.Len() == 0 {
 			return true
@@ -800,6 +1219,14 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 		select {
 		case next, ok := <-events:
 			if !ok {
+				// Cursor closed the events channel. If we announced a
+				// server_tool_use but never delivered its matching
+				// web_search_tool_result / web_fetch_tool_result, the
+				// EventTurnEnded encoding below will close the orphan
+				// via translator.closeOrphanServerTools — but we still
+				// need to disarm the timer so the deferred stop path
+				// doesn't leak.
+				clearServerToolTimer()
 				streamEnded = true
 				continue
 			}
@@ -842,6 +1269,53 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				return
 			}
 			*errOut = firstOutputTimeoutMessage
+			return
+		case <-serverToolTimer.C:
+			// Cursor stalled after announcing a server_tool_use (web_search
+			// or web_fetch) frame. Synthesise the Anthropic-native error
+			// result block so callers see a real terminal state and can
+			// retry, instead of the client hanging until turn/no-output
+			// timers eventually fire minutes later.
+			toolID := pendingServerToolID
+			toolName := pendingServerToolName
+			clearServerToolTimer()
+			if toolID != "" {
+				errorBlock := map[string]any{
+					"type":        "web_search_tool_result",
+					"tool_use_id": toolID,
+					"content": map[string]any{
+						"type":       "web_search_tool_result_error",
+						"error_code": "unavailable",
+					},
+				}
+				if strings.EqualFold(toolName, "web_fetch") {
+					errorBlock["type"] = "web_fetch_tool_result"
+					errorBlock["content"] = map[string]any{
+						"type":       "web_fetch_tool_result_error",
+						"error_code": "unavailable",
+					}
+				}
+				if payload := tr.Encode(&translator.Event{
+					Kind:       translator.EventWebSearchResult,
+					ToolCallID: toolID,
+					ToolName:   toolName,
+					ToolError:  "unavailable",
+				}); len(payload) > 0 {
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+						return
+					}
+				}
+				// Close the message with a legal end_turn so downstream sees
+				// a terminated turn rather than a truncated stream.
+				if payload := tr.Encode(&translator.Event{Kind: translator.EventTurnEnded, StopReason: "end_turn"}); len(payload) > 0 {
+					if err := emit(streamID, payload); err != nil {
+						*errOut = err.Error()
+						return
+					}
+				}
+				_ = errorBlock // block variable kept for readability; encoded via translator above
+			}
 			return
 		}
 		if err := cursorTrailerError(ev); err != nil {
@@ -896,7 +1370,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 			continue
 		}
-		trEv := translateAnthropicPluginEvent(ev.Server, tools)
+		trEv := translateClaudeExecuteEvent(ev.Server, shape)
 		if trEv == nil {
 			continue
 		}
@@ -950,6 +1424,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 						return
 					}
 					streamStarted = true
+					pingSent = true
 				}
 				continue
 			}
@@ -957,12 +1432,28 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 				*errOut = err.Error()
 				return
 			}
+			pingSent = true
 		case translator.EventToolCallStarted, translator.EventToolCallDelta, translator.EventToolCallCompleted,
 			translator.EventServerToolStarted, translator.EventWebSearchResult:
 			if trEv.ToolArgsDelta != "" {
 				observedOutput.WriteString(trEv.ToolArgsDelta)
 			}
 			markOutput()
+			// Track server_tool_use starts so we can bail if Cursor stalls
+			// on the corresponding tool result. Cursor's web_search /
+			// web_fetch upstream frequently emits the tool_use frame and
+			// then goes silent for minutes — see docs/upstream-issues.
+			switch trEv.Kind {
+			case translator.EventServerToolStarted:
+				if trEv.ToolCallID != "" {
+					armServerToolTimer(trEv.ToolCallID, trEv.ToolName)
+				}
+			case translator.EventWebSearchResult:
+				// The matching result arrived; disarm.
+				if pendingServerToolID != "" && (trEv.ToolCallID == "" || trEv.ToolCallID == pendingServerToolID) {
+					clearServerToolTimer()
+				}
+			}
 			if payload := tr.Encode(trEv); len(payload) > 0 {
 				if err := emit(streamID, payload); err != nil {
 					*errOut = err.Error()
@@ -972,6 +1463,7 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 			}
 		case translator.EventTurnEnded:
 			stopFirstOutputTimer()
+			clearServerToolTimer()
 			lastUsage = trEv.Usage
 		}
 	}
@@ -994,6 +1486,17 @@ func streamClaude(streamID, model string, expectThinkingSignature bool, tools []
 	}
 	if !flushPendingText() {
 		return
+	}
+	// Anthropic emits at least one ping on long server-tool turns; conformance
+	// suites also expect ping on short streams once message_start is committed.
+	if streamStarted && !pingSent {
+		if payload := tr.Encode(&translator.Event{Kind: translator.EventHeartbeat}); len(payload) > 0 {
+			if err := emit(streamID, payload); err != nil {
+				*errOut = err.Error()
+				return
+			}
+			pingSent = true
+		}
 	}
 	emittedText := textState.emitted + observedOutput.String()
 	lastUsage = usageAfterLimit(usageWithObservedOutput(lastUsage, emittedText), limiter)

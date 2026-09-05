@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -244,7 +245,7 @@ func TestBuildClaudeNonStreamingStopsAtRequestDeadline(t *testing.T) {
 	events := make(chan executor.ChatEvent) // never sends, never closes
 	done := make(chan error, 1)
 	go func() {
-		_, err := buildClaudeNonStreaming("claude-fable-5", nil, &translator.OutputLimiter{}, 1, events)
+		_, err := buildClaudeNonStreaming("claude-fable-5", chatShape{}, &translator.OutputLimiter{}, 1, events)
 		done <- err
 	}()
 
@@ -293,7 +294,7 @@ func TestStreamClaudeStopsWhenOnlyHeartbeatsArrive(t *testing.T) {
 	var streamErr string
 	done := make(chan struct{})
 	go func() {
-		streamClaude("s1", "claude-fable-5", false, nil, &translator.OutputLimiter{}, 1, events, &streamErr)
+		streamClaude("s1", "claude-fable-5", false, chatShape{}, &translator.OutputLimiter{}, 1, events, &streamErr)
 		close(done)
 	}()
 
@@ -343,7 +344,7 @@ func TestStreamClaudeStopsAtRequestDeadlineAfterCommit(t *testing.T) {
 	var streamErr string
 	done := make(chan struct{})
 	go func() {
-		streamClaude("s1", "claude-fable-5", false, nil, &translator.OutputLimiter{}, 1, events, &streamErr)
+		streamClaude("s1", "claude-fable-5", false, chatShape{}, &translator.OutputLimiter{}, 1, events, &streamErr)
 		close(done)
 	}()
 
@@ -563,7 +564,7 @@ func TestTranslateClaudePluginEventAnnouncesSearchPermissionAsServerTool(t *test
 	}
 }
 
-func TestTranslateClaudePluginEventStripsBedrockToolID(t *testing.T) {
+func TestTranslateClaudePluginEventKeepsBedrockToolID(t *testing.T) {
 	server := &cursorpb.AgentV1_AgentServerMessage{
 		Message: &cursorpb.AgentV1_AgentServerMessage_ExecServerMessage{
 			ExecServerMessage: &cursorpb.AgentV1_ExecServerMessage{
@@ -580,12 +581,12 @@ func TestTranslateClaudePluginEventStripsBedrockToolID(t *testing.T) {
 	if event == nil {
 		t.Fatal("expected tool event")
 	}
-	if event.ToolCallID != "toolu_014QuhsYS4bAkK5hyQAxoFAY" {
-		t.Fatalf("id = %q, want Bedrock infix stripped", event.ToolCallID)
+	if event.ToolCallID != "toolu_bdrk_014QuhsYS4bAkK5hyQAxoFAY" {
+		t.Fatalf("id = %q, want Bedrock infix kept", event.ToolCallID)
 	}
 }
 
-func TestTranslateClaudePluginEventStripsVertexToolID(t *testing.T) {
+func TestTranslateClaudePluginEventKeepsVertexToolID(t *testing.T) {
 	server := &cursorpb.AgentV1_AgentServerMessage{
 		Message: &cursorpb.AgentV1_AgentServerMessage_ExecServerMessage{
 			ExecServerMessage: &cursorpb.AgentV1_ExecServerMessage{
@@ -602,8 +603,8 @@ func TestTranslateClaudePluginEventStripsVertexToolID(t *testing.T) {
 	if event == nil {
 		t.Fatal("expected tool event")
 	}
-	if event.ToolCallID != "toolu_01JurySmHCDBTjuh8LgwtdAZ" {
-		t.Fatalf("id = %q, want Vertex infix stripped", event.ToolCallID)
+	if event.ToolCallID != "toolu_vrtx_01JurySmHCDBTjuh8LgwtdAZ" {
+		t.Fatalf("id = %q, want Vertex infix kept", event.ToolCallID)
 	}
 }
 
@@ -1202,6 +1203,184 @@ func TestExecuteStream_Claude_FastEmptyAfterHeartbeatStaysRetryableBeforePreambl
 	}
 }
 
+func TestBuildClaudeNonStreaming_DedupesDuplicateServerToolUse(t *testing.T) {
+	events := make(chan executor.ChatEvent, 3)
+	events <- executor.ChatEvent{Server: webSearchToolCallServerMessage()}
+	events <- executor.ChatEvent{Server: webSearchToolCallServerMessage()}
+	events <- buildTurnEndedEvent(10, 2)
+	close(events)
+
+	raw, err := buildClaudeNonStreaming("claude-opus-4-8", chatShape{}, &translator.OutputLimiter{}, 1, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	serverUses := 0
+	for _, block := range body["content"].([]any) {
+		m := block.(map[string]any)
+		if m["type"] == "server_tool_use" {
+			serverUses++
+		}
+	}
+	if serverUses != 1 {
+		t.Fatalf("server_tool_use blocks = %d, want 1", serverUses)
+	}
+}
+
+func TestExecuteStream_Claude_OrphanServerSearchCompletes(t *testing.T) {
+	runner := &fakeRunner{
+		events: []executor.ChatEvent{{Server: webSearchToolCallServerMessage()}},
+	}
+	var (
+		mu      sync.Mutex
+		emitted [][]byte
+		done    = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return runner, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-4-8","max_tokens":64,"stream":true,"tools":[{"type":"web_search_20250305","name":"web_search","max_uses":1}],"messages":[{"role":"user","content":"Search the web for today's date in Tokyo"}]}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "orphan-search"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("orphan server search stream never closed")
+	}
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if !strings.Contains(joined, `"type":"server_tool_use"`) {
+		t.Fatalf("missing server_tool_use:\n%s", joined)
+	}
+	if !strings.Contains(joined, `"type":"web_search_tool_result"`) {
+		t.Fatalf("missing web_search_tool_result after upstream closed:\n%s", joined)
+	}
+	if !strings.Contains(joined, "event: message_stop") {
+		t.Fatalf("missing message_stop:\n%s", joined)
+	}
+	if strings.Contains(joined, `"type":"error"`) {
+		t.Fatalf("orphan search ended as error instead of a finished tool pair:\n%s", joined)
+	}
+}
+
+func TestParseClaudePayload_ForcesNamedToolChoice(t *testing.T) {
+	shape, err := parseClaudePayload([]byte(`{
+		"model":"claude-opus-4-8",
+		"tool_choice":{"type":"tool","name":"record_answer"},
+		"tools":[{"name":"record_answer","input_schema":{"type":"object"}}],
+		"messages":[{"role":"user","content":"Answer is STRUCTURED_OK and count is 7."}]
+	}`))
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if shape.ForceTool != "record_answer" {
+		t.Fatalf("ForceTool = %q, want record_answer", shape.ForceTool)
+	}
+	req := buildChatRequest(shape, nil)
+	// The forced-tool instruction is now emitted with the imperative
+	// "MUST call" (upper case) so short/ambiguous prompts still trigger
+	// the call — cctest.ai's tool_use probe was reliably failing when
+	// the polite wording let Claude ask for clarification instead.
+	if !strings.Contains(req.UserMessage, "record_answer") || !strings.Contains(req.UserMessage, "MUST call") {
+		t.Fatalf("forced tool instruction missing from user turn: %q", req.UserMessage)
+	}
+}
+
+func TestParseOpenAIPayload_ForcesNamedFunctionToolChoice(t *testing.T) {
+	shape, err := parseOpenAIPayload([]byte(`{
+		"model":"gpt-5.5",
+		"tool_choice":{"type":"function","function":{"name":"record_answer"}},
+		"tools":[{"type":"function","function":{"name":"record_answer","parameters":{"type":"object"}}}],
+		"messages":[{"role":"user","content":"Answer is STRUCTURED_OK and count is 7."}]
+	}`))
+	if err != nil {
+		t.Fatalf("parseOpenAIPayload: %v", err)
+	}
+	if shape.ForceTool != "record_answer" {
+		t.Fatalf("ForceTool = %q, want record_answer", shape.ForceTool)
+	}
+	req := buildChatRequest(shape, nil)
+	if !strings.Contains(req.UserMessage, "record_answer") || !strings.Contains(req.UserMessage, "MUST call") {
+		t.Fatalf("forced tool instruction missing from user turn: %q", req.UserMessage)
+	}
+}
+
+func TestExecuteStream_Claude_ShortStreamEmitsPingBeforeStop(t *testing.T) {
+	runner := &fakeRunner{
+		events: []executor.ChatEvent{
+			buildTextDeltaEvent("STREAM_OK"),
+			buildTurnEndedEvent(4, 1),
+		},
+	}
+	var (
+		mu      sync.Mutex
+		emitted [][]byte
+		done    = make(chan struct{})
+	)
+	invoker := func(method string, payload []byte) ([]byte, error) {
+		switch method {
+		case "host.stream.emit":
+			var req struct {
+				Payload []byte `json:"payload"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				t.Fatalf("emit unmarshal: %v", err)
+			}
+			mu.Lock()
+			emitted = append(emitted, append([]byte(nil), req.Payload...))
+			mu.Unlock()
+		case "host.stream.close":
+			close(done)
+		}
+		return []byte(`{"ok":true}`), nil
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) { return runner, "", nil },
+		invoker,
+	)()
+
+	payload := []byte(`{"model":"claude-opus-4-8","max_tokens":32,"messages":[{"role":"user","content":"Count: 1 2 3"}],"stream":true}`)
+	_, _ = dispatch("executor.execute_stream", buildFakeExecutorRequest(t, "claude", payload, true, "short-ping"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream never closed")
+	}
+	mu.Lock()
+	joined := strings.Join(byteSlicesToStrings(emitted), "")
+	mu.Unlock()
+	if !strings.Contains(joined, `event: ping`) {
+		t.Fatalf("short stream missing ping: %s", joined)
+	}
+	pingAt := strings.Index(joined, `event: ping`)
+	stopAt := strings.Index(joined, `event: message_stop`)
+	if pingAt < 0 || stopAt < 0 || pingAt > stopAt {
+		t.Fatalf("ping must precede message_stop: %s", joined)
+	}
+}
+
 func TestBuildClaudeNonStreamingSurfacesCursorTrailerError(t *testing.T) {
 	events := make(chan executor.ChatEvent, 1)
 	events <- executor.ChatEvent{
@@ -1210,7 +1389,7 @@ func TestBuildClaudeNonStreamingSurfacesCursorTrailerError(t *testing.T) {
 	}
 	close(events)
 
-	_, err := buildClaudeNonStreaming("claude-opus-5", nil, &translator.OutputLimiter{}, 1, events)
+	_, err := buildClaudeNonStreaming("claude-opus-5", chatShape{}, &translator.OutputLimiter{}, 1, events)
 	if err == nil {
 		t.Fatal("expected Cursor trailer error")
 	}
@@ -1606,6 +1785,49 @@ func TestParseClaudePayload_UsesLatestNativeWebSearchVersion(t *testing.T) {
 	}
 }
 
+func TestParseClaudePayload_UsesAnyNativeWebFetchVersion(t *testing.T) {
+	for _, typ := range []string{"web_fetch_20250305", "web_fetch_20250910"} {
+		shape, err := parseClaudePayload([]byte(fmt.Sprintf(`{
+			"model":"claude-opus-4-8",
+			"tools":[{"type":%q,"name":"web_fetch","max_uses":1}],
+			"messages":[{"role":"user","content":"fetch"}]
+		}`, typ)))
+		if err != nil {
+			t.Fatalf("%s: %v", typ, err)
+		}
+		if !shape.WebFetch {
+			t.Fatalf("%s WebFetch = false, want true", typ)
+		}
+		if len(shape.Tools) != 0 {
+			t.Fatalf("%s leaked into client tools: %+v", typ, shape.Tools)
+		}
+	}
+}
+
+func TestTranslateClaudeEventAnnouncesDeclaredFetchAsServerTool(t *testing.T) {
+	server := &cursorpb.AgentV1_AgentServerMessage{
+		Message: &cursorpb.AgentV1_AgentServerMessage_InteractionQuery{
+			InteractionQuery: &cursorpb.AgentV1_InteractionQuery{
+				Query: &cursorpb.AgentV1_InteractionQuery_WebFetchRequestQuery{
+					WebFetchRequestQuery: &cursorpb.AgentV1_WebFetchRequestQuery{
+						Args: &cursorpb.AgentV1_WebFetchArgs{Url: "https://example.com", ToolCallId: "srvtoolu_fetch"},
+					},
+				},
+			},
+		},
+	}
+	if event := translateAnthropicPluginEvent(server, nil); event != nil {
+		t.Fatalf("search-only path leaked fetch as %+v", event)
+	}
+	event := translateClaudeEvent(server, nil, translator.ToolNameDialectClaudeCode, false, true)
+	if event == nil || event.Kind != translator.EventServerToolStarted || event.ToolName != "web_fetch" {
+		t.Fatalf("declared server fetch = %+v, want server_tool_use web_fetch", event)
+	}
+	if event.ToolCallID != "srvtoolu_fetch" {
+		t.Fatalf("id = %q, want srvtoolu_fetch", event.ToolCallID)
+	}
+}
+
 func TestBuildChatRequest_UsesStableServerToolVariant(t *testing.T) {
 	req := buildChatRequest(chatShape{
 		Model:     "claude-opus-4-8-medium",
@@ -1626,6 +1848,30 @@ func TestBuildChatRequest_UsesStableServerToolVariant(t *testing.T) {
 	}
 }
 
+func TestBuildChatRequest_ThinkingEnabledDefaultsToHighTier(t *testing.T) {
+	// The plugin used to synthesize the variant slug on the client side
+	// (`claude-opus-4-8-thinking-high`). That broke older models whose slugs
+	// live under a completely different pattern (e.g. `claude-4.5-sonnet-
+	// thinking`, no effort tier at all) and were rejected by Cursor's
+	// backend with ERROR_BAD_MODEL_NAME. buildChatRequest now leaves the
+	// model id at the base name and lets the live catalog map parameters
+	// to whichever slug that specific account exposes.
+	shape := chatShape{
+		Model:    "claude-opus-4-8",
+		Thinking: true,
+	}
+	req := buildChatRequest(shape, nil)
+	if req.Model != "claude-opus-4-8" {
+		t.Fatalf("resolved model = %q, want claude-opus-4-8 (variant selected via ModelParameters)", req.Model)
+	}
+	if req.ModelParameters["thinking"] != "true" {
+		t.Fatalf("thinking parameter = %q, want true", req.ModelParameters["thinking"])
+	}
+	if req.ModelParameters["effort"] != "high" {
+		t.Fatalf("effort parameter = %q, want high (thinking-enabled default)", req.ModelParameters["effort"])
+	}
+}
+
 func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing.T) {
 	shape, err := parseClaudePayload([]byte(`{
 		"model":"claude-opus-4-8-medium",
@@ -1637,8 +1883,18 @@ func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing
 		t.Fatalf("parseClaudePayload: %v", err)
 	}
 	req := buildChatRequest(shape, nil)
-	if req.Model != "claude-opus-4-8-thinking-xhigh" {
+	// The `-medium` suffix on the request model is a legacy_slug that the
+	// executor's catalog resolver will fold back to the base id at
+	// dispatch time. buildChatRequest keeps it verbatim here so callers
+	// that already know the exact slug are not overridden.
+	if req.Model != "claude-opus-4-8-medium" {
 		t.Fatalf("resolved model = %q", req.Model)
+	}
+	if req.ModelParameters["thinking"] != "true" {
+		t.Fatalf("thinking parameter = %q, want true", req.ModelParameters["thinking"])
+	}
+	if req.ModelParameters["effort"] != "xhigh" {
+		t.Fatalf("effort parameter = %q, want xhigh", req.ModelParameters["effort"])
 	}
 	if req.Mode != executor.APIConversationMode(false) {
 		t.Fatalf("mode = %d, want API ask mode", req.Mode)
@@ -1648,5 +1904,113 @@ func TestParseClaudePayload_ResolvesThinkingEffortAndStructuredOutput(t *testing
 	}
 	if !strings.Contains(req.SystemPrompt, `"required":["result"]`) {
 		t.Fatalf("structured output schema missing from prompt: %q", req.SystemPrompt)
+	}
+}
+
+func TestStripJSONMarkdownFences(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "fenced_json",
+			in:   "```json\n{\"result\":\"ok\"}\n```",
+			want: `{"result":"ok"}`,
+		},
+		{
+			name: "fenced_generic",
+			in:   "```\n{\"result\":42}\n```",
+			want: `{"result":42}`,
+		},
+		{
+			name: "fenced_with_trailing_prose",
+			in:   "```json\n{\"result\":\"ok\"}\n```\nLet me know if you'd like more.",
+			want: `{"result":"ok"}`,
+		},
+		{
+			name: "bare_json_with_prose",
+			in:   "Sure, here it is: {\"result\":\"ok\"} — hope that helps!",
+			want: `{"result":"ok"}`,
+		},
+		{
+			name: "bare_json_array",
+			in:   "Here: [1,2,3] done.",
+			want: `[1,2,3]`,
+		},
+		{
+			name: "plain_json_untouched",
+			in:   `{"result":"ok"}`,
+			want: `{"result":"ok"}`,
+		},
+		{
+			name: "no_json_returns_original",
+			in:   "hello world",
+			want: "hello world",
+		},
+		{
+			name: "empty",
+			in:   "",
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := stripJSONMarkdownFences(tc.in)
+			if got != tc.want {
+				t.Fatalf("stripJSONMarkdownFences(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCitationsFromServerToolUsesShape(t *testing.T) {
+	blocks := []map[string]any{
+		{
+			"type":  "server_tool_use",
+			"id":    "srvtoolu_x",
+			"name":  "web_search",
+			"input": map[string]any{"query": "x"},
+		},
+		{
+			"type":        "web_search_tool_result",
+			"tool_use_id": "srvtoolu_x",
+			"content": []map[string]any{
+				{"type": "web_search_result", "url": "https://a", "title": "A", "encrypted_content": "ac", "page_age": nil},
+				{"type": "web_search_result", "url": "https://b", "title": "", "encrypted_content": "bc", "page_age": nil},
+			},
+		},
+	}
+	got := citationsFromServerToolUses(blocks)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 citations, got %d: %#v", len(got), got)
+	}
+	// First: title present → cited_text == title
+	if got[0]["cited_text"] != "A" || got[0]["url"] != "https://a" ||
+		got[0]["encrypted_index"] != "srvtoolu_x#0" ||
+		got[0]["type"] != "web_search_result_location" {
+		t.Fatalf("first citation malformed: %#v", got[0])
+	}
+	// Second: title empty → cited_text falls back to url
+	if got[1]["cited_text"] != "https://b" || got[1]["encrypted_index"] != "srvtoolu_x#1" {
+		t.Fatalf("second citation malformed: %#v", got[1])
+	}
+}
+
+func TestParseClaudePayloadReadsTopLevelResponseFormat(t *testing.T) {
+	body := []byte(`{
+        "model":"claude-opus-4-8",
+        "messages":[{"role":"user","content":"give me json"}],
+        "response_format":{"type":"json_schema","json_schema":{"name":"r","schema":{"type":"object","properties":{"result":{"type":"string"}},"required":["result"]}}}
+    }`)
+	shape, err := parseClaudePayload(body)
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if len(shape.JSONSchema) == 0 {
+		t.Fatalf("JSONSchema not populated from top-level response_format: %s", string(shape.JSONSchema))
+	}
+	if !strings.Contains(string(shape.JSONSchema), `"required":["result"]`) {
+		t.Fatalf("JSONSchema missing schema body: %s", string(shape.JSONSchema))
 	}
 }

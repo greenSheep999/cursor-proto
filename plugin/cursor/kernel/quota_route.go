@@ -27,15 +27,34 @@ const (
 	quotaBucketOther  = "other"
 	quotaCacheTTL     = 45 * time.Second
 	quotaFetchTimeout = 8 * time.Second
-	// Cursor's PlanUsage percents are inconsistent across fields: Auto is
-	// 0–1+ (1.0 = 100%), API is 0–100 (100 = 100%). Anything above 2 is
-	// treated as a 0–100 scale so a live API=100 still means exhausted.
+	// Cursor's Auto bar is a 0-1+ ratio (1.0 = 100%). We still gate the
+	// "cursor" bucket on it because a team account really can burn through
+	// its Composer/Grok allotment without leaving usage-based billing open
+	// for those specific families.
 	quotaExhaustedAt = 1.0
 )
 
+// accountQuota captures the signals we use to gate provider ownership.
+//
+// Older revisions read GetCurrentPeriodUsage.ApiPercentUsed and treated
+// api_percent_used == 100 as "kill Claude for this account". That was
+// wrong: Cursor returns api_percent_used=100 whenever total_spend >=
+// plan_free_limit, even for accounts whose team plan actually pays for
+// Other Models via usage-based billing. Real accounts on VPS had that
+// field pinned to 100 while still serving Claude in the IDE, so CPA
+// unregistered every Claude variant and cctest.ai's requests failed
+// with "unknown provider for model claude-opus-4-8-medium".
+//
+// The Cursor server exposes the actual "no more API for you" state as
+// two orthogonal flags: in_slow_pool (Auto/Composer are throttled but
+// Other Models still work) and no_usage_based_allowed (the account
+// cannot buy usage beyond the plan). Only when both are true does the
+// pool truly refuse Other-bucket calls; that combination is what we now
+// gate on.
 type accountQuota struct {
-	Auto float64
-	API  float64
+	Auto                float64
+	InSlowPool          bool
+	NoUsageBasedAllowed bool
 }
 
 type quotaCacheEntry struct {
@@ -61,7 +80,18 @@ func fetchAccountQuotaLive(acc *auth.Account) (accountQuota, bool) {
 	if err != nil || snap == nil || !snap.Fetched.CurrentPeriodUsage {
 		return accountQuota{}, false
 	}
-	return accountQuota{Auto: snap.AutoPercentUsed, API: snap.APIPercentUsed}, true
+	// Require both slow-pool and hard-limit signals to actually be
+	// populated. Either one missing means we did not see the ground
+	// truth and should fail open — pool churn is worse than the odd
+	// wasted upstream 429.
+	if !snap.Fetched.SlowPoolStatus || !snap.Fetched.HardLimit {
+		return accountQuota{}, false
+	}
+	return accountQuota{
+		Auto:                snap.AutoPercentUsed,
+		InSlowPool:          snap.InSlowPool,
+		NoUsageBasedAllowed: snap.NoUsageBasedAllowed,
+	}, true
 }
 
 func quotaCacheKey(authID string, acc *auth.Account) string {
@@ -100,16 +130,24 @@ func resetQuotaCache() {
 	})
 }
 
-// normalizeQuotaPercent maps Cursor's mixed percent scales onto 0–1+.
-func normalizeQuotaPercent(p float64) float64 {
+func normalizeAutoPercent(p float64) float64 {
 	if p > 2 {
 		return p / 100
 	}
 	return p
 }
 
-func quotaExhausted(p float64) bool {
-	return normalizeQuotaPercent(p) >= quotaExhaustedAt
+func quotaExhaustedAuto(p float64) bool {
+	return normalizeAutoPercent(p) >= quotaExhaustedAt
+}
+
+// quotaExhaustedOther is the API/Other-Models gate. Cursor's Other Models
+// bar can sit at 100+ % while the account still bills to usage-based spend
+// (which is the case for every healthy team account on the VPS pool). Only
+// a slow-pool state combined with no_usage_based_allowed genuinely means
+// "no more Claude/GPT/Gemini here".
+func quotaExhaustedOther(q accountQuota) bool {
+	return q.InSlowPool && q.NoUsageBasedAllowed
 }
 
 func normalizeModelID(model string) string {
@@ -148,8 +186,8 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 	if !ok {
 		return names
 	}
-	dropCursor := quotaExhausted(quota.Auto)
-	dropOther := quotaExhausted(quota.API)
+	dropCursor := quotaExhaustedAuto(quota.Auto)
+	dropOther := quotaExhaustedOther(quota)
 	if !dropCursor && !dropOther {
 		return names
 	}
@@ -174,8 +212,8 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 	if acc != nil {
 		email = acc.Email
 	}
-	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route for_auth auth=%s email=%s auto=%.4f api=%.4f kept=%d dropped_cursor=%d dropped_other=%d\n",
-		strings.TrimSpace(authID), email, quota.Auto, quota.API, len(out), droppedCursor, droppedOther)
+	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route for_auth auth=%s email=%s auto=%.4f slow_pool=%v no_usage_based=%v kept=%d dropped_cursor=%d dropped_other=%d\n",
+		strings.TrimSpace(authID), email, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed, len(out), droppedCursor, droppedOther)
 	return out
 }
 
@@ -196,14 +234,14 @@ func quotaSkipFromStorage(storage []byte, model string) (bool, string) {
 		return false, ""
 	}
 	bucket := modelQuotaBucket(model)
-	used := quota.API
+	exhausted := quotaExhaustedOther(quota)
 	if bucket == quotaBucketCursor {
-		used = quota.Auto
+		exhausted = quotaExhaustedAuto(quota.Auto)
 	}
-	if !quotaExhausted(used) {
+	if !exhausted {
 		return false, ""
 	}
-	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route skip email=%s model=%s bucket=%s auto=%.4f api=%.4f\n",
-		acc.Email, model, bucket, quota.Auto, quota.API)
-	return true, fmt.Sprintf("cursor %s-models quota exhausted for %s (auto=%.4f api=%.4f)", bucket, model, quota.Auto, quota.API)
+	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route skip email=%s model=%s bucket=%s auto=%.4f slow_pool=%v no_usage_based=%v\n",
+		acc.Email, model, bucket, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed)
+	return true, fmt.Sprintf("cursor %s-models quota exhausted for %s (auto=%.4f slow_pool=%v no_usage_based=%v)", bucket, model, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed)
 }

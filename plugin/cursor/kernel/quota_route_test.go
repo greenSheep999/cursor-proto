@@ -19,12 +19,22 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func stubQuota(t *testing.T, auto, api float64, ok bool) {
+// stubQuota installs a canned accountQuota for the duration of a test.
+// Tests pass the two orthogonal signals we now key off explicitly:
+//
+//   - auto: the AutoPercentUsed ratio (0-1 or 0-100; normalized inside).
+//   - slowPool: matches snap.InSlowPool.
+//   - noUsageBased: matches snap.NoUsageBasedAllowed.
+func stubQuota(t *testing.T, auto float64, slowPool, noUsageBased, ok bool) {
 	t.Helper()
 	previous := fetchAccountQuota
 	resetQuotaCache()
 	fetchAccountQuota = func(*auth.Account) (accountQuota, bool) {
-		return accountQuota{Auto: auto, API: api}, ok
+		return accountQuota{
+			Auto:                auto,
+			InSlowPool:          slowPool,
+			NoUsageBasedAllowed: noUsageBased,
+		}, ok
 	}
 	t.Cleanup(func() {
 		fetchAccountQuota = previous
@@ -32,7 +42,7 @@ func stubQuota(t *testing.T, auto, api float64, ok bool) {
 	})
 }
 
-func TestNormalizeQuotaPercent(t *testing.T) {
+func TestNormalizeAutoPercent(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		in, want float64
@@ -41,28 +51,66 @@ func TestNormalizeQuotaPercent(t *testing.T) {
 		{1.0, 1.0},
 		{1.45, 1.45},
 		{100, 1.0},
-		{99.0, 0.99},
 	}
 	for _, tc := range cases {
-		if got := normalizeQuotaPercent(tc.in); got != tc.want {
-			t.Errorf("normalizeQuotaPercent(%v) = %v, want %v", tc.in, got, tc.want)
+		if got := normalizeAutoPercent(tc.in); got != tc.want {
+			t.Errorf("normalizeAutoPercent(%v) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
 }
 
-func TestQuotaExhausted(t *testing.T) {
+func TestQuotaExhaustedAuto(t *testing.T) {
 	t.Parallel()
-	if quotaExhausted(0.98) {
+	if quotaExhaustedAuto(0.98) {
 		t.Fatal("0.98 auto must still be routable")
 	}
-	if !quotaExhausted(1.0) {
+	if !quotaExhaustedAuto(1.0) {
 		t.Fatal("1.0 auto is exhausted")
 	}
-	if !quotaExhausted(100) {
-		t.Fatal("live API=100 must count as exhausted")
+}
+
+// TestQuotaExhaustedOther pins the two-signal gate: only when BOTH the
+// slow-pool flag and no_usage_based_allowed are set does CPA refuse to
+// register Other Models. This is the case cctest.ai regressed: every
+// healthy pool account showed api_percent_used=100 but neither flag,
+// and CPA still unregistered Claude for them.
+func TestQuotaExhaustedOther(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name         string
+		slowPool     bool
+		noUsageBased bool
+		want         bool
+	}{
+		{"healthy team account", false, false, false},
+		{"slow pool only (still has usage-based)", true, false, false},
+		{"usage-based off only (not in slow pool)", false, true, false},
+		{"fully exhausted", true, true, true},
 	}
-	if quotaExhausted(0) {
-		t.Fatal("zero is not exhausted")
+	for _, tc := range cases {
+		got := quotaExhaustedOther(accountQuota{
+			InSlowPool: tc.slowPool, NoUsageBasedAllowed: tc.noUsageBased,
+		})
+		if got != tc.want {
+			t.Errorf("%s: got %v want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestFilterModelsForQuotaKeepsHealthyAPI reproduces the cctest.ai regression:
+// Cursor reports api_percent_used=100 on every account whose total_spend
+// exceeds the plan's free limit, even when the team plan continues to
+// serve Other Models via usage-based billing. Without the slow-pool guard
+// CPA drops every Claude/GPT/Gemini variant and cctest.ai's request for
+// claude-opus-4-8-medium returns "unknown provider".
+func TestFilterModelsForQuotaKeepsHealthyAPI(t *testing.T) {
+	stubQuota(t, 0.07, false, false, true)
+	acc := &auth.Account{Email: "healthy-team@example.com", AccessToken: "tok"}
+	got := filterModelsForQuota("healthy-team@example.com", acc, []string{
+		"composer-2.5", "claude-sonnet-4-6",
+	})
+	if len(got) != 2 {
+		t.Fatalf("got %v, want both models (in_slow_pool=false must not gate)", got)
 	}
 }
 
@@ -100,7 +148,9 @@ func TestModelQuotaBucket(t *testing.T) {
 }
 
 func TestFilterModelsForQuotaDropsExhaustedOther(t *testing.T) {
-	stubQuota(t, 0.07, 100, true)
+	// slow_pool=true AND no_usage_based_allowed=true — the account really
+	// cannot serve Other Models any more.
+	stubQuota(t, 0.07, true, true, true)
 	acc := &auth.Account{Email: "pool@example.com", AccessToken: "tok"}
 	got := filterModelsForQuota("pool@example.com", acc, []string{
 		"composer-2.5", "grok-4.6", "claude-sonnet-4-6", "gpt-5.5",
@@ -111,7 +161,7 @@ func TestFilterModelsForQuotaDropsExhaustedOther(t *testing.T) {
 }
 
 func TestFilterModelsForQuotaDropsExhaustedCursor(t *testing.T) {
-	stubQuota(t, 1.45, 0.2, true)
+	stubQuota(t, 1.45, false, false, true)
 	acc := &auth.Account{Email: "over@example.com", AccessToken: "tok"}
 	got := filterModelsForQuota("over@example.com", acc, []string{
 		"composer-2.5", "claude-sonnet-4-6",
@@ -122,7 +172,7 @@ func TestFilterModelsForQuotaDropsExhaustedCursor(t *testing.T) {
 }
 
 func TestFilterModelsForQuotaFailsOpen(t *testing.T) {
-	stubQuota(t, 0, 0, false)
+	stubQuota(t, 0, false, false, false)
 	acc := &auth.Account{Email: "blip@example.com", AccessToken: "tok"}
 	in := []string{"composer-2.5", "claude-sonnet-4-6"}
 	got := filterModelsForQuota("blip@example.com", acc, in)
@@ -131,9 +181,9 @@ func TestFilterModelsForQuotaFailsOpen(t *testing.T) {
 	}
 }
 
-func TestDispatch_ModelForAuthHidesOtherWhenAPIExhausted(t *testing.T) {
+func TestDispatch_ModelForAuthHidesOtherWhenExhausted(t *testing.T) {
 	withoutCatalogRetries(t)
-	stubQuota(t, 0.02, 100, true)
+	stubQuota(t, 0.02, true, true, true)
 	previous := listModelsForAuth
 	t.Cleanup(func() { listModelsForAuth = previous })
 	listModelsForAuth = func(*auth.Account) ([]string, error) {
@@ -146,8 +196,8 @@ func TestDispatch_ModelForAuthHidesOtherWhenAPIExhausted(t *testing.T) {
 	}
 }
 
-func TestExecuteRejectsOtherModelsWhenAPIQuotaExhausted(t *testing.T) {
-	stubQuota(t, 0.04, 100, true)
+func TestExecuteRejectsOtherModelsWhenQuotaExhausted(t *testing.T) {
+	stubQuota(t, 0.04, true, true, true)
 	runnerCalled := false
 	defer installFakes(t,
 		func(_ string, _ []byte) (chatRunner, string, error) {
@@ -200,7 +250,7 @@ func TestExecuteRejectsOtherModelsWhenAPIQuotaExhausted(t *testing.T) {
 }
 
 func TestExecuteAllowsComposerWhenOnlyOtherQuotaExhausted(t *testing.T) {
-	stubQuota(t, 0.04, 100, true)
+	stubQuota(t, 0.04, true, true, true)
 	runner := &fakeRunner{
 		events: []executor.ChatEvent{
 			buildTextDeltaEvent("ok"),
