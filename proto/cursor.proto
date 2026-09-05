@@ -4,9 +4,9 @@ package cursor;
 
 option go_package = "github.com/router-for-me/cursor-proto/gen/cursor;cursorpb";
 
-// Generated from Cursor 3.16.17 workbench.desktop.main.js
-// commit: 6b2afae0257df2bb5e1835f15165dc2f0de056b0
-// Mode: core, 931 messages, 67 enums
+// Generated from Cursor 3.10.20 workbench.desktop.main.js
+// commit: 23b9fb205fe595ea2be29da7214e19762d037fc0
+// Mode: core, 949 messages, 71 enums
 
 // ============================================================
 // Namespace: agent.v1 → AgentV1
@@ -36,6 +36,9 @@ message AgentV1 {
     BACKGROUND_TASK_COMPLETION_REASON_UNSPECIFIED = 0;
     BACKGROUND_TASK_COMPLETION_REASON_TASK_FINISHED = 1;
     BACKGROUND_TASK_COMPLETION_REASON_TASK_PROGRESS = 2;
+    BACKGROUND_TASK_COMPLETION_REASON_WORKER_REPARENTED = 3;
+    BACKGROUND_TASK_COMPLETION_REASON_WORKER_MESSAGE = 4;
+    BACKGROUND_TASK_COMPLETION_REASON_WORKER_NEEDS_ATTENTION = 5;
   }
 
   enum BackgroundTaskKind {
@@ -243,6 +246,8 @@ message AgentV1 {
     SIMULATED_MSG_REASON_AGENT_STORE_CONFLICT = 30;
     SIMULATED_MSG_REASON_GOAL_CONTINUATION = 31;
     SIMULATED_MSG_REASON_PROJECT_KICKOFF = 32;
+    SIMULATED_MSG_REASON_MARKDOWN_PROMPT_BUTTON = 33;
+    SIMULATED_MSG_REASON_USER_QUICK_ACTION = 34;
   }
 
   enum SmartModeClassifierDecision {
@@ -313,6 +318,7 @@ message AgentV1 {
     UPDATE_PR_CODE_TOUR_EXECUTION_MODE_SERVER_SCHEDULED = 1;
     UPDATE_PR_CODE_TOUR_EXECUTION_MODE_CLIENT_REQUIRED = 2;
     UPDATE_PR_CODE_TOUR_EXECUTION_MODE_SKIPPED = 3;
+    UPDATE_PR_CODE_TOUR_EXECUTION_MODE_EDITED = 4;
   }
 
   message ActiveBranchChange {
@@ -397,6 +403,10 @@ message AgentV1 {
     optional string agent_session_id = 26;
     optional bool client_supports_prompt_context_usage_rpc = 27;
     optional bool client_supports_routed_model_update = 28;
+    optional AgentV1.SystemPromptSpec system_prompt_spec = 29;
+    optional AgentV1.ClientLlmGatewayCredential client_llm_gateway_credential = 30;
+    optional bool client_supports_preview_card = 31;
+    optional bool started_as_new_project = 32;
   }
 
   message AgentServerMessage {
@@ -431,6 +441,7 @@ message AgentV1 {
   message AgentStoreConflictArgs {
     optional AgentV1.AgentStoreConflictCursor cursor = 1;
     optional bool advance = 2;
+    optional bool include_quota_notices = 3;
   }
 
   message AgentStoreConflictCursor {
@@ -456,6 +467,9 @@ message AgentV1 {
     optional string original_abs_path = 10;
     optional string conflict_abs_path = 11;
     optional uint64 preserved_bytes = 12;
+    optional string scope_kind = 13;
+    optional uint64 limit_bytes = 14;
+    optional uint64 usage_bytes = 15;
   }
 
   message AgentStoreConflictResult {
@@ -549,16 +563,16 @@ message AgentV1 {
   }
 
   message AskQuestionArgs {
+    message Option {
+      string id = 1;
+      string label = 2;
+    }
+
     message Question {
       string id = 1;
       string prompt = 2;
       repeated AgentV1.AskQuestionArgs.Option options = 3;
       bool allow_multiple = 4;
-    }
-
-    message Option {
-      string id = 1;
-      string label = 2;
     }
 
     string title = 1;
@@ -609,6 +623,8 @@ message AgentV1 {
 
   message AssistantMessage {
     string text = 1;
+    optional uint64 started_at_ms = 2;
+    optional uint64 completed_at_ms = 3;
   }
 
   message AsyncAskQuestionCompletionAction {
@@ -694,6 +710,7 @@ message AgentV1 {
     bool skip_approval = 12;
     optional string conversation_id = 13;
     repeated string admin_command_denylist = 14;
+    optional string request_id = 15;
   }
 
   message BackgroundShellSpawnError {
@@ -735,6 +752,8 @@ message AgentV1 {
     optional string subagent_id = 9;
     optional string tool_call_id = 10;
     AgentV1.BackgroundTaskNotificationContext notification_context = 11;
+    optional uint64 completed_at_ms = 12;
+    bool record_only = 13;
   }
 
   message BackgroundTaskCompletionAction {
@@ -831,6 +850,10 @@ message AgentV1 {
   }
 
   message CanvasDiagnosticsResult {
+    optional string canvas_id = 3;
+    optional string title = 4;
+    optional string save_state = 5;
+    optional string save_detail = 6;
     oneof result {
       AgentV1.CanvasDiagnosticsSuccess success = 1;
       AgentV1.CanvasDiagnosticsError error = 2;
@@ -857,6 +880,10 @@ message AgentV1 {
     bool collect_background_children = 5;
     string children_completed_message_template = 6;
     int32 continuation_round_delay_ms = 7;
+  }
+
+  message ClientLlmGatewayCredential {
+    string bearer_token = 1;
   }
 
   message CloudSubagentReference {
@@ -1222,6 +1249,10 @@ message AgentV1 {
     map<string, bytes> subagent_state_refs = 31;
     optional AgentV1.GoalState goal_state = 32;
     optional bool is_root_project_conversation = 33;
+    repeated string completed_ask_question_tool_call_ids = 34;
+    repeated string durable_skill_blocks = 35;
+    optional string durable_custom_mode_id = 36;
+    optional uint32 message_count_at_last_compaction = 37;
   }
 
   message ConversationStep {
@@ -1703,6 +1734,7 @@ message AgentV1 {
     string exec_id = 15;
     optional AgentV1.SpanContext span_context = 19;
     optional bool accept_hook_additional_contexts = 55;
+    optional string machine_id = 57;
     oneof message {
       AgentV1.ShellArgs shell_args = 2;
       AgentV1.WriteArgs write_args = 3;
@@ -2029,6 +2061,31 @@ message AgentV1 {
     AgentV1.GetMcpToolsAgentResult result = 2;
   }
 
+  message GetPrCodeTourArgs {
+    string tool_call_id = 1;
+    optional string revision_id = 2;
+  }
+
+  message GetPrCodeTourError {
+    string error = 1;
+  }
+
+  message GetPrCodeTourResult {
+    oneof result {
+      AgentV1.GetPrCodeTourSuccess success = 1;
+      AgentV1.GetPrCodeTourError error = 2;
+    }
+  }
+
+  message GetPrCodeTourSuccess {
+    repeated AgentV1.PrCodeTourRevisionSnapshot revisions = 1;
+  }
+
+  message GetPrCodeTourToolCall {
+    AgentV1.GetPrCodeTourArgs args = 1;
+    AgentV1.GetPrCodeTourResult result = 2;
+  }
+
   message GitRepoInfo {
     string path = 1;
     string status = 2;
@@ -2223,6 +2280,7 @@ message AgentV1 {
   }
 
   message InteractionUpdate {
+    optional uint64 message_started_at_ms = 25;
     oneof message {
       AgentV1.TextDeltaUpdate text_delta = 1;
       AgentV1.ToolCallStartedUpdate tool_call_started = 2;
@@ -2272,6 +2330,15 @@ message AgentV1 {
     }
 
     message IdeState {
+      message ViewedPullRequest {
+        int32 number = 1;
+        string url = 2;
+        optional string title = 3;
+        optional string folder_path = 4;
+        optional string summary_json = 5;
+        optional string description = 6;
+      }
+
       message File {
         message CursorPosition {
           int32 line = 1;
@@ -2283,15 +2350,6 @@ message AgentV1 {
         optional AgentV1.InvocationContext.IdeState.File.CursorPosition cursor_position = 3;
         int32 total_lines = 4;
         optional string active_command = 5;
-      }
-
-      message ViewedPullRequest {
-        int32 number = 1;
-        string url = 2;
-        optional string title = 3;
-        optional string folder_path = 4;
-        optional string summary_json = 5;
-        optional string description = 6;
       }
 
       repeated AgentV1.InvocationContext.IdeState.File visible_files = 1;
@@ -2449,6 +2507,7 @@ message AgentV1 {
     string provider_identifier = 1;
     string tool_name = 2;
     optional string tool_call_id = 3;
+    optional string annotations_json = 4;
   }
 
   message McpAllowlistPrecheckResult {
@@ -2629,6 +2688,8 @@ message AgentV1 {
     string provider_identifier = 4;
     string tool_name = 5;
     optional string input_schema_json = 6;
+    optional string output_schema_json = 7;
+    optional string annotations_json = 8;
   }
 
   message McpToolDescriptor {
@@ -3212,6 +3273,16 @@ message AgentV1 {
 
   message PostToolUseRequestResponse {
     optional string additional_context = 1;
+  }
+
+  message PrCodeTourRevisionSnapshot {
+    string revision_id = 1;
+    string status = 2;
+    string head_sha = 3;
+    string feedback = 4;
+    int64 updated_at_ms = 5;
+    bool is_current = 6;
+    string markdown = 7;
   }
 
   message PrManagementArgs {
@@ -3936,6 +4007,7 @@ message AgentV1 {
     optional bool search_conversations_enabled = 50;
     optional bool send_message_enabled = 51;
     repeated string admin_command_denylist = 52;
+    optional AgentV1.SystemPromptSpec system_prompt_override = 53;
   }
 
   message RequestContextArgs {
@@ -3944,6 +4016,7 @@ message AgentV1 {
     optional string read_only_pinned_tree_sha = 4;
     optional string read_only_plugin_cache_root = 5;
     optional bool use_cached = 7;
+    optional bool wait_for_workspace_cache = 8;
   }
 
   message RequestContextEnv {
@@ -3969,6 +4042,8 @@ message AgentV1 {
     optional string dev_force_next_smart_mode_classifier_block_token = 23;
     optional string dev_delay_next_smart_mode_classifier_token = 24;
     repeated AgentV1.MountedAgentStore mounted_agent_stores = 25;
+    optional AgentV1.UserAgentStoreWebContext user_agent_store_web_context = 26;
+    optional bytes dev_mock_prompt_time = 27;
   }
 
   message RequestContextError {
@@ -4076,7 +4151,6 @@ message AgentV1 {
       READ_BOUNDARY_MODE_UNSPECIFIED = 0;
       READ_BOUNDARY_MODE_SYSTEM = 1;
       READ_BOUNDARY_MODE_WORKSPACE = 2;
-      READ_BOUNDARY_MODE_CUSTOM = 3;
     }
 
     enum Type {
@@ -4665,6 +4739,7 @@ message AgentV1 {
     optional AgentV1.ShellHookApprovalRequirement hook_approval_requirement = 20;
     optional string conversation_id = 21;
     repeated string admin_command_denylist = 22;
+    optional string request_id = 23;
   }
 
   message ShellCommand {
@@ -5314,6 +5389,7 @@ message AgentV1 {
 
   message SummaryCompletedUpdate {
     optional string hook_message = 1;
+    optional bool failed = 2;
   }
 
   message SummaryStartedUpdate {
@@ -5362,6 +5438,13 @@ message AgentV1 {
   message SystemContextInjection {
     string producer = 1;
     string content = 2;
+  }
+
+  message SystemPromptSpec {
+    oneof spec {
+      string replace = 1;
+      string append = 2;
+    }
   }
 
   message TargetMachine {
@@ -5452,6 +5535,8 @@ message AgentV1 {
   message ThinkingMessage {
     string text = 1;
     uint32 duration_ms = 2;
+    optional uint64 started_at_ms = 3;
+    optional uint64 completed_at_ms = 4;
   }
 
   message TodoItem {
@@ -5539,6 +5624,7 @@ message AgentV1 {
       AgentV1.ReadAgentTranscriptToolCall read_agent_transcript_tool_call = 75;
       AgentV1.CreateAgentToolCall create_agent_tool_call = 76;
       AgentV1.StopAgentToolCall stop_agent_tool_call = 77;
+      AgentV1.GetPrCodeTourToolCall get_pr_code_tour_tool_call = 78;
     }
   }
 
@@ -5659,6 +5745,16 @@ message AgentV1 {
   message UpdatePrCodeTourArgs {
     string feedback = 1;
     string tool_call_id = 2;
+    optional string base_sha = 3;
+    optional string head_sha = 4;
+    optional string source_revision_id = 5;
+    optional string revision_id = 6;
+    optional string markdown = 7;
+    optional string heading = 8;
+    optional string artifact_path = 9;
+    optional string artifact_alt = 10;
+    repeated string scope_commit_hashes = 11;
+    optional string explicit_user_prompt = 12;
   }
 
   message UpdatePrCodeTourError {
@@ -5710,6 +5806,11 @@ message AgentV1 {
     AgentV1.UpdateTodosResult result = 2;
   }
 
+  message UserAgentStoreWebContext {
+    string store_id = 1;
+    string portal_base_url = 2;
+  }
+
   message UserContextInjection {
     AgentV1.UserMessage user_message = 1;
     AgentV1.RequestContext request_context = 2;
@@ -5746,6 +5847,9 @@ message AgentV1 {
     repeated AgentV1.HookAdditionalContext hook_additional_contexts = 21;
     optional AgentV1.CustomModeIntent custom_mode_intent = 22;
     optional AgentV1.ProjectDetails project_details = 23;
+    optional bool turn_steer = 24;
+    optional uint64 started_at_ms = 25;
+    optional uint64 completed_at_ms = 26;
   }
 
   message UserMessageAction {
@@ -6002,6 +6106,39 @@ message AiserverV1 {
     INFERENCE_PROVIDER_WARNING_TRIGGER_ON_ERROR = 2;
   }
 
+  enum NewRepoFlowFact {
+    NEW_REPO_FLOW_FACT_UNSPECIFIED = 0;
+    NEW_REPO_FLOW_FACT_STARTED_AS_NEW_PROJECT = 1;
+    NEW_REPO_FLOW_FACT_REPO_IS_STANDARD_ORIGIN = 2;
+    NEW_REPO_FLOW_FACT_IS_SUBAGENT_CONVERSATION = 3;
+    NEW_REPO_FLOW_FACT_PLUGIN_INSTALLED = 4;
+    NEW_REPO_FLOW_FACT_PROBE_RESULT = 5;
+    NEW_REPO_FLOW_FACT_STEP_LATCHED = 6;
+    NEW_REPO_FLOW_FACT_SERVER_FACT = 7;
+    NEW_REPO_FLOW_FACT_PROBE_LINKED_WITH_LATCH_FALLBACK = 8;
+    NEW_REPO_FLOW_FACT_MCP_NEEDS_AUTH = 9;
+  }
+
+  enum NewRepoFlowPluginAuthTarget {
+    NEW_REPO_FLOW_PLUGIN_AUTH_TARGET_UNSPECIFIED = 0;
+    NEW_REPO_FLOW_PLUGIN_AUTH_TARGET_CLOUD = 1;
+    NEW_REPO_FLOW_PLUGIN_AUTH_TARGET_LOCAL = 2;
+  }
+
+  enum NewRepoFlowProbeInterpreter {
+    NEW_REPO_FLOW_PROBE_INTERPRETER_UNSPECIFIED = 0;
+    NEW_REPO_FLOW_PROBE_INTERPRETER_VERCEL_PROJECT_LINK_MATCH = 1;
+    NEW_REPO_FLOW_PROBE_INTERPRETER_JSON_PATH_EQUALS = 2;
+    NEW_REPO_FLOW_PROBE_INTERPRETER_BOOLEAN_FIELD = 3;
+  }
+
+  enum NewRepoFlowStepPresentation {
+    NEW_REPO_FLOW_STEP_PRESENTATION_UNSPECIFIED = 0;
+    NEW_REPO_FLOW_STEP_PRESENTATION_PILL = 1;
+    NEW_REPO_FLOW_STEP_PRESENTATION_PLUGIN_NUDGE = 2;
+    NEW_REPO_FLOW_STEP_PRESENTATION_BLOCKING_TRAY = 3;
+  }
+
   enum RemoteConnectionType {
     REMOTE_CONNECTION_TYPE_UNSPECIFIED = 0;
     REMOTE_CONNECTION_TYPE_LOCAL = 1;
@@ -6098,15 +6235,10 @@ message AiserverV1 {
     optional bool use_cloud_agent_effort_modes = 12;
     optional string admin_settings_group_public_id = 13;
     optional bool byok_enabled = 14;
+    optional bool use_parameterized_automations_models = 15;
   }
 
   message AvailableModelsResponse {
-    enum DegradationStatus {
-      DEGRADATION_STATUS_UNSPECIFIED = 0;
-      DEGRADATION_STATUS_DEGRADED = 1;
-      DEGRADATION_STATUS_DISABLED = 2;
-    }
-
     enum ModelVendorId {
       MODEL_VENDOR_ID_UNSPECIFIED = 0;
       MODEL_VENDOR_ID_ANTHROPIC = 1;
@@ -6120,30 +6252,24 @@ message AiserverV1 {
       MODEL_VENDOR_ID_META = 9;
     }
 
-    message FeatureModelConfig {
-      string default_model = 1;
-      repeated string fallback_models = 2;
-      repeated string best_of_n_default_models = 3;
+    enum DegradationStatus {
+      DEGRADATION_STATUS_UNSPECIFIED = 0;
+      DEGRADATION_STATUS_DEGRADED = 1;
+      DEGRADATION_STATUS_DISABLED = 2;
     }
 
-    message ModelVendor {
-      AiserverV1.AvailableModelsResponse.ModelVendorId id = 1;
+    message ModelVariantConfig {
+      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
       string display_name = 2;
-    }
-
-    message ModelPickerBadge {
-      enum Variant {
-        VARIANT_UNSPECIFIED = 0;
-        VARIANT_ACCENT = 1;
-        VARIANT_NEUTRAL = 2;
-        VARIANT_SUCCESS = 3;
-        VARIANT_WARN = 4;
-        VARIANT_DANGER = 5;
-      }
-
-      string label = 1;
-      AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant variant = 2;
-      bool dismiss_on_selection = 3;
+      bool is_max_mode = 3;
+      optional bool is_default_max_config = 4;
+      optional bool is_default_non_max_config = 5;
+      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
+      optional string tagline = 7;
+      optional string display_name_outside_picker = 8;
+      optional string variant_string_representation = 9;
+      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
+      optional string legacy_slug = 11;
     }
 
     message TooltipData {
@@ -6206,6 +6332,75 @@ message AiserverV1 {
       repeated AiserverV1.AvailableModelsResponse.ModelPickerBadge model_picker_badges = 48;
     }
 
+    message ModelVendor {
+      AiserverV1.AvailableModelsResponse.ModelVendorId id = 1;
+      string display_name = 2;
+    }
+
+    message ModelPickerBadge {
+      enum Variant {
+        VARIANT_UNSPECIFIED = 0;
+        VARIANT_ACCENT = 1;
+        VARIANT_NEUTRAL = 2;
+        VARIANT_SUCCESS = 3;
+        VARIANT_WARN = 4;
+        VARIANT_DANGER = 5;
+      }
+
+      string label = 1;
+      AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant variant = 2;
+      bool dismiss_on_selection = 3;
+    }
+
+    message ModelPickerDisplayConfiguration {
+      message RoutedModelViewConfig {
+        message RoutedModelViewToNamedViewButton {
+          string markdown = 1;
+        }
+
+        message RoutedModelViewToNamedViewToggle {
+          string title_markdown = 1;
+          optional string subtitle = 2;
+          optional bool set_to_last_named_model = 3;
+        }
+
+        optional string title = 1;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle routed_model_view_to_named_view_toggle = 2;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton routed_model_view_to_named_view_button = 3;
+        optional bool hide_search_bar = 4;
+        optional bool hide_routed_model_view = 5;
+      }
+
+      message NamedModelsViewConfig {
+        message NamedViewToRoutedModelViewToggle {
+          string markdown = 1;
+        }
+
+        message NamedViewToRoutedModelViewNoButton {
+        }
+
+        message NamedViewToRoutedModelViewButton {
+          string markdown = 1;
+        }
+
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle named_view_to_routed_model_view_toggle = 2;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton named_view_to_routed_model_view_no_button = 3;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton named_view_to_routed_model_view_button = 4;
+      }
+
+      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig routed_model_view_config = 1;
+      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig named_models_view_config = 2;
+      optional bool hide_search_bar = 3;
+      optional bool hide_add_models = 4;
+      optional string model_selection_restriction_message = 5;
+    }
+
+    message FeatureModelConfig {
+      string default_model = 1;
+      repeated string fallback_models = 2;
+      repeated string best_of_n_default_models = 3;
+    }
+
     message ConfirmationDialogue {
       enum Presentation {
         PRESENTATION_UNSPECIFIED = 0;
@@ -6217,63 +6412,6 @@ message AiserverV1 {
       string key = 3;
       bool blocks_submission = 4;
       optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation presentation = 5;
-    }
-
-    message ModelPickerDisplayConfiguration {
-      message NamedModelsViewConfig {
-        message NamedViewToRoutedModelViewNoButton {
-        }
-
-        message NamedViewToRoutedModelViewButton {
-          string markdown = 1;
-        }
-
-        message NamedViewToRoutedModelViewToggle {
-          string markdown = 1;
-        }
-
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle named_view_to_routed_model_view_toggle = 2;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton named_view_to_routed_model_view_no_button = 3;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton named_view_to_routed_model_view_button = 4;
-      }
-
-      message RoutedModelViewConfig {
-        message RoutedModelViewToNamedViewToggle {
-          string title_markdown = 1;
-          optional string subtitle = 2;
-          optional bool set_to_last_named_model = 3;
-        }
-
-        message RoutedModelViewToNamedViewButton {
-          string markdown = 1;
-        }
-
-        optional string title = 1;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle routed_model_view_to_named_view_toggle = 2;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton routed_model_view_to_named_view_button = 3;
-        optional bool hide_search_bar = 4;
-        optional bool hide_routed_model_view = 5;
-      }
-
-      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig routed_model_view_config = 1;
-      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig named_models_view_config = 2;
-      optional bool hide_search_bar = 3;
-      optional bool hide_add_models = 4;
-      optional string model_selection_restriction_message = 5;
-    }
-
-    message ModelVariantConfig {
-      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
-      string display_name = 2;
-      bool is_max_mode = 3;
-      optional bool is_default_max_config = 4;
-      optional bool is_default_non_max_config = 5;
-      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
-      optional string tagline = 7;
-      optional string display_name_outside_picker = 8;
-      optional string variant_string_representation = 9;
-      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
-      optional string legacy_slug = 11;
     }
 
     repeated string model_names = 1;
@@ -6699,6 +6837,7 @@ message AiserverV1 {
     optional AiserverV1.CodebaseTelemetryConfig codebase_telemetry_config = 35;
     AiserverV1.RetrievalKeepAliveConfig retrieval_keep_alive_config = 36;
     optional AiserverV1.GoogleWorkspaceMcpOAuthClient google_workspace_mcp_oauth_client = 37;
+    optional AiserverV1.NewRepoFlowConfig new_repo_flow_config = 38;
   }
 
   message GitCommit {
@@ -6831,11 +6970,6 @@ message AiserverV1 {
   }
 
   message ModelParameterDefinition {
-    message ModelParameterType {
-      optional AiserverV1.ModelParameterDefinition.BooleanParameterDefinition boolean_parameter = 1;
-      optional AiserverV1.ModelParameterDefinition.EnumParameterDefinition enum_parameter = 2;
-    }
-
     message BooleanParameterDefinition {
       message BooleanParameterValue {
         string value = 1;
@@ -6843,6 +6977,7 @@ message AiserverV1 {
         optional bool increases_model_cost = 3;
         optional bool default_blocked_in_admin_allowlist = 4;
         optional bool hide_from_user_picker_when_admin_blocked = 5;
+        optional bool blocked_by_admin_allowlist = 6;
       }
 
       repeated AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue values = 1;
@@ -6861,11 +6996,89 @@ message AiserverV1 {
       repeated AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue values = 1;
     }
 
+    message ModelParameterType {
+      optional AiserverV1.ModelParameterDefinition.BooleanParameterDefinition boolean_parameter = 1;
+      optional AiserverV1.ModelParameterDefinition.EnumParameterDefinition enum_parameter = 2;
+    }
+
     string id = 1;
     string name = 2;
     optional string markdown_tooltip = 3;
     AiserverV1.ModelParameterDefinition.ModelParameterType parameter_type = 4;
     optional bool is_cycleable_by_hotkey = 5;
+  }
+
+  message NewRepoFlowCondition {
+    AiserverV1.NewRepoFlowFact fact = 1;
+    string param = 2;
+    string expected_value = 3;
+    bool negate = 4;
+  }
+
+  message NewRepoFlowConfig {
+    string config_version = 1;
+    repeated AiserverV1.NewRepoFlowProbe probes = 2;
+    repeated AiserverV1.NewRepoFlowStep steps = 3;
+    map<string, string> server_facts = 4;
+  }
+
+  message NewRepoFlowDismissAction {
+  }
+
+  message NewRepoFlowInstallPluginAction {
+    string plugin_name = 1;
+    AiserverV1.NewRepoFlowPluginAuthTarget auth_target = 2;
+    map<string, string> redirect_metadata = 3;
+  }
+
+  message NewRepoFlowMcpAuthenticateAction {
+    string server_name_match = 1;
+    string post_auth_return_path_template = 2;
+  }
+
+  message NewRepoFlowProbe {
+    string id = 1;
+    string mcp_server_name_match = 2;
+    string tool_name = 3;
+    string args_json = 4;
+    AiserverV1.NewRepoFlowProbeInterpreter interpreter = 5;
+    string interpreter_param = 6;
+    string interpreter_expected_value = 7;
+    string backend_method = 8;
+  }
+
+  message NewRepoFlowStep {
+    string id = 1;
+    AiserverV1.NewRepoFlowStepPresentation presentation = 2;
+    string title = 3;
+    string body_markdown = 4;
+    string pill_label = 5;
+    repeated AiserverV1.NewRepoFlowStepButton buttons = 6;
+    repeated AiserverV1.NewRepoFlowCondition visible_when = 7;
+    bool dismissible = 8;
+    string brand_plugin_name = 9;
+    repeated AiserverV1.NewRepoFlowCondition disabled_when = 10;
+    string disabled_reason = 11;
+  }
+
+  message NewRepoFlowStepButton {
+    string label = 1;
+    AiserverV1.ButtonType button_type = 2;
+    oneof action {
+      string external_url = 3;
+      AiserverV1.NewRepoFlowInstallPluginAction install_plugin = 4;
+      AiserverV1.NewRepoFlowSubmitFollowupAction submit_followup = 5;
+      AiserverV1.ClientAction client_action = 6;
+      AiserverV1.NewRepoFlowDismissAction dismiss = 7;
+      AiserverV1.NewRepoFlowMcpAuthenticateAction mcp_authenticate = 8;
+    }
+  }
+
+  message NewRepoFlowSubmitFollowupAction {
+    string slash_command = 1;
+    string prompt_body = 2;
+    string compact_title = 3;
+    string latch_key = 4;
   }
 
   message OnboardingConfig {

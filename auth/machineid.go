@@ -30,6 +30,7 @@ const (
 	KnownReleaseHash_3_11_19 = "bf249e6efb5b097f23d7e21d7283429f0760b74a"
 	KnownReleaseHash_3_15_19 = "de07bee81cefe43461ebf4f40c3d2d78d15052aa"
 	KnownReleaseHash_3_16_17 = "6b2afae0257df2bb5e1835f15165dc2f0de056b2"
+	KnownReleaseHash_3_19_7  = "90de2327392570a5f5f625c656c6749d228e6437"
 	// KnownChecksumMachineID_3_16_17 is the machineId value observed in the
 	// 3.16.17 IDE's request-header builder. It intentionally differs from both
 	// the 3.16 release hash and the host's stable device MachineID.
@@ -50,6 +51,8 @@ func KnownReleaseHashFor(version string) string {
 		return KnownReleaseHash_3_15_19
 	case "3.16.17":
 		return KnownReleaseHash_3_16_17
+	case "3.19.7":
+		return KnownReleaseHash_3_19_7
 	default:
 		return ""
 	}
