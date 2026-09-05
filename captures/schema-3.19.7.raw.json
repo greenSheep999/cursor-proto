@@ -1,6 +1,6 @@
 {
-  "cursor_version": "3.10.20",
-  "cursor_commit": "23b9fb205fe595ea2be29da7214e19762d037fc0",
+  "cursor_version": "3.19.7",
+  "cursor_commit": "90de2327392570a5f5f625c656c6749d228e6430",
   "class_refs": {
     "exe": "aiserver.v1.LintSeverity",
     "EAc": "aiserver.v1.FeatureType",

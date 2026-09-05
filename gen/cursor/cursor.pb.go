@@ -3521,6 +3521,52 @@ func (AiserverV1_AvailableModelsResponse_DegradationStatus) EnumDescriptor() ([]
 	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 1}
 }
 
+type AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation int32
+
+const (
+	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_PRESENTATION_UNSPECIFIED         AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation = 0
+	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_PRESENTATION_POST_PICKER_WARNING AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation = 1
+)
+
+// Enum value maps for AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation.
+var (
+	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation_name = map[int32]string{
+		0: "PRESENTATION_UNSPECIFIED",
+		1: "PRESENTATION_POST_PICKER_WARNING",
+	}
+	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation_value = map[string]int32{
+		"PRESENTATION_UNSPECIFIED":         0,
+		"PRESENTATION_POST_PICKER_WARNING": 1,
+	}
+)
+
+func (x AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Enum() *AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation {
+	p := new(AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation)
+	*p = x
+	return p
+}
+
+func (x AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Descriptor() protoreflect.EnumDescriptor {
+	return file_cursor_proto_enumTypes[65].Descriptor()
+}
+
+func (AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Type() protoreflect.EnumType {
+	return &file_cursor_proto_enumTypes[65]
+}
+
+func (x AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation.Descriptor instead.
+func (AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) EnumDescriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 4, 0}
+}
+
 type AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant int32
 
 const (
@@ -3563,11 +3609,11 @@ func (x AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant) String() st
 }
 
 func (AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant) Descriptor() protoreflect.EnumDescriptor {
-	return file_cursor_proto_enumTypes[65].Descriptor()
+	return file_cursor_proto_enumTypes[66].Descriptor()
 }
 
 func (AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant) Type() protoreflect.EnumType {
-	return &file_cursor_proto_enumTypes[65]
+	return &file_cursor_proto_enumTypes[66]
 }
 
 func (x AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant) Number() protoreflect.EnumNumber {
@@ -3576,52 +3622,6 @@ func (x AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant) Number() pr
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant.Descriptor instead.
 func (AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant) EnumDescriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 4, 0}
-}
-
-type AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation int32
-
-const (
-	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_PRESENTATION_UNSPECIFIED         AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation = 0
-	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_PRESENTATION_POST_PICKER_WARNING AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation = 1
-)
-
-// Enum value maps for AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation.
-var (
-	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation_name = map[int32]string{
-		0: "PRESENTATION_UNSPECIFIED",
-		1: "PRESENTATION_POST_PICKER_WARNING",
-	}
-	AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation_value = map[string]int32{
-		"PRESENTATION_UNSPECIFIED":         0,
-		"PRESENTATION_POST_PICKER_WARNING": 1,
-	}
-)
-
-func (x AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Enum() *AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation {
-	p := new(AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation)
-	*p = x
-	return p
-}
-
-func (x AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Descriptor() protoreflect.EnumDescriptor {
-	return file_cursor_proto_enumTypes[66].Descriptor()
-}
-
-func (AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Type() protoreflect.EnumType {
-	return &file_cursor_proto_enumTypes[66]
-}
-
-func (x AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation.Descriptor instead.
-func (AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation) EnumDescriptor() ([]byte, []int) {
 	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 7, 0}
 }
 
@@ -62451,58 +62451,6 @@ func (x *AgentV1_WriteSuccess) GetFileContentAfterWrite() string {
 	return ""
 }
 
-type AgentV1_AskQuestionArgs_Option struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AgentV1_AskQuestionArgs_Option) Reset() {
-	*x = AgentV1_AskQuestionArgs_Option{}
-	mi := &file_cursor_proto_msgTypes[811]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentV1_AskQuestionArgs_Option) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentV1_AskQuestionArgs_Option) ProtoMessage() {}
-
-func (x *AgentV1_AskQuestionArgs_Option) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[811]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentV1_AskQuestionArgs_Option.ProtoReflect.Descriptor instead.
-func (*AgentV1_AskQuestionArgs_Option) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 29, 0}
-}
-
-func (x *AgentV1_AskQuestionArgs_Option) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *AgentV1_AskQuestionArgs_Option) GetLabel() string {
-	if x != nil {
-		return x.Label
-	}
-	return ""
-}
-
 type AgentV1_AskQuestionArgs_Question struct {
 	state         protoimpl.MessageState            `protogen:"open.v1"`
 	Id            string                            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -62515,7 +62463,7 @@ type AgentV1_AskQuestionArgs_Question struct {
 
 func (x *AgentV1_AskQuestionArgs_Question) Reset() {
 	*x = AgentV1_AskQuestionArgs_Question{}
-	mi := &file_cursor_proto_msgTypes[812]
+	mi := &file_cursor_proto_msgTypes[811]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -62527,7 +62475,7 @@ func (x *AgentV1_AskQuestionArgs_Question) String() string {
 func (*AgentV1_AskQuestionArgs_Question) ProtoMessage() {}
 
 func (x *AgentV1_AskQuestionArgs_Question) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[812]
+	mi := &file_cursor_proto_msgTypes[811]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62540,7 +62488,7 @@ func (x *AgentV1_AskQuestionArgs_Question) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentV1_AskQuestionArgs_Question.ProtoReflect.Descriptor instead.
 func (*AgentV1_AskQuestionArgs_Question) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 29, 1}
+	return file_cursor_proto_rawDescGZIP(), []int{0, 29, 0}
 }
 
 func (x *AgentV1_AskQuestionArgs_Question) GetId() string {
@@ -62569,6 +62517,58 @@ func (x *AgentV1_AskQuestionArgs_Question) GetAllowMultiple() bool {
 		return x.AllowMultiple
 	}
 	return false
+}
+
+type AgentV1_AskQuestionArgs_Option struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentV1_AskQuestionArgs_Option) Reset() {
+	*x = AgentV1_AskQuestionArgs_Option{}
+	mi := &file_cursor_proto_msgTypes[812]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentV1_AskQuestionArgs_Option) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentV1_AskQuestionArgs_Option) ProtoMessage() {}
+
+func (x *AgentV1_AskQuestionArgs_Option) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[812]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentV1_AskQuestionArgs_Option.ProtoReflect.Descriptor instead.
+func (*AgentV1_AskQuestionArgs_Option) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{0, 29, 1}
+}
+
+func (x *AgentV1_AskQuestionArgs_Option) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AgentV1_AskQuestionArgs_Option) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
 }
 
 type AgentV1_AskQuestionSuccess_Answer struct {
@@ -62699,30 +62699,34 @@ func (x *AgentV1_CommandClassifierResult_ClassifiedCommand) GetSubcommandTokens(
 	return nil
 }
 
-type AgentV1_InvocationContext_GithubPR struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Comments      string                 `protobuf:"bytes,3,opt,name=comments,proto3" json:"comments,omitempty"`
-	CiFailures    *string                `protobuf:"bytes,4,opt,name=ci_failures,json=ciFailures,proto3,oneof" json:"ci_failures,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type AgentV1_InvocationContext_SlackThread struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Thread              string                 `protobuf:"bytes,1,opt,name=thread,proto3" json:"thread,omitempty"`
+	ChannelName         *string                `protobuf:"bytes,2,opt,name=channel_name,json=channelName,proto3,oneof" json:"channel_name,omitempty"`
+	ChannelPurpose      *string                `protobuf:"bytes,3,opt,name=channel_purpose,json=channelPurpose,proto3,oneof" json:"channel_purpose,omitempty"`
+	ChannelTopic        *string                `protobuf:"bytes,4,opt,name=channel_topic,json=channelTopic,proto3,oneof" json:"channel_topic,omitempty"`
+	SenderName          *string                `protobuf:"bytes,5,opt,name=sender_name,json=senderName,proto3,oneof" json:"sender_name,omitempty"`
+	SenderId            *string                `protobuf:"bytes,6,opt,name=sender_id,json=senderId,proto3,oneof" json:"sender_id,omitempty"`
+	SenderType          *string                `protobuf:"bytes,7,opt,name=sender_type,json=senderType,proto3,oneof" json:"sender_type,omitempty"`
+	IsDirectlyAddressed *bool                  `protobuf:"varint,8,opt,name=is_directly_addressed,json=isDirectlyAddressed,proto3,oneof" json:"is_directly_addressed,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
-func (x *AgentV1_InvocationContext_GithubPR) Reset() {
-	*x = AgentV1_InvocationContext_GithubPR{}
+func (x *AgentV1_InvocationContext_SlackThread) Reset() {
+	*x = AgentV1_InvocationContext_SlackThread{}
 	mi := &file_cursor_proto_msgTypes[825]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AgentV1_InvocationContext_GithubPR) String() string {
+func (x *AgentV1_InvocationContext_SlackThread) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AgentV1_InvocationContext_GithubPR) ProtoMessage() {}
+func (*AgentV1_InvocationContext_SlackThread) ProtoMessage() {}
 
-func (x *AgentV1_InvocationContext_GithubPR) ProtoReflect() protoreflect.Message {
+func (x *AgentV1_InvocationContext_SlackThread) ProtoReflect() protoreflect.Message {
 	mi := &file_cursor_proto_msgTypes[825]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -62734,37 +62738,65 @@ func (x *AgentV1_InvocationContext_GithubPR) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AgentV1_InvocationContext_GithubPR.ProtoReflect.Descriptor instead.
-func (*AgentV1_InvocationContext_GithubPR) Descriptor() ([]byte, []int) {
+// Deprecated: Use AgentV1_InvocationContext_SlackThread.ProtoReflect.Descriptor instead.
+func (*AgentV1_InvocationContext_SlackThread) Descriptor() ([]byte, []int) {
 	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 0}
 }
 
-func (x *AgentV1_InvocationContext_GithubPR) GetTitle() string {
+func (x *AgentV1_InvocationContext_SlackThread) GetThread() string {
 	if x != nil {
-		return x.Title
+		return x.Thread
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_GithubPR) GetDescription() string {
-	if x != nil {
-		return x.Description
+func (x *AgentV1_InvocationContext_SlackThread) GetChannelName() string {
+	if x != nil && x.ChannelName != nil {
+		return *x.ChannelName
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_GithubPR) GetComments() string {
-	if x != nil {
-		return x.Comments
+func (x *AgentV1_InvocationContext_SlackThread) GetChannelPurpose() string {
+	if x != nil && x.ChannelPurpose != nil {
+		return *x.ChannelPurpose
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_GithubPR) GetCiFailures() string {
-	if x != nil && x.CiFailures != nil {
-		return *x.CiFailures
+func (x *AgentV1_InvocationContext_SlackThread) GetChannelTopic() string {
+	if x != nil && x.ChannelTopic != nil {
+		return *x.ChannelTopic
 	}
 	return ""
+}
+
+func (x *AgentV1_InvocationContext_SlackThread) GetSenderName() string {
+	if x != nil && x.SenderName != nil {
+		return *x.SenderName
+	}
+	return ""
+}
+
+func (x *AgentV1_InvocationContext_SlackThread) GetSenderId() string {
+	if x != nil && x.SenderId != nil {
+		return *x.SenderId
+	}
+	return ""
+}
+
+func (x *AgentV1_InvocationContext_SlackThread) GetSenderType() string {
+	if x != nil && x.SenderType != nil {
+		return *x.SenderType
+	}
+	return ""
+}
+
+func (x *AgentV1_InvocationContext_SlackThread) GetIsDirectlyAddressed() bool {
+	if x != nil && x.IsDirectlyAddressed != nil {
+		return *x.IsDirectlyAddressed
+	}
+	return false
 }
 
 type AgentV1_InvocationContext_IdeState struct {
@@ -62903,34 +62935,30 @@ func (x *AgentV1_InvocationContext_MicrosoftTeamsThread) GetTeamDescription() st
 	return ""
 }
 
-type AgentV1_InvocationContext_SlackThread struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Thread              string                 `protobuf:"bytes,1,opt,name=thread,proto3" json:"thread,omitempty"`
-	ChannelName         *string                `protobuf:"bytes,2,opt,name=channel_name,json=channelName,proto3,oneof" json:"channel_name,omitempty"`
-	ChannelPurpose      *string                `protobuf:"bytes,3,opt,name=channel_purpose,json=channelPurpose,proto3,oneof" json:"channel_purpose,omitempty"`
-	ChannelTopic        *string                `protobuf:"bytes,4,opt,name=channel_topic,json=channelTopic,proto3,oneof" json:"channel_topic,omitempty"`
-	SenderName          *string                `protobuf:"bytes,5,opt,name=sender_name,json=senderName,proto3,oneof" json:"sender_name,omitempty"`
-	SenderId            *string                `protobuf:"bytes,6,opt,name=sender_id,json=senderId,proto3,oneof" json:"sender_id,omitempty"`
-	SenderType          *string                `protobuf:"bytes,7,opt,name=sender_type,json=senderType,proto3,oneof" json:"sender_type,omitempty"`
-	IsDirectlyAddressed *bool                  `protobuf:"varint,8,opt,name=is_directly_addressed,json=isDirectlyAddressed,proto3,oneof" json:"is_directly_addressed,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+type AgentV1_InvocationContext_GithubPR struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Comments      string                 `protobuf:"bytes,3,opt,name=comments,proto3" json:"comments,omitempty"`
+	CiFailures    *string                `protobuf:"bytes,4,opt,name=ci_failures,json=ciFailures,proto3,oneof" json:"ci_failures,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) Reset() {
-	*x = AgentV1_InvocationContext_SlackThread{}
+func (x *AgentV1_InvocationContext_GithubPR) Reset() {
+	*x = AgentV1_InvocationContext_GithubPR{}
 	mi := &file_cursor_proto_msgTypes[828]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) String() string {
+func (x *AgentV1_InvocationContext_GithubPR) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AgentV1_InvocationContext_SlackThread) ProtoMessage() {}
+func (*AgentV1_InvocationContext_GithubPR) ProtoMessage() {}
 
-func (x *AgentV1_InvocationContext_SlackThread) ProtoReflect() protoreflect.Message {
+func (x *AgentV1_InvocationContext_GithubPR) ProtoReflect() protoreflect.Message {
 	mi := &file_cursor_proto_msgTypes[828]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -62942,65 +62970,113 @@ func (x *AgentV1_InvocationContext_SlackThread) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AgentV1_InvocationContext_SlackThread.ProtoReflect.Descriptor instead.
-func (*AgentV1_InvocationContext_SlackThread) Descriptor() ([]byte, []int) {
+// Deprecated: Use AgentV1_InvocationContext_GithubPR.ProtoReflect.Descriptor instead.
+func (*AgentV1_InvocationContext_GithubPR) Descriptor() ([]byte, []int) {
 	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 3}
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetThread() string {
+func (x *AgentV1_InvocationContext_GithubPR) GetTitle() string {
 	if x != nil {
-		return x.Thread
+		return x.Title
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetChannelName() string {
-	if x != nil && x.ChannelName != nil {
-		return *x.ChannelName
+func (x *AgentV1_InvocationContext_GithubPR) GetDescription() string {
+	if x != nil {
+		return x.Description
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetChannelPurpose() string {
-	if x != nil && x.ChannelPurpose != nil {
-		return *x.ChannelPurpose
+func (x *AgentV1_InvocationContext_GithubPR) GetComments() string {
+	if x != nil {
+		return x.Comments
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetChannelTopic() string {
-	if x != nil && x.ChannelTopic != nil {
-		return *x.ChannelTopic
+func (x *AgentV1_InvocationContext_GithubPR) GetCiFailures() string {
+	if x != nil && x.CiFailures != nil {
+		return *x.CiFailures
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetSenderName() string {
-	if x != nil && x.SenderName != nil {
-		return *x.SenderName
+type AgentV1_InvocationContext_IdeState_File struct {
+	state          protoimpl.MessageState                                  `protogen:"open.v1"`
+	Path           string                                                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	RelativePath   *string                                                 `protobuf:"bytes,2,opt,name=relative_path,json=relativePath,proto3,oneof" json:"relative_path,omitempty"`
+	CursorPosition *AgentV1_InvocationContext_IdeState_File_CursorPosition `protobuf:"bytes,3,opt,name=cursor_position,json=cursorPosition,proto3,oneof" json:"cursor_position,omitempty"`
+	TotalLines     int32                                                   `protobuf:"varint,4,opt,name=total_lines,json=totalLines,proto3" json:"total_lines,omitempty"`
+	ActiveCommand  *string                                                 `protobuf:"bytes,5,opt,name=active_command,json=activeCommand,proto3,oneof" json:"active_command,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AgentV1_InvocationContext_IdeState_File) Reset() {
+	*x = AgentV1_InvocationContext_IdeState_File{}
+	mi := &file_cursor_proto_msgTypes[829]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentV1_InvocationContext_IdeState_File) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentV1_InvocationContext_IdeState_File) ProtoMessage() {}
+
+func (x *AgentV1_InvocationContext_IdeState_File) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[829]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentV1_InvocationContext_IdeState_File.ProtoReflect.Descriptor instead.
+func (*AgentV1_InvocationContext_IdeState_File) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 1, 0}
+}
+
+func (x *AgentV1_InvocationContext_IdeState_File) GetPath() string {
+	if x != nil {
+		return x.Path
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetSenderId() string {
-	if x != nil && x.SenderId != nil {
-		return *x.SenderId
+func (x *AgentV1_InvocationContext_IdeState_File) GetRelativePath() string {
+	if x != nil && x.RelativePath != nil {
+		return *x.RelativePath
 	}
 	return ""
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetSenderType() string {
-	if x != nil && x.SenderType != nil {
-		return *x.SenderType
+func (x *AgentV1_InvocationContext_IdeState_File) GetCursorPosition() *AgentV1_InvocationContext_IdeState_File_CursorPosition {
+	if x != nil {
+		return x.CursorPosition
 	}
-	return ""
+	return nil
 }
 
-func (x *AgentV1_InvocationContext_SlackThread) GetIsDirectlyAddressed() bool {
-	if x != nil && x.IsDirectlyAddressed != nil {
-		return *x.IsDirectlyAddressed
+func (x *AgentV1_InvocationContext_IdeState_File) GetTotalLines() int32 {
+	if x != nil {
+		return x.TotalLines
 	}
-	return false
+	return 0
+}
+
+func (x *AgentV1_InvocationContext_IdeState_File) GetActiveCommand() string {
+	if x != nil && x.ActiveCommand != nil {
+		return *x.ActiveCommand
+	}
+	return ""
 }
 
 type AgentV1_InvocationContext_IdeState_ViewedPullRequest struct {
@@ -63017,7 +63093,7 @@ type AgentV1_InvocationContext_IdeState_ViewedPullRequest struct {
 
 func (x *AgentV1_InvocationContext_IdeState_ViewedPullRequest) Reset() {
 	*x = AgentV1_InvocationContext_IdeState_ViewedPullRequest{}
-	mi := &file_cursor_proto_msgTypes[829]
+	mi := &file_cursor_proto_msgTypes[830]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -63029,7 +63105,7 @@ func (x *AgentV1_InvocationContext_IdeState_ViewedPullRequest) String() string {
 func (*AgentV1_InvocationContext_IdeState_ViewedPullRequest) ProtoMessage() {}
 
 func (x *AgentV1_InvocationContext_IdeState_ViewedPullRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[829]
+	mi := &file_cursor_proto_msgTypes[830]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63042,7 +63118,7 @@ func (x *AgentV1_InvocationContext_IdeState_ViewedPullRequest) ProtoReflect() pr
 
 // Deprecated: Use AgentV1_InvocationContext_IdeState_ViewedPullRequest.ProtoReflect.Descriptor instead.
 func (*AgentV1_InvocationContext_IdeState_ViewedPullRequest) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 1, 0}
+	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 1, 1}
 }
 
 func (x *AgentV1_InvocationContext_IdeState_ViewedPullRequest) GetNumber() int32 {
@@ -63087,82 +63163,6 @@ func (x *AgentV1_InvocationContext_IdeState_ViewedPullRequest) GetDescription() 
 	return ""
 }
 
-type AgentV1_InvocationContext_IdeState_File struct {
-	state          protoimpl.MessageState                                  `protogen:"open.v1"`
-	Path           string                                                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	RelativePath   *string                                                 `protobuf:"bytes,2,opt,name=relative_path,json=relativePath,proto3,oneof" json:"relative_path,omitempty"`
-	CursorPosition *AgentV1_InvocationContext_IdeState_File_CursorPosition `protobuf:"bytes,3,opt,name=cursor_position,json=cursorPosition,proto3,oneof" json:"cursor_position,omitempty"`
-	TotalLines     int32                                                   `protobuf:"varint,4,opt,name=total_lines,json=totalLines,proto3" json:"total_lines,omitempty"`
-	ActiveCommand  *string                                                 `protobuf:"bytes,5,opt,name=active_command,json=activeCommand,proto3,oneof" json:"active_command,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *AgentV1_InvocationContext_IdeState_File) Reset() {
-	*x = AgentV1_InvocationContext_IdeState_File{}
-	mi := &file_cursor_proto_msgTypes[830]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentV1_InvocationContext_IdeState_File) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentV1_InvocationContext_IdeState_File) ProtoMessage() {}
-
-func (x *AgentV1_InvocationContext_IdeState_File) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[830]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentV1_InvocationContext_IdeState_File.ProtoReflect.Descriptor instead.
-func (*AgentV1_InvocationContext_IdeState_File) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 1, 1}
-}
-
-func (x *AgentV1_InvocationContext_IdeState_File) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *AgentV1_InvocationContext_IdeState_File) GetRelativePath() string {
-	if x != nil && x.RelativePath != nil {
-		return *x.RelativePath
-	}
-	return ""
-}
-
-func (x *AgentV1_InvocationContext_IdeState_File) GetCursorPosition() *AgentV1_InvocationContext_IdeState_File_CursorPosition {
-	if x != nil {
-		return x.CursorPosition
-	}
-	return nil
-}
-
-func (x *AgentV1_InvocationContext_IdeState_File) GetTotalLines() int32 {
-	if x != nil {
-		return x.TotalLines
-	}
-	return 0
-}
-
-func (x *AgentV1_InvocationContext_IdeState_File) GetActiveCommand() string {
-	if x != nil && x.ActiveCommand != nil {
-		return *x.ActiveCommand
-	}
-	return ""
-}
-
 type AgentV1_InvocationContext_IdeState_File_CursorPosition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Line          int32                  `protobuf:"varint,1,opt,name=line,proto3" json:"line,omitempty"`
@@ -63198,7 +63198,7 @@ func (x *AgentV1_InvocationContext_IdeState_File_CursorPosition) ProtoReflect() 
 
 // Deprecated: Use AgentV1_InvocationContext_IdeState_File_CursorPosition.ProtoReflect.Descriptor instead.
 func (*AgentV1_InvocationContext_IdeState_File_CursorPosition) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 1, 1, 0}
+	return file_cursor_proto_rawDescGZIP(), []int{0, 276, 1, 0, 0}
 }
 
 func (x *AgentV1_InvocationContext_IdeState_File_CursorPosition) GetLine() int32 {
@@ -63611,6 +63611,58 @@ func (x *AgentV1_SelectedImage_BlobIdWithData) GetData() []byte {
 	return nil
 }
 
+type AgentV1_SelectedVideo_BlobIdWithData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BlobId        []byte                 `protobuf:"bytes,1,opt,name=blob_id,json=blobId,proto3" json:"blob_id,omitempty"`
+	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentV1_SelectedVideo_BlobIdWithData) Reset() {
+	*x = AgentV1_SelectedVideo_BlobIdWithData{}
+	mi := &file_cursor_proto_msgTypes[844]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentV1_SelectedVideo_BlobIdWithData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentV1_SelectedVideo_BlobIdWithData) ProtoMessage() {}
+
+func (x *AgentV1_SelectedVideo_BlobIdWithData) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[844]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentV1_SelectedVideo_BlobIdWithData.ProtoReflect.Descriptor instead.
+func (*AgentV1_SelectedVideo_BlobIdWithData) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{0, 580, 0}
+}
+
+func (x *AgentV1_SelectedVideo_BlobIdWithData) GetBlobId() []byte {
+	if x != nil {
+		return x.BlobId
+	}
+	return nil
+}
+
+func (x *AgentV1_SelectedVideo_BlobIdWithData) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 type AgentV1_SelectedVideo_SignedUrl struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Url                string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
@@ -63624,7 +63676,7 @@ type AgentV1_SelectedVideo_SignedUrl struct {
 
 func (x *AgentV1_SelectedVideo_SignedUrl) Reset() {
 	*x = AgentV1_SelectedVideo_SignedUrl{}
-	mi := &file_cursor_proto_msgTypes[844]
+	mi := &file_cursor_proto_msgTypes[845]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -63636,7 +63688,7 @@ func (x *AgentV1_SelectedVideo_SignedUrl) String() string {
 func (*AgentV1_SelectedVideo_SignedUrl) ProtoMessage() {}
 
 func (x *AgentV1_SelectedVideo_SignedUrl) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[844]
+	mi := &file_cursor_proto_msgTypes[845]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63649,7 +63701,7 @@ func (x *AgentV1_SelectedVideo_SignedUrl) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentV1_SelectedVideo_SignedUrl.ProtoReflect.Descriptor instead.
 func (*AgentV1_SelectedVideo_SignedUrl) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 580, 0}
+	return file_cursor_proto_rawDescGZIP(), []int{0, 580, 1}
 }
 
 func (x *AgentV1_SelectedVideo_SignedUrl) GetUrl() string {
@@ -63687,29 +63739,30 @@ func (x *AgentV1_SelectedVideo_SignedUrl) GetConversationId() string {
 	return ""
 }
 
-type AgentV1_SelectedVideo_BlobIdWithData struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BlobId        []byte                 `protobuf:"bytes,1,opt,name=blob_id,json=blobId,proto3" json:"blob_id,omitempty"`
-	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+type AgentV1_ShellCommandParsingResult_ExecutableCommand struct {
+	state         protoimpl.MessageState                                    `protogen:"open.v1"`
+	Name          string                                                    `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Args          []*AgentV1_ShellCommandParsingResult_ExecutableCommandArg `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"`
+	FullText      string                                                    `protobuf:"bytes,3,opt,name=full_text,json=fullText,proto3" json:"full_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AgentV1_SelectedVideo_BlobIdWithData) Reset() {
-	*x = AgentV1_SelectedVideo_BlobIdWithData{}
-	mi := &file_cursor_proto_msgTypes[845]
+func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) Reset() {
+	*x = AgentV1_ShellCommandParsingResult_ExecutableCommand{}
+	mi := &file_cursor_proto_msgTypes[846]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AgentV1_SelectedVideo_BlobIdWithData) String() string {
+func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AgentV1_SelectedVideo_BlobIdWithData) ProtoMessage() {}
+func (*AgentV1_ShellCommandParsingResult_ExecutableCommand) ProtoMessage() {}
 
-func (x *AgentV1_SelectedVideo_BlobIdWithData) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[845]
+func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[846]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63720,23 +63773,30 @@ func (x *AgentV1_SelectedVideo_BlobIdWithData) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AgentV1_SelectedVideo_BlobIdWithData.ProtoReflect.Descriptor instead.
-func (*AgentV1_SelectedVideo_BlobIdWithData) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 580, 1}
+// Deprecated: Use AgentV1_ShellCommandParsingResult_ExecutableCommand.ProtoReflect.Descriptor instead.
+func (*AgentV1_ShellCommandParsingResult_ExecutableCommand) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{0, 627, 0}
 }
 
-func (x *AgentV1_SelectedVideo_BlobIdWithData) GetBlobId() []byte {
+func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) GetName() string {
 	if x != nil {
-		return x.BlobId
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) GetArgs() []*AgentV1_ShellCommandParsingResult_ExecutableCommandArg {
+	if x != nil {
+		return x.Args
 	}
 	return nil
 }
 
-func (x *AgentV1_SelectedVideo_BlobIdWithData) GetData() []byte {
+func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) GetFullText() string {
 	if x != nil {
-		return x.Data
+		return x.FullText
 	}
-	return nil
+	return ""
 }
 
 type AgentV1_ShellCommandParsingResult_Redirect struct {
@@ -63751,7 +63811,7 @@ type AgentV1_ShellCommandParsingResult_Redirect struct {
 
 func (x *AgentV1_ShellCommandParsingResult_Redirect) Reset() {
 	*x = AgentV1_ShellCommandParsingResult_Redirect{}
-	mi := &file_cursor_proto_msgTypes[846]
+	mi := &file_cursor_proto_msgTypes[847]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -63763,7 +63823,7 @@ func (x *AgentV1_ShellCommandParsingResult_Redirect) String() string {
 func (*AgentV1_ShellCommandParsingResult_Redirect) ProtoMessage() {}
 
 func (x *AgentV1_ShellCommandParsingResult_Redirect) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[846]
+	mi := &file_cursor_proto_msgTypes[847]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63776,7 +63836,7 @@ func (x *AgentV1_ShellCommandParsingResult_Redirect) ProtoReflect() protoreflect
 
 // Deprecated: Use AgentV1_ShellCommandParsingResult_Redirect.ProtoReflect.Descriptor instead.
 func (*AgentV1_ShellCommandParsingResult_Redirect) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 627, 0}
+	return file_cursor_proto_rawDescGZIP(), []int{0, 627, 1}
 }
 
 func (x *AgentV1_ShellCommandParsingResult_Redirect) GetOperator() string {
@@ -63817,7 +63877,7 @@ type AgentV1_ShellCommandParsingResult_ExecutableCommandArg struct {
 
 func (x *AgentV1_ShellCommandParsingResult_ExecutableCommandArg) Reset() {
 	*x = AgentV1_ShellCommandParsingResult_ExecutableCommandArg{}
-	mi := &file_cursor_proto_msgTypes[847]
+	mi := &file_cursor_proto_msgTypes[848]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -63829,7 +63889,7 @@ func (x *AgentV1_ShellCommandParsingResult_ExecutableCommandArg) String() string
 func (*AgentV1_ShellCommandParsingResult_ExecutableCommandArg) ProtoMessage() {}
 
 func (x *AgentV1_ShellCommandParsingResult_ExecutableCommandArg) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[847]
+	mi := &file_cursor_proto_msgTypes[848]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63842,7 +63902,7 @@ func (x *AgentV1_ShellCommandParsingResult_ExecutableCommandArg) ProtoReflect() 
 
 // Deprecated: Use AgentV1_ShellCommandParsingResult_ExecutableCommandArg.ProtoReflect.Descriptor instead.
 func (*AgentV1_ShellCommandParsingResult_ExecutableCommandArg) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 627, 1}
+	return file_cursor_proto_rawDescGZIP(), []int{0, 627, 2}
 }
 
 func (x *AgentV1_ShellCommandParsingResult_ExecutableCommandArg) GetType() string {
@@ -63855,66 +63915,6 @@ func (x *AgentV1_ShellCommandParsingResult_ExecutableCommandArg) GetType() strin
 func (x *AgentV1_ShellCommandParsingResult_ExecutableCommandArg) GetValue() string {
 	if x != nil {
 		return x.Value
-	}
-	return ""
-}
-
-type AgentV1_ShellCommandParsingResult_ExecutableCommand struct {
-	state         protoimpl.MessageState                                    `protogen:"open.v1"`
-	Name          string                                                    `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Args          []*AgentV1_ShellCommandParsingResult_ExecutableCommandArg `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"`
-	FullText      string                                                    `protobuf:"bytes,3,opt,name=full_text,json=fullText,proto3" json:"full_text,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) Reset() {
-	*x = AgentV1_ShellCommandParsingResult_ExecutableCommand{}
-	mi := &file_cursor_proto_msgTypes[848]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentV1_ShellCommandParsingResult_ExecutableCommand) ProtoMessage() {}
-
-func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[848]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentV1_ShellCommandParsingResult_ExecutableCommand.ProtoReflect.Descriptor instead.
-func (*AgentV1_ShellCommandParsingResult_ExecutableCommand) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{0, 627, 2}
-}
-
-func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) GetArgs() []*AgentV1_ShellCommandParsingResult_ExecutableCommandArg {
-	if x != nil {
-		return x.Args
-	}
-	return nil
-}
-
-func (x *AgentV1_ShellCommandParsingResult_ExecutableCommand) GetFullText() string {
-	if x != nil {
-		return x.FullText
 	}
 	return ""
 }
@@ -70862,222 +70862,6 @@ func (x *AiserverV1_VscodeOSStatistics) GetLoadavg() []float64 {
 	return nil
 }
 
-type AiserverV1_AvailableModelsResponse_ModelVariantConfig struct {
-	state                       protoimpl.MessageState                                   `protogen:"open.v1"`
-	ParameterValues             []*AgentV1_RequestedModel_ModelParameterValue            `protobuf:"bytes,1,rep,name=parameter_values,json=parameterValues,proto3" json:"parameter_values,omitempty"`
-	DisplayName                 string                                                   `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	IsMaxMode                   bool                                                     `protobuf:"varint,3,opt,name=is_max_mode,json=isMaxMode,proto3" json:"is_max_mode,omitempty"`
-	IsDefaultMaxConfig          *bool                                                    `protobuf:"varint,4,opt,name=is_default_max_config,json=isDefaultMaxConfig,proto3,oneof" json:"is_default_max_config,omitempty"`
-	IsDefaultNonMaxConfig       *bool                                                    `protobuf:"varint,5,opt,name=is_default_non_max_config,json=isDefaultNonMaxConfig,proto3,oneof" json:"is_default_non_max_config,omitempty"`
-	TooltipData                 *AiserverV1_AvailableModelsResponse_TooltipData          `protobuf:"bytes,6,opt,name=tooltip_data,json=tooltipData,proto3,oneof" json:"tooltip_data,omitempty"`
-	Tagline                     *string                                                  `protobuf:"bytes,7,opt,name=tagline,proto3,oneof" json:"tagline,omitempty"`
-	DisplayNameOutsidePicker    *string                                                  `protobuf:"bytes,8,opt,name=display_name_outside_picker,json=displayNameOutsidePicker,proto3,oneof" json:"display_name_outside_picker,omitempty"`
-	VariantStringRepresentation *string                                                  `protobuf:"bytes,9,opt,name=variant_string_representation,json=variantStringRepresentation,proto3,oneof" json:"variant_string_representation,omitempty"`
-	ConfirmationDialogue        *AiserverV1_AvailableModelsResponse_ConfirmationDialogue `protobuf:"bytes,10,opt,name=confirmation_dialogue,json=confirmationDialogue,proto3,oneof" json:"confirmation_dialogue,omitempty"`
-	LegacySlug                  *string                                                  `protobuf:"bytes,11,opt,name=legacy_slug,json=legacySlug,proto3,oneof" json:"legacy_slug,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) Reset() {
-	*x = AiserverV1_AvailableModelsResponse_ModelVariantConfig{}
-	mi := &file_cursor_proto_msgTypes[938]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AiserverV1_AvailableModelsResponse_ModelVariantConfig) ProtoMessage() {}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[938]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelVariantConfig.ProtoReflect.Descriptor instead.
-func (*AiserverV1_AvailableModelsResponse_ModelVariantConfig) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 0}
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetParameterValues() []*AgentV1_RequestedModel_ModelParameterValue {
-	if x != nil {
-		return x.ParameterValues
-	}
-	return nil
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetDisplayName() string {
-	if x != nil {
-		return x.DisplayName
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetIsMaxMode() bool {
-	if x != nil {
-		return x.IsMaxMode
-	}
-	return false
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetIsDefaultMaxConfig() bool {
-	if x != nil && x.IsDefaultMaxConfig != nil {
-		return *x.IsDefaultMaxConfig
-	}
-	return false
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetIsDefaultNonMaxConfig() bool {
-	if x != nil && x.IsDefaultNonMaxConfig != nil {
-		return *x.IsDefaultNonMaxConfig
-	}
-	return false
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetTooltipData() *AiserverV1_AvailableModelsResponse_TooltipData {
-	if x != nil {
-		return x.TooltipData
-	}
-	return nil
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetTagline() string {
-	if x != nil && x.Tagline != nil {
-		return *x.Tagline
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetDisplayNameOutsidePicker() string {
-	if x != nil && x.DisplayNameOutsidePicker != nil {
-		return *x.DisplayNameOutsidePicker
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetVariantStringRepresentation() string {
-	if x != nil && x.VariantStringRepresentation != nil {
-		return *x.VariantStringRepresentation
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetConfirmationDialogue() *AiserverV1_AvailableModelsResponse_ConfirmationDialogue {
-	if x != nil {
-		return x.ConfirmationDialogue
-	}
-	return nil
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetLegacySlug() string {
-	if x != nil && x.LegacySlug != nil {
-		return *x.LegacySlug
-	}
-	return ""
-}
-
-type AiserverV1_AvailableModelsResponse_TooltipData struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	PrimaryText          string                 `protobuf:"bytes,1,opt,name=primary_text,json=primaryText,proto3" json:"primary_text,omitempty"`
-	SecondaryText        string                 `protobuf:"bytes,2,opt,name=secondary_text,json=secondaryText,proto3" json:"secondary_text,omitempty"`
-	SecondaryWarningText bool                   `protobuf:"varint,3,opt,name=secondary_warning_text,json=secondaryWarningText,proto3" json:"secondary_warning_text,omitempty"`
-	Icon                 string                 `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"`
-	TertiaryText         string                 `protobuf:"bytes,5,opt,name=tertiary_text,json=tertiaryText,proto3" json:"tertiary_text,omitempty"`
-	TertiaryTextUrl      string                 `protobuf:"bytes,6,opt,name=tertiary_text_url,json=tertiaryTextUrl,proto3" json:"tertiary_text_url,omitempty"`
-	MarkdownContent      *string                `protobuf:"bytes,7,opt,name=markdown_content,json=markdownContent,proto3,oneof" json:"markdown_content,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) Reset() {
-	*x = AiserverV1_AvailableModelsResponse_TooltipData{}
-	mi := &file_cursor_proto_msgTypes[939]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AiserverV1_AvailableModelsResponse_TooltipData) ProtoMessage() {}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[939]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AiserverV1_AvailableModelsResponse_TooltipData.ProtoReflect.Descriptor instead.
-func (*AiserverV1_AvailableModelsResponse_TooltipData) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 1}
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetPrimaryText() string {
-	if x != nil {
-		return x.PrimaryText
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetSecondaryText() string {
-	if x != nil {
-		return x.SecondaryText
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetSecondaryWarningText() bool {
-	if x != nil {
-		return x.SecondaryWarningText
-	}
-	return false
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetIcon() string {
-	if x != nil {
-		return x.Icon
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetTertiaryText() string {
-	if x != nil {
-		return x.TertiaryText
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetTertiaryTextUrl() string {
-	if x != nil {
-		return x.TertiaryTextUrl
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetMarkdownContent() string {
-	if x != nil && x.MarkdownContent != nil {
-		return *x.MarkdownContent
-	}
-	return ""
-}
-
 type AiserverV1_AvailableModelsResponse_AvailableModel struct {
 	state                              protoimpl.MessageState                                   `protogen:"open.v1"`
 	Name                               string                                                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -71133,7 +70917,7 @@ type AiserverV1_AvailableModelsResponse_AvailableModel struct {
 
 func (x *AiserverV1_AvailableModelsResponse_AvailableModel) Reset() {
 	*x = AiserverV1_AvailableModelsResponse_AvailableModel{}
-	mi := &file_cursor_proto_msgTypes[940]
+	mi := &file_cursor_proto_msgTypes[938]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -71145,7 +70929,7 @@ func (x *AiserverV1_AvailableModelsResponse_AvailableModel) String() string {
 func (*AiserverV1_AvailableModelsResponse_AvailableModel) ProtoMessage() {}
 
 func (x *AiserverV1_AvailableModelsResponse_AvailableModel) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[940]
+	mi := &file_cursor_proto_msgTypes[938]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -71158,7 +70942,7 @@ func (x *AiserverV1_AvailableModelsResponse_AvailableModel) ProtoReflect() proto
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_AvailableModel.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_AvailableModel) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 2}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 0}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_AvailableModel) GetName() string {
@@ -71500,7 +71284,7 @@ type AiserverV1_AvailableModelsResponse_ModelVendor struct {
 
 func (x *AiserverV1_AvailableModelsResponse_ModelVendor) Reset() {
 	*x = AiserverV1_AvailableModelsResponse_ModelVendor{}
-	mi := &file_cursor_proto_msgTypes[941]
+	mi := &file_cursor_proto_msgTypes[939]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -71512,7 +71296,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelVendor) String() string {
 func (*AiserverV1_AvailableModelsResponse_ModelVendor) ProtoMessage() {}
 
 func (x *AiserverV1_AvailableModelsResponse_ModelVendor) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[941]
+	mi := &file_cursor_proto_msgTypes[939]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -71525,7 +71309,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelVendor) ProtoReflect() protoref
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelVendor.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ModelVendor) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 1}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelVendor) GetId() AiserverV1_AvailableModelsResponse_ModelVendorId {
@@ -71542,30 +71326,38 @@ func (x *AiserverV1_AvailableModelsResponse_ModelVendor) GetDisplayName() string
 	return ""
 }
 
-type AiserverV1_AvailableModelsResponse_ModelPickerBadge struct {
-	state              protoimpl.MessageState                                      `protogen:"open.v1"`
-	Label              string                                                      `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
-	Variant            AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant `protobuf:"varint,2,opt,name=variant,proto3,enum=cursor.AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant" json:"variant,omitempty"`
-	DismissOnSelection bool                                                        `protobuf:"varint,3,opt,name=dismiss_on_selection,json=dismissOnSelection,proto3" json:"dismiss_on_selection,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+type AiserverV1_AvailableModelsResponse_ModelVariantConfig struct {
+	state                       protoimpl.MessageState                                   `protogen:"open.v1"`
+	ParameterValues             []*AgentV1_RequestedModel_ModelParameterValue            `protobuf:"bytes,1,rep,name=parameter_values,json=parameterValues,proto3" json:"parameter_values,omitempty"`
+	DisplayName                 string                                                   `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	IsMaxMode                   bool                                                     `protobuf:"varint,3,opt,name=is_max_mode,json=isMaxMode,proto3" json:"is_max_mode,omitempty"`
+	IsDefaultMaxConfig          *bool                                                    `protobuf:"varint,4,opt,name=is_default_max_config,json=isDefaultMaxConfig,proto3,oneof" json:"is_default_max_config,omitempty"`
+	IsDefaultNonMaxConfig       *bool                                                    `protobuf:"varint,5,opt,name=is_default_non_max_config,json=isDefaultNonMaxConfig,proto3,oneof" json:"is_default_non_max_config,omitempty"`
+	TooltipData                 *AiserverV1_AvailableModelsResponse_TooltipData          `protobuf:"bytes,6,opt,name=tooltip_data,json=tooltipData,proto3,oneof" json:"tooltip_data,omitempty"`
+	Tagline                     *string                                                  `protobuf:"bytes,7,opt,name=tagline,proto3,oneof" json:"tagline,omitempty"`
+	DisplayNameOutsidePicker    *string                                                  `protobuf:"bytes,8,opt,name=display_name_outside_picker,json=displayNameOutsidePicker,proto3,oneof" json:"display_name_outside_picker,omitempty"`
+	VariantStringRepresentation *string                                                  `protobuf:"bytes,9,opt,name=variant_string_representation,json=variantStringRepresentation,proto3,oneof" json:"variant_string_representation,omitempty"`
+	ConfirmationDialogue        *AiserverV1_AvailableModelsResponse_ConfirmationDialogue `protobuf:"bytes,10,opt,name=confirmation_dialogue,json=confirmationDialogue,proto3,oneof" json:"confirmation_dialogue,omitempty"`
+	LegacySlug                  *string                                                  `protobuf:"bytes,11,opt,name=legacy_slug,json=legacySlug,proto3,oneof" json:"legacy_slug,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) Reset() {
-	*x = AiserverV1_AvailableModelsResponse_ModelPickerBadge{}
-	mi := &file_cursor_proto_msgTypes[942]
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) Reset() {
+	*x = AiserverV1_AvailableModelsResponse_ModelVariantConfig{}
+	mi := &file_cursor_proto_msgTypes[940]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) String() string {
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AiserverV1_AvailableModelsResponse_ModelPickerBadge) ProtoMessage() {}
+func (*AiserverV1_AvailableModelsResponse_ModelVariantConfig) ProtoMessage() {}
 
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[942]
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[940]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -71576,30 +71368,86 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) ProtoReflect() pro
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerBadge.ProtoReflect.Descriptor instead.
-func (*AiserverV1_AvailableModelsResponse_ModelPickerBadge) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 4}
+// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelVariantConfig.ProtoReflect.Descriptor instead.
+func (*AiserverV1_AvailableModelsResponse_ModelVariantConfig) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 2}
 }
 
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) GetLabel() string {
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetParameterValues() []*AgentV1_RequestedModel_ModelParameterValue {
 	if x != nil {
-		return x.Label
+		return x.ParameterValues
+	}
+	return nil
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
 	}
 	return ""
 }
 
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) GetVariant() AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant {
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetIsMaxMode() bool {
 	if x != nil {
-		return x.Variant
-	}
-	return AiserverV1_AvailableModelsResponse_ModelPickerBadge_VARIANT_UNSPECIFIED
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) GetDismissOnSelection() bool {
-	if x != nil {
-		return x.DismissOnSelection
+		return x.IsMaxMode
 	}
 	return false
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetIsDefaultMaxConfig() bool {
+	if x != nil && x.IsDefaultMaxConfig != nil {
+		return *x.IsDefaultMaxConfig
+	}
+	return false
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetIsDefaultNonMaxConfig() bool {
+	if x != nil && x.IsDefaultNonMaxConfig != nil {
+		return *x.IsDefaultNonMaxConfig
+	}
+	return false
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetTooltipData() *AiserverV1_AvailableModelsResponse_TooltipData {
+	if x != nil {
+		return x.TooltipData
+	}
+	return nil
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetTagline() string {
+	if x != nil && x.Tagline != nil {
+		return *x.Tagline
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetDisplayNameOutsidePicker() string {
+	if x != nil && x.DisplayNameOutsidePicker != nil {
+		return *x.DisplayNameOutsidePicker
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetVariantStringRepresentation() string {
+	if x != nil && x.VariantStringRepresentation != nil {
+		return *x.VariantStringRepresentation
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetConfirmationDialogue() *AiserverV1_AvailableModelsResponse_ConfirmationDialogue {
+	if x != nil {
+		return x.ConfirmationDialogue
+	}
+	return nil
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelVariantConfig) GetLegacySlug() string {
+	if x != nil && x.LegacySlug != nil {
+		return *x.LegacySlug
+	}
+	return ""
 }
 
 type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration struct {
@@ -71615,7 +71463,7 @@ type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration struct {
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) Reset() {
 	*x = AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration{}
-	mi := &file_cursor_proto_msgTypes[943]
+	mi := &file_cursor_proto_msgTypes[941]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -71627,7 +71475,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) Str
 func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) ProtoMessage() {}
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[943]
+	mi := &file_cursor_proto_msgTypes[941]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -71640,7 +71488,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) Pro
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) GetRoutedModelViewConfig() *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig {
@@ -71678,66 +71526,6 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration) Get
 	return ""
 }
 
-type AiserverV1_AvailableModelsResponse_FeatureModelConfig struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	DefaultModel         string                 `protobuf:"bytes,1,opt,name=default_model,json=defaultModel,proto3" json:"default_model,omitempty"`
-	FallbackModels       []string               `protobuf:"bytes,2,rep,name=fallback_models,json=fallbackModels,proto3" json:"fallback_models,omitempty"`
-	BestOfNDefaultModels []string               `protobuf:"bytes,3,rep,name=best_of_n_default_models,json=bestOfNDefaultModels,proto3" json:"best_of_n_default_models,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
-}
-
-func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) Reset() {
-	*x = AiserverV1_AvailableModelsResponse_FeatureModelConfig{}
-	mi := &file_cursor_proto_msgTypes[944]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AiserverV1_AvailableModelsResponse_FeatureModelConfig) ProtoMessage() {}
-
-func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[944]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AiserverV1_AvailableModelsResponse_FeatureModelConfig.ProtoReflect.Descriptor instead.
-func (*AiserverV1_AvailableModelsResponse_FeatureModelConfig) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 6}
-}
-
-func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) GetDefaultModel() string {
-	if x != nil {
-		return x.DefaultModel
-	}
-	return ""
-}
-
-func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) GetFallbackModels() []string {
-	if x != nil {
-		return x.FallbackModels
-	}
-	return nil
-}
-
-func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) GetBestOfNDefaultModels() []string {
-	if x != nil {
-		return x.BestOfNDefaultModels
-	}
-	return nil
-}
-
 type AiserverV1_AvailableModelsResponse_ConfirmationDialogue struct {
 	state            protoimpl.MessageState                                                `protogen:"open.v1"`
 	Title            string                                                                `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
@@ -71751,7 +71539,7 @@ type AiserverV1_AvailableModelsResponse_ConfirmationDialogue struct {
 
 func (x *AiserverV1_AvailableModelsResponse_ConfirmationDialogue) Reset() {
 	*x = AiserverV1_AvailableModelsResponse_ConfirmationDialogue{}
-	mi := &file_cursor_proto_msgTypes[945]
+	mi := &file_cursor_proto_msgTypes[942]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -71763,7 +71551,7 @@ func (x *AiserverV1_AvailableModelsResponse_ConfirmationDialogue) String() strin
 func (*AiserverV1_AvailableModelsResponse_ConfirmationDialogue) ProtoMessage() {}
 
 func (x *AiserverV1_AvailableModelsResponse_ConfirmationDialogue) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[945]
+	mi := &file_cursor_proto_msgTypes[942]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -71776,7 +71564,7 @@ func (x *AiserverV1_AvailableModelsResponse_ConfirmationDialogue) ProtoReflect()
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ConfirmationDialogue.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ConfirmationDialogue) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 7}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 4}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ConfirmationDialogue) GetTitle() string {
@@ -71812,6 +71600,218 @@ func (x *AiserverV1_AvailableModelsResponse_ConfirmationDialogue) GetPresentatio
 		return *x.Presentation
 	}
 	return AiserverV1_AvailableModelsResponse_ConfirmationDialogue_PRESENTATION_UNSPECIFIED
+}
+
+type AiserverV1_AvailableModelsResponse_FeatureModelConfig struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	DefaultModel         string                 `protobuf:"bytes,1,opt,name=default_model,json=defaultModel,proto3" json:"default_model,omitempty"`
+	FallbackModels       []string               `protobuf:"bytes,2,rep,name=fallback_models,json=fallbackModels,proto3" json:"fallback_models,omitempty"`
+	BestOfNDefaultModels []string               `protobuf:"bytes,3,rep,name=best_of_n_default_models,json=bestOfNDefaultModels,proto3" json:"best_of_n_default_models,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) Reset() {
+	*x = AiserverV1_AvailableModelsResponse_FeatureModelConfig{}
+	mi := &file_cursor_proto_msgTypes[943]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiserverV1_AvailableModelsResponse_FeatureModelConfig) ProtoMessage() {}
+
+func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[943]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiserverV1_AvailableModelsResponse_FeatureModelConfig.ProtoReflect.Descriptor instead.
+func (*AiserverV1_AvailableModelsResponse_FeatureModelConfig) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5}
+}
+
+func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) GetDefaultModel() string {
+	if x != nil {
+		return x.DefaultModel
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) GetFallbackModels() []string {
+	if x != nil {
+		return x.FallbackModels
+	}
+	return nil
+}
+
+func (x *AiserverV1_AvailableModelsResponse_FeatureModelConfig) GetBestOfNDefaultModels() []string {
+	if x != nil {
+		return x.BestOfNDefaultModels
+	}
+	return nil
+}
+
+type AiserverV1_AvailableModelsResponse_TooltipData struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	PrimaryText          string                 `protobuf:"bytes,1,opt,name=primary_text,json=primaryText,proto3" json:"primary_text,omitempty"`
+	SecondaryText        string                 `protobuf:"bytes,2,opt,name=secondary_text,json=secondaryText,proto3" json:"secondary_text,omitempty"`
+	SecondaryWarningText bool                   `protobuf:"varint,3,opt,name=secondary_warning_text,json=secondaryWarningText,proto3" json:"secondary_warning_text,omitempty"`
+	Icon                 string                 `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"`
+	TertiaryText         string                 `protobuf:"bytes,5,opt,name=tertiary_text,json=tertiaryText,proto3" json:"tertiary_text,omitempty"`
+	TertiaryTextUrl      string                 `protobuf:"bytes,6,opt,name=tertiary_text_url,json=tertiaryTextUrl,proto3" json:"tertiary_text_url,omitempty"`
+	MarkdownContent      *string                `protobuf:"bytes,7,opt,name=markdown_content,json=markdownContent,proto3,oneof" json:"markdown_content,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) Reset() {
+	*x = AiserverV1_AvailableModelsResponse_TooltipData{}
+	mi := &file_cursor_proto_msgTypes[944]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiserverV1_AvailableModelsResponse_TooltipData) ProtoMessage() {}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[944]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiserverV1_AvailableModelsResponse_TooltipData.ProtoReflect.Descriptor instead.
+func (*AiserverV1_AvailableModelsResponse_TooltipData) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 6}
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetPrimaryText() string {
+	if x != nil {
+		return x.PrimaryText
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetSecondaryText() string {
+	if x != nil {
+		return x.SecondaryText
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetSecondaryWarningText() bool {
+	if x != nil {
+		return x.SecondaryWarningText
+	}
+	return false
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetTertiaryText() string {
+	if x != nil {
+		return x.TertiaryText
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetTertiaryTextUrl() string {
+	if x != nil {
+		return x.TertiaryTextUrl
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_TooltipData) GetMarkdownContent() string {
+	if x != nil && x.MarkdownContent != nil {
+		return *x.MarkdownContent
+	}
+	return ""
+}
+
+type AiserverV1_AvailableModelsResponse_ModelPickerBadge struct {
+	state              protoimpl.MessageState                                      `protogen:"open.v1"`
+	Label              string                                                      `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	Variant            AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant `protobuf:"varint,2,opt,name=variant,proto3,enum=cursor.AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant" json:"variant,omitempty"`
+	DismissOnSelection bool                                                        `protobuf:"varint,3,opt,name=dismiss_on_selection,json=dismissOnSelection,proto3" json:"dismiss_on_selection,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) Reset() {
+	*x = AiserverV1_AvailableModelsResponse_ModelPickerBadge{}
+	mi := &file_cursor_proto_msgTypes[945]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiserverV1_AvailableModelsResponse_ModelPickerBadge) ProtoMessage() {}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[945]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerBadge.ProtoReflect.Descriptor instead.
+func (*AiserverV1_AvailableModelsResponse_ModelPickerBadge) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 7}
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) GetVariant() AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant {
+	if x != nil {
+		return x.Variant
+	}
+	return AiserverV1_AvailableModelsResponse_ModelPickerBadge_VARIANT_UNSPECIFIED
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerBadge) GetDismissOnSelection() bool {
+	if x != nil {
+		return x.DismissOnSelection
+	}
+	return false
 }
 
 type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig struct {
@@ -71853,7 +71853,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Rout
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5, 0}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3, 0}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig) GetTitle() string {
@@ -71928,7 +71928,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Name
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5, 1}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3, 1}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig) GetNamedViewToRoutedModelViewToggle() *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewToggle {
@@ -71952,51 +71952,6 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Name
 	return nil
 }
 
-type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Markdown      string                 `protobuf:"bytes,1,opt,name=markdown,proto3" json:"markdown,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) Reset() {
-	*x = AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton{}
-	mi := &file_cursor_proto_msgTypes[949]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) ProtoMessage() {
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[949]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton.ProtoReflect.Descriptor instead.
-func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5, 0, 0}
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) GetMarkdown() string {
-	if x != nil {
-		return x.Markdown
-	}
-	return ""
-}
-
 type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	TitleMarkdown       string                 `protobuf:"bytes,1,opt,name=title_markdown,json=titleMarkdown,proto3" json:"title_markdown,omitempty"`
@@ -72008,7 +71963,7 @@ type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedMo
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle) Reset() {
 	*x = AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle{}
-	mi := &file_cursor_proto_msgTypes[950]
+	mi := &file_cursor_proto_msgTypes[949]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -72021,7 +71976,7 @@ func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Routed
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[950]
+	mi := &file_cursor_proto_msgTypes[949]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -72034,7 +71989,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Rout
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5, 0, 1}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3, 0, 0}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle) GetTitleMarkdown() string {
@@ -72056,6 +72011,51 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Rout
 		return *x.SetToLastNamedModel
 	}
 	return false
+}
+
+type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Markdown      string                 `protobuf:"bytes,1,opt,name=markdown,proto3" json:"markdown,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) Reset() {
+	*x = AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton{}
+	mi := &file_cursor_proto_msgTypes[950]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) ProtoMessage() {
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[950]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton.ProtoReflect.Descriptor instead.
+func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3, 0, 1}
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton) GetMarkdown() string {
+	if x != nil {
+		return x.Markdown
+	}
+	return ""
 }
 
 type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewToggle struct {
@@ -72093,10 +72093,55 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Name
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewToggle.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewToggle) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5, 1, 0}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3, 1, 0}
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewToggle) GetMarkdown() string {
+	if x != nil {
+		return x.Markdown
+	}
+	return ""
+}
+
+type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Markdown      string                 `protobuf:"bytes,1,opt,name=markdown,proto3" json:"markdown,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) Reset() {
+	*x = AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton{}
+	mi := &file_cursor_proto_msgTypes[952]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) ProtoMessage() {
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[952]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton.ProtoReflect.Descriptor instead.
+func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3, 1, 1}
+}
+
+func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) GetMarkdown() string {
 	if x != nil {
 		return x.Markdown
 	}
@@ -72111,7 +72156,7 @@ type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedMod
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewNoButton) Reset() {
 	*x = AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewNoButton{}
-	mi := &file_cursor_proto_msgTypes[952]
+	mi := &file_cursor_proto_msgTypes[953]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -72124,7 +72169,7 @@ func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedM
 }
 
 func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewNoButton) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[952]
+	mi := &file_cursor_proto_msgTypes[953]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -72137,52 +72182,7 @@ func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_Name
 
 // Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewNoButton.ProtoReflect.Descriptor instead.
 func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewNoButton) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5, 1, 1}
-}
-
-type AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Markdown      string                 `protobuf:"bytes,1,opt,name=markdown,proto3" json:"markdown,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) Reset() {
-	*x = AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton{}
-	mi := &file_cursor_proto_msgTypes[953]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) ProtoMessage() {
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[953]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton.ProtoReflect.Descriptor instead.
-func (*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 5, 1, 2}
-}
-
-func (x *AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton) GetMarkdown() string {
-	if x != nil {
-		return x.Markdown
-	}
-	return ""
+	return file_cursor_proto_rawDescGZIP(), []int{1, 9, 3, 1, 2}
 }
 
 type AiserverV1_BugConfigResponse_LinterStrategyV2 struct {
@@ -72269,66 +72269,6 @@ func (x *AiserverV1_BugConfigResponse_LinterStrategyV2) GetPreventTriggeringWhen
 	return false
 }
 
-type AiserverV1_BugConfigResponse_LinterStrategyV1 struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	Enabled               bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	TryTriggerOnSave      bool                   `protobuf:"varint,2,opt,name=try_trigger_on_save,json=tryTriggerOnSave,proto3" json:"try_trigger_on_save,omitempty"`
-	WaitBetweenTriggersMs float64                `protobuf:"fixed64,3,opt,name=wait_between_triggers_ms,json=waitBetweenTriggersMs,proto3" json:"wait_between_triggers_ms,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
-}
-
-func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) Reset() {
-	*x = AiserverV1_BugConfigResponse_LinterStrategyV1{}
-	mi := &file_cursor_proto_msgTypes[955]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AiserverV1_BugConfigResponse_LinterStrategyV1) ProtoMessage() {}
-
-func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[955]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AiserverV1_BugConfigResponse_LinterStrategyV1.ProtoReflect.Descriptor instead.
-func (*AiserverV1_BugConfigResponse_LinterStrategyV1) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 14, 1}
-}
-
-func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
-}
-
-func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) GetTryTriggerOnSave() bool {
-	if x != nil {
-		return x.TryTriggerOnSave
-	}
-	return false
-}
-
-func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) GetWaitBetweenTriggersMs() float64 {
-	if x != nil {
-		return x.WaitBetweenTriggersMs
-	}
-	return 0
-}
-
 type AiserverV1_BugConfigResponse_BugBotV1 struct {
 	state                                                   protoimpl.MessageState `protogen:"open.v1"`
 	Enabled                                                 bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
@@ -72356,7 +72296,7 @@ type AiserverV1_BugConfigResponse_BugBotV1 struct {
 
 func (x *AiserverV1_BugConfigResponse_BugBotV1) Reset() {
 	*x = AiserverV1_BugConfigResponse_BugBotV1{}
-	mi := &file_cursor_proto_msgTypes[956]
+	mi := &file_cursor_proto_msgTypes[955]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -72368,7 +72308,7 @@ func (x *AiserverV1_BugConfigResponse_BugBotV1) String() string {
 func (*AiserverV1_BugConfigResponse_BugBotV1) ProtoMessage() {}
 
 func (x *AiserverV1_BugConfigResponse_BugBotV1) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[956]
+	mi := &file_cursor_proto_msgTypes[955]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -72381,7 +72321,7 @@ func (x *AiserverV1_BugConfigResponse_BugBotV1) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use AiserverV1_BugConfigResponse_BugBotV1.ProtoReflect.Descriptor instead.
 func (*AiserverV1_BugConfigResponse_BugBotV1) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 14, 2}
+	return file_cursor_proto_rawDescGZIP(), []int{1, 14, 1}
 }
 
 func (x *AiserverV1_BugConfigResponse_BugBotV1) GetEnabled() bool {
@@ -72513,6 +72453,66 @@ func (x *AiserverV1_BugConfigResponse_BugBotV1) GetCheapAbsoluteMaxTokens() int3
 func (x *AiserverV1_BugConfigResponse_BugBotV1) GetExpensiveAbsoluteMaxTokens() int32 {
 	if x != nil && x.ExpensiveAbsoluteMaxTokens != nil {
 		return *x.ExpensiveAbsoluteMaxTokens
+	}
+	return 0
+}
+
+type AiserverV1_BugConfigResponse_LinterStrategyV1 struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Enabled               bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	TryTriggerOnSave      bool                   `protobuf:"varint,2,opt,name=try_trigger_on_save,json=tryTriggerOnSave,proto3" json:"try_trigger_on_save,omitempty"`
+	WaitBetweenTriggersMs float64                `protobuf:"fixed64,3,opt,name=wait_between_triggers_ms,json=waitBetweenTriggersMs,proto3" json:"wait_between_triggers_ms,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) Reset() {
+	*x = AiserverV1_BugConfigResponse_LinterStrategyV1{}
+	mi := &file_cursor_proto_msgTypes[956]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiserverV1_BugConfigResponse_LinterStrategyV1) ProtoMessage() {}
+
+func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[956]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiserverV1_BugConfigResponse_LinterStrategyV1.ProtoReflect.Descriptor instead.
+func (*AiserverV1_BugConfigResponse_LinterStrategyV1) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 14, 2}
+}
+
+func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) GetTryTriggerOnSave() bool {
+	if x != nil {
+		return x.TryTriggerOnSave
+	}
+	return false
+}
+
+func (x *AiserverV1_BugConfigResponse_LinterStrategyV1) GetWaitBetweenTriggersMs() float64 {
+	if x != nil {
+		return x.WaitBetweenTriggersMs
 	}
 	return 0
 }
@@ -72705,27 +72705,28 @@ func (x *AiserverV1_GetDiffResponse_SubmoduleDiff) GetErrored() bool {
 	return false
 }
 
-type AiserverV1_ModelParameterDefinition_BooleanParameterDefinition struct {
-	state         protoimpl.MessageState                                                                  `protogen:"open.v1"`
-	Values        []*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type AiserverV1_ModelParameterDefinition_ModelParameterType struct {
+	state            protoimpl.MessageState                                          `protogen:"open.v1"`
+	BooleanParameter *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition `protobuf:"bytes,1,opt,name=boolean_parameter,json=booleanParameter,proto3,oneof" json:"boolean_parameter,omitempty"`
+	EnumParameter    *AiserverV1_ModelParameterDefinition_EnumParameterDefinition    `protobuf:"bytes,2,opt,name=enum_parameter,json=enumParameter,proto3,oneof" json:"enum_parameter,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) Reset() {
-	*x = AiserverV1_ModelParameterDefinition_BooleanParameterDefinition{}
+func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) Reset() {
+	*x = AiserverV1_ModelParameterDefinition_ModelParameterType{}
 	mi := &file_cursor_proto_msgTypes[963]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) String() string {
+func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) ProtoMessage() {}
+func (*AiserverV1_ModelParameterDefinition_ModelParameterType) ProtoMessage() {}
 
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) ProtoReflect() protoreflect.Message {
+func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) ProtoReflect() protoreflect.Message {
 	mi := &file_cursor_proto_msgTypes[963]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -72737,14 +72738,21 @@ func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) ProtoRe
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AiserverV1_ModelParameterDefinition_BooleanParameterDefinition.ProtoReflect.Descriptor instead.
-func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) Descriptor() ([]byte, []int) {
+// Deprecated: Use AiserverV1_ModelParameterDefinition_ModelParameterType.ProtoReflect.Descriptor instead.
+func (*AiserverV1_ModelParameterDefinition_ModelParameterType) Descriptor() ([]byte, []int) {
 	return file_cursor_proto_rawDescGZIP(), []int{1, 56, 0}
 }
 
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) GetValues() []*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue {
+func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) GetBooleanParameter() *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition {
 	if x != nil {
-		return x.Values
+		return x.BooleanParameter
+	}
+	return nil
+}
+
+func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) GetEnumParameter() *AiserverV1_ModelParameterDefinition_EnumParameterDefinition {
+	if x != nil {
+		return x.EnumParameter
 	}
 	return nil
 }
@@ -72793,28 +72801,27 @@ func (x *AiserverV1_ModelParameterDefinition_EnumParameterDefinition) GetValues(
 	return nil
 }
 
-type AiserverV1_ModelParameterDefinition_ModelParameterType struct {
-	state            protoimpl.MessageState                                          `protogen:"open.v1"`
-	BooleanParameter *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition `protobuf:"bytes,1,opt,name=boolean_parameter,json=booleanParameter,proto3,oneof" json:"boolean_parameter,omitempty"`
-	EnumParameter    *AiserverV1_ModelParameterDefinition_EnumParameterDefinition    `protobuf:"bytes,2,opt,name=enum_parameter,json=enumParameter,proto3,oneof" json:"enum_parameter,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+type AiserverV1_ModelParameterDefinition_BooleanParameterDefinition struct {
+	state         protoimpl.MessageState                                                                  `protogen:"open.v1"`
+	Values        []*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) Reset() {
-	*x = AiserverV1_ModelParameterDefinition_ModelParameterType{}
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) Reset() {
+	*x = AiserverV1_ModelParameterDefinition_BooleanParameterDefinition{}
 	mi := &file_cursor_proto_msgTypes[965]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) String() string {
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AiserverV1_ModelParameterDefinition_ModelParameterType) ProtoMessage() {}
+func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) ProtoMessage() {}
 
-func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) ProtoReflect() protoreflect.Message {
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) ProtoReflect() protoreflect.Message {
 	mi := &file_cursor_proto_msgTypes[965]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -72826,108 +72833,16 @@ func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) ProtoReflect() 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AiserverV1_ModelParameterDefinition_ModelParameterType.ProtoReflect.Descriptor instead.
-func (*AiserverV1_ModelParameterDefinition_ModelParameterType) Descriptor() ([]byte, []int) {
+// Deprecated: Use AiserverV1_ModelParameterDefinition_BooleanParameterDefinition.ProtoReflect.Descriptor instead.
+func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) Descriptor() ([]byte, []int) {
 	return file_cursor_proto_rawDescGZIP(), []int{1, 56, 2}
 }
 
-func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) GetBooleanParameter() *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition {
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition) GetValues() []*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue {
 	if x != nil {
-		return x.BooleanParameter
+		return x.Values
 	}
 	return nil
-}
-
-func (x *AiserverV1_ModelParameterDefinition_ModelParameterType) GetEnumParameter() *AiserverV1_ModelParameterDefinition_EnumParameterDefinition {
-	if x != nil {
-		return x.EnumParameter
-	}
-	return nil
-}
-
-type AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue struct {
-	state                              protoimpl.MessageState `protogen:"open.v1"`
-	Value                              string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	DisplayName                        *string                `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	IncreasesModelCost                 *bool                  `protobuf:"varint,3,opt,name=increases_model_cost,json=increasesModelCost,proto3,oneof" json:"increases_model_cost,omitempty"`
-	DefaultBlockedInAdminAllowlist     *bool                  `protobuf:"varint,4,opt,name=default_blocked_in_admin_allowlist,json=defaultBlockedInAdminAllowlist,proto3,oneof" json:"default_blocked_in_admin_allowlist,omitempty"`
-	HideFromUserPickerWhenAdminBlocked *bool                  `protobuf:"varint,5,opt,name=hide_from_user_picker_when_admin_blocked,json=hideFromUserPickerWhenAdminBlocked,proto3,oneof" json:"hide_from_user_picker_when_admin_blocked,omitempty"`
-	BlockedByAdminAllowlist            *bool                  `protobuf:"varint,6,opt,name=blocked_by_admin_allowlist,json=blockedByAdminAllowlist,proto3,oneof" json:"blocked_by_admin_allowlist,omitempty"`
-	unknownFields                      protoimpl.UnknownFields
-	sizeCache                          protoimpl.SizeCache
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) Reset() {
-	*x = AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue{}
-	mi := &file_cursor_proto_msgTypes[966]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) ProtoMessage() {
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[966]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue.ProtoReflect.Descriptor instead.
-func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) Descriptor() ([]byte, []int) {
-	return file_cursor_proto_rawDescGZIP(), []int{1, 56, 0, 0}
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetValue() string {
-	if x != nil {
-		return x.Value
-	}
-	return ""
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetDisplayName() string {
-	if x != nil && x.DisplayName != nil {
-		return *x.DisplayName
-	}
-	return ""
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetIncreasesModelCost() bool {
-	if x != nil && x.IncreasesModelCost != nil {
-		return *x.IncreasesModelCost
-	}
-	return false
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetDefaultBlockedInAdminAllowlist() bool {
-	if x != nil && x.DefaultBlockedInAdminAllowlist != nil {
-		return *x.DefaultBlockedInAdminAllowlist
-	}
-	return false
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetHideFromUserPickerWhenAdminBlocked() bool {
-	if x != nil && x.HideFromUserPickerWhenAdminBlocked != nil {
-		return *x.HideFromUserPickerWhenAdminBlocked
-	}
-	return false
-}
-
-func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetBlockedByAdminAllowlist() bool {
-	if x != nil && x.BlockedByAdminAllowlist != nil {
-		return *x.BlockedByAdminAllowlist
-	}
-	return false
 }
 
 type AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue struct {
@@ -72944,7 +72859,7 @@ type AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterVa
 
 func (x *AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue) Reset() {
 	*x = AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue{}
-	mi := &file_cursor_proto_msgTypes[967]
+	mi := &file_cursor_proto_msgTypes[966]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -72957,7 +72872,7 @@ func (*AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameter
 }
 
 func (x *AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_proto_msgTypes[967]
+	mi := &file_cursor_proto_msgTypes[966]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -73013,6 +72928,91 @@ func (x *AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParamet
 		return x.ModelPickerBadges
 	}
 	return nil
+}
+
+type AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue struct {
+	state                              protoimpl.MessageState `protogen:"open.v1"`
+	Value                              string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	DisplayName                        *string                `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	IncreasesModelCost                 *bool                  `protobuf:"varint,3,opt,name=increases_model_cost,json=increasesModelCost,proto3,oneof" json:"increases_model_cost,omitempty"`
+	DefaultBlockedInAdminAllowlist     *bool                  `protobuf:"varint,4,opt,name=default_blocked_in_admin_allowlist,json=defaultBlockedInAdminAllowlist,proto3,oneof" json:"default_blocked_in_admin_allowlist,omitempty"`
+	HideFromUserPickerWhenAdminBlocked *bool                  `protobuf:"varint,5,opt,name=hide_from_user_picker_when_admin_blocked,json=hideFromUserPickerWhenAdminBlocked,proto3,oneof" json:"hide_from_user_picker_when_admin_blocked,omitempty"`
+	BlockedByAdminAllowlist            *bool                  `protobuf:"varint,6,opt,name=blocked_by_admin_allowlist,json=blockedByAdminAllowlist,proto3,oneof" json:"blocked_by_admin_allowlist,omitempty"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) Reset() {
+	*x = AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue{}
+	mi := &file_cursor_proto_msgTypes[967]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) ProtoMessage() {
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_proto_msgTypes[967]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue.ProtoReflect.Descriptor instead.
+func (*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) Descriptor() ([]byte, []int) {
+	return file_cursor_proto_rawDescGZIP(), []int{1, 56, 2, 0}
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetDisplayName() string {
+	if x != nil && x.DisplayName != nil {
+		return *x.DisplayName
+	}
+	return ""
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetIncreasesModelCost() bool {
+	if x != nil && x.IncreasesModelCost != nil {
+		return *x.IncreasesModelCost
+	}
+	return false
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetDefaultBlockedInAdminAllowlist() bool {
+	if x != nil && x.DefaultBlockedInAdminAllowlist != nil {
+		return *x.DefaultBlockedInAdminAllowlist
+	}
+	return false
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetHideFromUserPickerWhenAdminBlocked() bool {
+	if x != nil && x.HideFromUserPickerWhenAdminBlocked != nil {
+		return *x.HideFromUserPickerWhenAdminBlocked
+	}
+	return false
+}
+
+func (x *AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue) GetBlockedByAdminAllowlist() bool {
+	if x != nil && x.BlockedByAdminAllowlist != nil {
+		return *x.BlockedByAdminAllowlist
+	}
+	return false
 }
 
 type AiserverV1_ProfileScheduleConfig_ScheduleConfig struct {
@@ -73394,15 +73394,15 @@ const file_cursor_proto_rawDesc = "" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12F\n" +
 	"\tquestions\x18\x02 \x03(\v2(.cursor.AgentV1.AskQuestionArgs.QuestionR\tquestions\x12\x1b\n" +
 	"\trun_async\x18\x05 \x01(\bR\brunAsync\x12<\n" +
-	"\x1basync_original_tool_call_id\x18\x06 \x01(\tR\x17asyncOriginalToolCallId\x1a.\n" +
-	"\x06Option\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
-	"\x05label\x18\x02 \x01(\tR\x05label\x1a\x9b\x01\n" +
+	"\x1basync_original_tool_call_id\x18\x06 \x01(\tR\x17asyncOriginalToolCallId\x1a\x9b\x01\n" +
 	"\bQuestion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x12@\n" +
 	"\aoptions\x18\x03 \x03(\v2&.cursor.AgentV1.AskQuestionArgs.OptionR\aoptions\x12%\n" +
-	"\x0eallow_multiple\x18\x04 \x01(\bR\rallowMultiple\x1a\x12\n" +
+	"\x0eallow_multiple\x18\x04 \x01(\bR\rallowMultiple\x1a.\n" +
+	"\x06Option\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x1a\x12\n" +
 	"\x10AskQuestionAsync\x1a7\n" +
 	"\x10AskQuestionError\x12#\n" +
 	"\rerror_message\x18\x01 \x01(\tR\ferrorMessage\x1at\n" +
@@ -74986,54 +74986,7 @@ const file_cursor_proto_rawDesc = "" +
 	"\tide_state\x18\x03 \x01(\v2*.cursor.AgentV1.InvocationContext.IdeStateH\x00R\bideState\x12n\n" +
 	"\x16microsoft_teams_thread\x18\x04 \x01(\v26.cursor.AgentV1.InvocationContext.MicrosoftTeamsThreadH\x00R\x14microsoftTeamsThread\x12\x19\n" +
 	"\ablob_id\x18\n" +
-	" \x01(\fH\x00R\x06blobId\x1a\x94\x01\n" +
-	"\bGithubPR\x12\x14\n" +
-	"\x05title\x18\x01 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
-	"\bcomments\x18\x03 \x01(\tR\bcomments\x12$\n" +
-	"\vci_failures\x18\x04 \x01(\tH\x00R\n" +
-	"ciFailures\x88\x01\x01B\x0e\n" +
-	"\f_ci_failures\x1a\xb5\a\n" +
-	"\bIdeState\x12T\n" +
-	"\rvisible_files\x18\x01 \x03(\v2/.cursor.AgentV1.InvocationContext.IdeState.FileR\fvisibleFiles\x12c\n" +
-	"\x15recently_viewed_files\x18\x02 \x03(\v2/.cursor.AgentV1.InvocationContext.IdeState.FileR\x13recentlyViewedFiles\x12n\n" +
-	"\x14currently_viewed_prs\x18\x03 \x03(\v2<.cursor.AgentV1.InvocationContext.IdeState.ViewedPullRequestR\x12currentlyViewedPrs\x1a\x88\x02\n" +
-	"\x11ViewedPullRequest\x12\x16\n" +
-	"\x06number\x18\x01 \x01(\x05R\x06number\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03url\x12\x19\n" +
-	"\x05title\x18\x03 \x01(\tH\x00R\x05title\x88\x01\x01\x12$\n" +
-	"\vfolder_path\x18\x04 \x01(\tH\x01R\n" +
-	"folderPath\x88\x01\x01\x12&\n" +
-	"\fsummary_json\x18\x05 \x01(\tH\x02R\vsummaryJson\x88\x01\x01\x12%\n" +
-	"\vdescription\x18\x06 \x01(\tH\x03R\vdescription\x88\x01\x01B\b\n" +
-	"\x06_titleB\x0e\n" +
-	"\f_folder_pathB\x0f\n" +
-	"\r_summary_jsonB\x0e\n" +
-	"\f_description\x1a\xf2\x02\n" +
-	"\x04File\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12(\n" +
-	"\rrelative_path\x18\x02 \x01(\tH\x00R\frelativePath\x88\x01\x01\x12l\n" +
-	"\x0fcursor_position\x18\x03 \x01(\v2>.cursor.AgentV1.InvocationContext.IdeState.File.CursorPositionH\x01R\x0ecursorPosition\x88\x01\x01\x12\x1f\n" +
-	"\vtotal_lines\x18\x04 \x01(\x05R\n" +
-	"totalLines\x12*\n" +
-	"\x0eactive_command\x18\x05 \x01(\tH\x02R\ractiveCommand\x88\x01\x01\x1a8\n" +
-	"\x0eCursorPosition\x12\x12\n" +
-	"\x04line\x18\x01 \x01(\x05R\x04line\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04textB\x10\n" +
-	"\x0e_relative_pathB\x12\n" +
-	"\x10_cursor_positionB\x11\n" +
-	"\x0f_active_command\x1a\xaa\x02\n" +
-	"\x14MicrosoftTeamsThread\x12\x16\n" +
-	"\x06thread\x18\x01 \x01(\tR\x06thread\x12&\n" +
-	"\fchannel_name\x18\x02 \x01(\tH\x00R\vchannelName\x88\x01\x01\x12 \n" +
-	"\tteam_name\x18\x03 \x01(\tH\x01R\bteamName\x88\x01\x01\x124\n" +
-	"\x13channel_description\x18\x04 \x01(\tH\x02R\x12channelDescription\x88\x01\x01\x12.\n" +
-	"\x10team_description\x18\x05 \x01(\tH\x03R\x0fteamDescription\x88\x01\x01B\x0f\n" +
-	"\r_channel_nameB\f\n" +
-	"\n" +
-	"_team_nameB\x16\n" +
-	"\x14_channel_descriptionB\x13\n" +
-	"\x11_team_description\x1a\xcb\x03\n" +
+	" \x01(\fH\x00R\x06blobId\x1a\xcb\x03\n" +
 	"\vSlackThread\x12\x16\n" +
 	"\x06thread\x18\x01 \x01(\tR\x06thread\x12&\n" +
 	"\fchannel_name\x18\x02 \x01(\tH\x00R\vchannelName\x88\x01\x01\x12,\n" +
@@ -75052,7 +75005,54 @@ const file_cursor_proto_rawDesc = "" +
 	"\n" +
 	"_sender_idB\x0e\n" +
 	"\f_sender_typeB\x18\n" +
-	"\x16_is_directly_addressedB\x06\n" +
+	"\x16_is_directly_addressed\x1a\xb5\a\n" +
+	"\bIdeState\x12T\n" +
+	"\rvisible_files\x18\x01 \x03(\v2/.cursor.AgentV1.InvocationContext.IdeState.FileR\fvisibleFiles\x12c\n" +
+	"\x15recently_viewed_files\x18\x02 \x03(\v2/.cursor.AgentV1.InvocationContext.IdeState.FileR\x13recentlyViewedFiles\x12n\n" +
+	"\x14currently_viewed_prs\x18\x03 \x03(\v2<.cursor.AgentV1.InvocationContext.IdeState.ViewedPullRequestR\x12currentlyViewedPrs\x1a\xf2\x02\n" +
+	"\x04File\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12(\n" +
+	"\rrelative_path\x18\x02 \x01(\tH\x00R\frelativePath\x88\x01\x01\x12l\n" +
+	"\x0fcursor_position\x18\x03 \x01(\v2>.cursor.AgentV1.InvocationContext.IdeState.File.CursorPositionH\x01R\x0ecursorPosition\x88\x01\x01\x12\x1f\n" +
+	"\vtotal_lines\x18\x04 \x01(\x05R\n" +
+	"totalLines\x12*\n" +
+	"\x0eactive_command\x18\x05 \x01(\tH\x02R\ractiveCommand\x88\x01\x01\x1a8\n" +
+	"\x0eCursorPosition\x12\x12\n" +
+	"\x04line\x18\x01 \x01(\x05R\x04line\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04textB\x10\n" +
+	"\x0e_relative_pathB\x12\n" +
+	"\x10_cursor_positionB\x11\n" +
+	"\x0f_active_command\x1a\x88\x02\n" +
+	"\x11ViewedPullRequest\x12\x16\n" +
+	"\x06number\x18\x01 \x01(\x05R\x06number\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12\x19\n" +
+	"\x05title\x18\x03 \x01(\tH\x00R\x05title\x88\x01\x01\x12$\n" +
+	"\vfolder_path\x18\x04 \x01(\tH\x01R\n" +
+	"folderPath\x88\x01\x01\x12&\n" +
+	"\fsummary_json\x18\x05 \x01(\tH\x02R\vsummaryJson\x88\x01\x01\x12%\n" +
+	"\vdescription\x18\x06 \x01(\tH\x03R\vdescription\x88\x01\x01B\b\n" +
+	"\x06_titleB\x0e\n" +
+	"\f_folder_pathB\x0f\n" +
+	"\r_summary_jsonB\x0e\n" +
+	"\f_description\x1a\xaa\x02\n" +
+	"\x14MicrosoftTeamsThread\x12\x16\n" +
+	"\x06thread\x18\x01 \x01(\tR\x06thread\x12&\n" +
+	"\fchannel_name\x18\x02 \x01(\tH\x00R\vchannelName\x88\x01\x01\x12 \n" +
+	"\tteam_name\x18\x03 \x01(\tH\x01R\bteamName\x88\x01\x01\x124\n" +
+	"\x13channel_description\x18\x04 \x01(\tH\x02R\x12channelDescription\x88\x01\x01\x12.\n" +
+	"\x10team_description\x18\x05 \x01(\tH\x03R\x0fteamDescription\x88\x01\x01B\x0f\n" +
+	"\r_channel_nameB\f\n" +
+	"\n" +
+	"_team_nameB\x16\n" +
+	"\x14_channel_descriptionB\x13\n" +
+	"\x11_team_description\x1a\x94\x01\n" +
+	"\bGithubPR\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bcomments\x18\x03 \x01(\tR\bcomments\x12$\n" +
+	"\vci_failures\x18\x04 \x01(\tH\x00R\n" +
+	"ciFailures\x88\x01\x01B\x0e\n" +
+	"\f_ci_failuresB\x06\n" +
 	"\x04data\x1aa\n" +
 	"\tKeyAction\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
@@ -76951,16 +76951,16 @@ const file_cursor_proto_rawDesc = "" +
 	"\x04data\x18\b \x01(\fH\x00R\x04data\x12Y\n" +
 	"\x11blob_id_with_data\x18\t \x01(\v2,.cursor.AgentV1.SelectedVideo.BlobIdWithDataH\x00R\x0eblobIdWithData\x12H\n" +
 	"\n" +
-	"signed_url\x18\v \x01(\v2'.cursor.AgentV1.SelectedVideo.SignedUrlH\x00R\tsignedUrl\x1a\xb8\x01\n" +
+	"signed_url\x18\v \x01(\v2'.cursor.AgentV1.SelectedVideo.SignedUrlH\x00R\tsignedUrl\x1a=\n" +
+	"\x0eBlobIdWithData\x12\x17\n" +
+	"\ablob_id\x18\x01 \x01(\fR\x06blobId\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\x1a\xb8\x01\n" +
 	"\tSignedUrl\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12+\n" +
 	"\x12expires_at_unix_ms\x18\x03 \x01(\x03R\x0fexpiresAtUnixMs\x121\n" +
 	"\x15refresh_after_unix_ms\x18\x04 \x01(\x03R\x12refreshAfterUnixMs\x12'\n" +
-	"\x0fconversation_id\x18\x05 \x01(\tR\x0econversationId\x1a=\n" +
-	"\x0eBlobIdWithData\x12\x17\n" +
-	"\ablob_id\x18\x01 \x01(\fR\x06blobId\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04dataB\x11\n" +
+	"\x0fconversation_id\x18\x05 \x01(\tR\x0econversationIdB\x11\n" +
 	"\x0fdata_or_blob_idB\x06\n" +
 	"\x04_fps\x1aw\n" +
 	"\x14SelfHostedPoolTarget\x12\x17\n" +
@@ -77157,7 +77157,11 @@ const file_cursor_proto_rawDesc = "" +
 	"\rhas_redirects\x18\x03 \x01(\bR\fhasRedirects\x128\n" +
 	"\x18has_command_substitution\x18\x04 \x01(\bR\x16hasCommandSubstitution\x12?\n" +
 	"\x1aall_redirects_are_dev_null\x18\x05 \x01(\bH\x00R\x16allRedirectsAreDevNull\x88\x01\x01\x12P\n" +
-	"\tredirects\x18\x06 \x03(\v22.cursor.AgentV1.ShellCommandParsingResult.RedirectR\tredirects\x1a\xaf\x01\n" +
+	"\tredirects\x18\x06 \x03(\v22.cursor.AgentV1.ShellCommandParsingResult.RedirectR\tredirects\x1a\x98\x01\n" +
+	"\x11ExecutableCommand\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12R\n" +
+	"\x04args\x18\x02 \x03(\v2>.cursor.AgentV1.ShellCommandParsingResult.ExecutableCommandArgR\x04args\x12\x1b\n" +
+	"\tfull_text\x18\x03 \x01(\tR\bfullText\x1a\xaf\x01\n" +
 	"\bRedirect\x12\x1a\n" +
 	"\boperator\x18\x01 \x01(\tR\boperator\x12'\n" +
 	"\x0fdestination_fds\x18\x02 \x03(\rR\x0edestinationFds\x12(\n" +
@@ -77167,11 +77171,7 @@ const file_cursor_proto_rawDesc = "" +
 	"\f_target_text\x1a@\n" +
 	"\x14ExecutableCommandArg\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\x1a\x98\x01\n" +
-	"\x11ExecutableCommand\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12R\n" +
-	"\x04args\x18\x02 \x03(\v2>.cursor.AgentV1.ShellCommandParsingResult.ExecutableCommandArgR\x04args\x12\x1b\n" +
-	"\tfull_text\x18\x03 \x01(\tR\bfullTextB\x1d\n" +
+	"\x05value\x18\x02 \x01(\tR\x05valueB\x1d\n" +
 	"\x1b_all_redirects_are_dev_null\x1a\x80\x06\n" +
 	"\fShellFailure\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12+\n" +
@@ -78661,39 +78661,7 @@ const file_cursor_proto_rawDesc = "" +
 	"\x15experimental_model_id\x18\x13 \x01(\tH\tR\x13experimentalModelId\x88\x01\x01\x12J\n" +
 	"\x1fexperimental_model_display_name\x18\x14 \x01(\tH\n" +
 	"R\x1cexperimentalModelDisplayName\x88\x01\x01\x12Q\n" +
-	"$nudge_new_chats_to_auto_optimize_for\x18\x15 \x01(\tH\vR\x1enudgeNewChatsToAutoOptimizeFor\x88\x01\x01\x1a\x9b\a\n" +
-	"\x12ModelVariantConfig\x12]\n" +
-	"\x10parameter_values\x18\x01 \x03(\v22.cursor.AgentV1.RequestedModel.ModelParameterValueR\x0fparameterValues\x12!\n" +
-	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1e\n" +
-	"\vis_max_mode\x18\x03 \x01(\bR\tisMaxMode\x126\n" +
-	"\x15is_default_max_config\x18\x04 \x01(\bH\x00R\x12isDefaultMaxConfig\x88\x01\x01\x12=\n" +
-	"\x19is_default_non_max_config\x18\x05 \x01(\bH\x01R\x15isDefaultNonMaxConfig\x88\x01\x01\x12^\n" +
-	"\ftooltip_data\x18\x06 \x01(\v26.cursor.AiserverV1.AvailableModelsResponse.TooltipDataH\x02R\vtooltipData\x88\x01\x01\x12\x1d\n" +
-	"\atagline\x18\a \x01(\tH\x03R\atagline\x88\x01\x01\x12B\n" +
-	"\x1bdisplay_name_outside_picker\x18\b \x01(\tH\x04R\x18displayNameOutsidePicker\x88\x01\x01\x12G\n" +
-	"\x1dvariant_string_representation\x18\t \x01(\tH\x05R\x1bvariantStringRepresentation\x88\x01\x01\x12y\n" +
-	"\x15confirmation_dialogue\x18\n" +
-	" \x01(\v2?.cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogueH\x06R\x14confirmationDialogue\x88\x01\x01\x12$\n" +
-	"\vlegacy_slug\x18\v \x01(\tH\aR\n" +
-	"legacySlug\x88\x01\x01B\x18\n" +
-	"\x16_is_default_max_configB\x1c\n" +
-	"\x1a_is_default_non_max_configB\x0f\n" +
-	"\r_tooltip_dataB\n" +
-	"\n" +
-	"\b_taglineB\x1e\n" +
-	"\x1c_display_name_outside_pickerB \n" +
-	"\x1e_variant_string_representationB\x18\n" +
-	"\x16_confirmation_dialogueB\x0e\n" +
-	"\f_legacy_slug\x1a\xb7\x02\n" +
-	"\vTooltipData\x12!\n" +
-	"\fprimary_text\x18\x01 \x01(\tR\vprimaryText\x12%\n" +
-	"\x0esecondary_text\x18\x02 \x01(\tR\rsecondaryText\x124\n" +
-	"\x16secondary_warning_text\x18\x03 \x01(\bR\x14secondaryWarningText\x12\x12\n" +
-	"\x04icon\x18\x04 \x01(\tR\x04icon\x12#\n" +
-	"\rtertiary_text\x18\x05 \x01(\tR\ftertiaryText\x12*\n" +
-	"\x11tertiary_text_url\x18\x06 \x01(\tR\x0ftertiaryTextUrl\x12.\n" +
-	"\x10markdown_content\x18\a \x01(\tH\x00R\x0fmarkdownContent\x88\x01\x01B\x13\n" +
-	"\x11_markdown_content\x1a\xbf\x1e\n" +
+	"$nudge_new_chats_to_auto_optimize_for\x18\x15 \x01(\tH\vR\x1enudgeNewChatsToAutoOptimizeFor\x88\x01\x01\x1a\xbf\x1e\n" +
 	"\x0eAvailableModel\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -78791,18 +78759,30 @@ const file_cursor_proto_rawDesc = "" +
 	"\x1d_reason_for_zdr_consent_block\x1az\n" +
 	"\vModelVendor\x12H\n" +
 	"\x02id\x18\x01 \x01(\x0e28.cursor.AiserverV1.AvailableModelsResponse.ModelVendorIdR\x02id\x12!\n" +
-	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x1a\xc2\x02\n" +
-	"\x10ModelPickerBadge\x12\x14\n" +
-	"\x05label\x18\x01 \x01(\tR\x05label\x12]\n" +
-	"\avariant\x18\x02 \x01(\x0e2C.cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.VariantR\avariant\x120\n" +
-	"\x14dismiss_on_selection\x18\x03 \x01(\bR\x12dismissOnSelection\"\x86\x01\n" +
-	"\aVariant\x12\x17\n" +
-	"\x13VARIANT_UNSPECIFIED\x10\x00\x12\x12\n" +
-	"\x0eVARIANT_ACCENT\x10\x01\x12\x13\n" +
-	"\x0fVARIANT_NEUTRAL\x10\x02\x12\x13\n" +
-	"\x0fVARIANT_SUCCESS\x10\x03\x12\x10\n" +
-	"\fVARIANT_WARN\x10\x04\x12\x12\n" +
-	"\x0eVARIANT_DANGER\x10\x05\x1a\xaa\x14\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x1a\x9b\a\n" +
+	"\x12ModelVariantConfig\x12]\n" +
+	"\x10parameter_values\x18\x01 \x03(\v22.cursor.AgentV1.RequestedModel.ModelParameterValueR\x0fparameterValues\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1e\n" +
+	"\vis_max_mode\x18\x03 \x01(\bR\tisMaxMode\x126\n" +
+	"\x15is_default_max_config\x18\x04 \x01(\bH\x00R\x12isDefaultMaxConfig\x88\x01\x01\x12=\n" +
+	"\x19is_default_non_max_config\x18\x05 \x01(\bH\x01R\x15isDefaultNonMaxConfig\x88\x01\x01\x12^\n" +
+	"\ftooltip_data\x18\x06 \x01(\v26.cursor.AiserverV1.AvailableModelsResponse.TooltipDataH\x02R\vtooltipData\x88\x01\x01\x12\x1d\n" +
+	"\atagline\x18\a \x01(\tH\x03R\atagline\x88\x01\x01\x12B\n" +
+	"\x1bdisplay_name_outside_picker\x18\b \x01(\tH\x04R\x18displayNameOutsidePicker\x88\x01\x01\x12G\n" +
+	"\x1dvariant_string_representation\x18\t \x01(\tH\x05R\x1bvariantStringRepresentation\x88\x01\x01\x12y\n" +
+	"\x15confirmation_dialogue\x18\n" +
+	" \x01(\v2?.cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogueH\x06R\x14confirmationDialogue\x88\x01\x01\x12$\n" +
+	"\vlegacy_slug\x18\v \x01(\tH\aR\n" +
+	"legacySlug\x88\x01\x01B\x18\n" +
+	"\x16_is_default_max_configB\x1c\n" +
+	"\x1a_is_default_non_max_configB\x0f\n" +
+	"\r_tooltip_dataB\n" +
+	"\n" +
+	"\b_taglineB\x1e\n" +
+	"\x1c_display_name_outside_pickerB \n" +
+	"\x1e_variant_string_representationB\x18\n" +
+	"\x16_confirmation_dialogueB\x0e\n" +
+	"\f_legacy_slug\x1a\xaa\x14\n" +
 	"\x1fModelPickerDisplayConfiguration\x12\x99\x01\n" +
 	"\x18routed_model_view_config\x18\x01 \x01(\v2`.cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfigR\x15routedModelViewConfig\x12\x99\x01\n" +
 	"\x18named_models_view_config\x18\x02 \x01(\v2`.cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfigR\x15namedModelsViewConfig\x12+\n" +
@@ -78814,15 +78794,15 @@ const file_cursor_proto_rawDesc = "" +
 	"&routed_model_view_to_named_view_toggle\x18\x02 \x01(\v2\x81\x01.cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggleH\x01R routedModelViewToNamedViewToggle\x88\x01\x01\x12\xd9\x01\n" +
 	"&routed_model_view_to_named_view_button\x18\x03 \x01(\v2\x81\x01.cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButtonH\x02R routedModelViewToNamedViewButton\x88\x01\x01\x12+\n" +
 	"\x0fhide_search_bar\x18\x04 \x01(\bH\x03R\rhideSearchBar\x88\x01\x01\x128\n" +
-	"\x16hide_routed_model_view\x18\x05 \x01(\bH\x04R\x13hideRoutedModelView\x88\x01\x01\x1a>\n" +
-	" RoutedModelViewToNamedViewButton\x12\x1a\n" +
-	"\bmarkdown\x18\x01 \x01(\tR\bmarkdown\x1a\xce\x01\n" +
+	"\x16hide_routed_model_view\x18\x05 \x01(\bH\x04R\x13hideRoutedModelView\x88\x01\x01\x1a\xce\x01\n" +
 	" RoutedModelViewToNamedViewToggle\x12%\n" +
 	"\x0etitle_markdown\x18\x01 \x01(\tR\rtitleMarkdown\x12\x1f\n" +
 	"\bsubtitle\x18\x02 \x01(\tH\x00R\bsubtitle\x88\x01\x01\x129\n" +
 	"\x17set_to_last_named_model\x18\x03 \x01(\bH\x01R\x13setToLastNamedModel\x88\x01\x01B\v\n" +
 	"\t_subtitleB\x1a\n" +
-	"\x18_set_to_last_named_modelB\b\n" +
+	"\x18_set_to_last_named_model\x1a>\n" +
+	" RoutedModelViewToNamedViewButton\x12\x1a\n" +
+	"\bmarkdown\x18\x01 \x01(\tR\bmarkdownB\b\n" +
 	"\x06_titleB)\n" +
 	"'_routed_model_view_to_named_view_toggleB)\n" +
 	"'_routed_model_view_to_named_view_buttonB\x12\n" +
@@ -78833,20 +78813,16 @@ const file_cursor_proto_rawDesc = "" +
 	")named_view_to_routed_model_view_no_button\x18\x03 \x01(\v2\x83\x01.cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButtonH\x01R\"namedViewToRoutedModelViewNoButton\x88\x01\x01\x12\xd9\x01\n" +
 	"&named_view_to_routed_model_view_button\x18\x04 \x01(\v2\x81\x01.cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButtonH\x02R namedViewToRoutedModelViewButton\x88\x01\x01\x1a>\n" +
 	" NamedViewToRoutedModelViewToggle\x12\x1a\n" +
-	"\bmarkdown\x18\x01 \x01(\tR\bmarkdown\x1a$\n" +
-	"\"NamedViewToRoutedModelViewNoButton\x1a>\n" +
+	"\bmarkdown\x18\x01 \x01(\tR\bmarkdown\x1a>\n" +
 	" NamedViewToRoutedModelViewButton\x12\x1a\n" +
-	"\bmarkdown\x18\x01 \x01(\tR\bmarkdownB)\n" +
+	"\bmarkdown\x18\x01 \x01(\tR\bmarkdown\x1a$\n" +
+	"\"NamedViewToRoutedModelViewNoButtonB)\n" +
 	"'_named_view_to_routed_model_view_toggleB,\n" +
 	"*_named_view_to_routed_model_view_no_buttonB)\n" +
 	"'_named_view_to_routed_model_view_buttonB\x12\n" +
 	"\x10_hide_search_barB\x12\n" +
 	"\x10_hide_add_modelsB&\n" +
-	"$_model_selection_restriction_message\x1a\x9a\x01\n" +
-	"\x12FeatureModelConfig\x12#\n" +
-	"\rdefault_model\x18\x01 \x01(\tR\fdefaultModel\x12'\n" +
-	"\x0ffallback_models\x18\x02 \x03(\tR\x0efallbackModels\x126\n" +
-	"\x18best_of_n_default_models\x18\x03 \x03(\tR\x14bestOfNDefaultModels\x1a\xdb\x02\n" +
+	"$_model_selection_restriction_message\x1a\xdb\x02\n" +
 	"\x14ConfirmationDialogue\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\x12\x10\n" +
@@ -78856,7 +78832,31 @@ const file_cursor_proto_rawDesc = "" +
 	"\fPresentation\x12\x1c\n" +
 	"\x18PRESENTATION_UNSPECIFIED\x10\x00\x12$\n" +
 	" PRESENTATION_POST_PICKER_WARNING\x10\x01B\x0f\n" +
-	"\r_presentation\x1a\x86\x01\n" +
+	"\r_presentation\x1a\x9a\x01\n" +
+	"\x12FeatureModelConfig\x12#\n" +
+	"\rdefault_model\x18\x01 \x01(\tR\fdefaultModel\x12'\n" +
+	"\x0ffallback_models\x18\x02 \x03(\tR\x0efallbackModels\x126\n" +
+	"\x18best_of_n_default_models\x18\x03 \x03(\tR\x14bestOfNDefaultModels\x1a\xb7\x02\n" +
+	"\vTooltipData\x12!\n" +
+	"\fprimary_text\x18\x01 \x01(\tR\vprimaryText\x12%\n" +
+	"\x0esecondary_text\x18\x02 \x01(\tR\rsecondaryText\x124\n" +
+	"\x16secondary_warning_text\x18\x03 \x01(\bR\x14secondaryWarningText\x12\x12\n" +
+	"\x04icon\x18\x04 \x01(\tR\x04icon\x12#\n" +
+	"\rtertiary_text\x18\x05 \x01(\tR\ftertiaryText\x12*\n" +
+	"\x11tertiary_text_url\x18\x06 \x01(\tR\x0ftertiaryTextUrl\x12.\n" +
+	"\x10markdown_content\x18\a \x01(\tH\x00R\x0fmarkdownContent\x88\x01\x01B\x13\n" +
+	"\x11_markdown_content\x1a\xc2\x02\n" +
+	"\x10ModelPickerBadge\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12]\n" +
+	"\avariant\x18\x02 \x01(\x0e2C.cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.VariantR\avariant\x120\n" +
+	"\x14dismiss_on_selection\x18\x03 \x01(\bR\x12dismissOnSelection\"\x86\x01\n" +
+	"\aVariant\x12\x17\n" +
+	"\x13VARIANT_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eVARIANT_ACCENT\x10\x01\x12\x13\n" +
+	"\x0fVARIANT_NEUTRAL\x10\x02\x12\x13\n" +
+	"\x0fVARIANT_SUCCESS\x10\x03\x12\x10\n" +
+	"\fVARIANT_WARN\x10\x04\x12\x12\n" +
+	"\x0eVARIANT_DANGER\x10\x05\x1a\x86\x01\n" +
 	"\x19SubagentModelConfigsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12S\n" +
 	"\x05value\x18\x02 \x01(\v2=.cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfigR\x05value:\x028\x01\"\xa9\x02\n" +
@@ -78924,11 +78924,7 @@ const file_cursor_proto_rawDesc = "" +
 	"\x14debounce_triggers_ms\x18\x03 \x01(\x01R\x12debounceTriggersMs\x125\n" +
 	"\x17keep_lines_around_chunk\x18\x04 \x01(\x05R\x14keepLinesAroundChunk\x12e\n" +
 	"1prevent_triggering_for_files_with_this_many_lines\x18\x05 \x01(\x05R*preventTriggeringForFilesWithThisManyLines\x12A\n" +
-	"\x1dprevent_triggering_when_lints\x18\x06 \x01(\bR\x1apreventTriggeringWhenLints\x1a\x94\x01\n" +
-	"\x10LinterStrategyV1\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\x12-\n" +
-	"\x13try_trigger_on_save\x18\x02 \x01(\bR\x10tryTriggerOnSave\x127\n" +
-	"\x18wait_between_triggers_ms\x18\x03 \x01(\x01R\x15waitBetweenTriggersMs\x1a\x84\x0f\n" +
+	"\x1dprevent_triggering_when_lints\x18\x06 \x01(\bR\x1apreventTriggeringWhenLints\x1a\x84\x0f\n" +
 	"\bBugBotV1\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12#\n" +
 	"\ris_subsidized\x18\x02 \x01(\bR\fisSubsidized\x12?\n" +
@@ -78965,7 +78961,11 @@ const file_cursor_proto_rawDesc = "" +
 	"$_background_diff_include_uncommittedB\x13\n" +
 	"\x11_cheap_model_nameB\x1c\n" +
 	"\x1a_cheap_absolute_max_tokensB \n" +
-	"\x1e_expensive_absolute_max_tokens\x1a\x8b\x01\n" +
+	"\x1e_expensive_absolute_max_tokens\x1a\x94\x01\n" +
+	"\x10LinterStrategyV1\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12-\n" +
+	"\x13try_trigger_on_save\x18\x02 \x01(\bR\x10tryTriggerOnSave\x127\n" +
+	"\x18wait_between_triggers_ms\x18\x03 \x01(\x01R\x15waitBetweenTriggersMs\x1a\x8b\x01\n" +
 	"\fBugbotConfig\x12.\n" +
 	"\x13bugbot_plan_enabled\x18\x01 \x01(\bR\x11bugbotPlanEnabled\x12K\n" +
 	"\x10bugbot_plan_type\x18\x02 \x01(\x0e2!.cursor.AiserverV1.BugbotPlanTypeR\x0ebugbotPlanType\x1a\xe7\x06\n" +
@@ -79459,7 +79459,25 @@ const file_cursor_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12.\n" +
 	"\x10markdown_tooltip\x18\x03 \x01(\tH\x00R\x0fmarkdownTooltip\x88\x01\x01\x12e\n" +
 	"\x0eparameter_type\x18\x04 \x01(\v2>.cursor.AiserverV1.ModelParameterDefinition.ModelParameterTypeR\rparameterType\x128\n" +
-	"\x16is_cycleable_by_hotkey\x18\x05 \x01(\bH\x01R\x13isCycleableByHotkey\x88\x01\x01\x1a\xac\x05\n" +
+	"\x16is_cycleable_by_hotkey\x18\x05 \x01(\bH\x01R\x13isCycleableByHotkey\x88\x01\x01\x1a\xa8\x02\n" +
+	"\x12ModelParameterType\x12x\n" +
+	"\x11boolean_parameter\x18\x01 \x01(\v2F.cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinitionH\x00R\x10booleanParameter\x88\x01\x01\x12o\n" +
+	"\x0eenum_parameter\x18\x02 \x01(\v2C.cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinitionH\x01R\renumParameter\x88\x01\x01B\x14\n" +
+	"\x12_boolean_parameterB\x11\n" +
+	"\x0f_enum_parameter\x1a\xd2\x04\n" +
+	"\x17EnumParameterDefinition\x12n\n" +
+	"\x06values\x18\x01 \x03(\v2V.cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValueR\x06values\x1a\xc6\x03\n" +
+	"\x12EnumParameterValue\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x12&\n" +
+	"\fdisplay_name\x18\x02 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x125\n" +
+	"\x14increases_model_cost\x18\x03 \x01(\bH\x01R\x12increasesModelCost\x88\x01\x01\x12@\n" +
+	"\x1ablocked_by_admin_allowlist\x18\x04 \x01(\bH\x02R\x17blockedByAdminAllowlist\x88\x01\x01\x12.\n" +
+	"\x10markdown_tooltip\x18\x05 \x01(\tH\x03R\x0fmarkdownTooltip\x88\x01\x01\x12k\n" +
+	"\x13model_picker_badges\x18\x06 \x03(\v2;.cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadgeR\x11modelPickerBadgesB\x0f\n" +
+	"\r_display_nameB\x17\n" +
+	"\x15_increases_model_costB\x1d\n" +
+	"\x1b_blocked_by_admin_allowlistB\x13\n" +
+	"\x11_markdown_tooltip\x1a\xac\x05\n" +
 	"\x1aBooleanParameterDefinition\x12t\n" +
 	"\x06values\x18\x01 \x03(\v2\\.cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValueR\x06values\x1a\x97\x04\n" +
 	"\x15BooleanParameterValue\x12\x14\n" +
@@ -79473,25 +79491,7 @@ const file_cursor_proto_rawDesc = "" +
 	"\x15_increases_model_costB%\n" +
 	"#_default_blocked_in_admin_allowlistB+\n" +
 	")_hide_from_user_picker_when_admin_blockedB\x1d\n" +
-	"\x1b_blocked_by_admin_allowlist\x1a\xd2\x04\n" +
-	"\x17EnumParameterDefinition\x12n\n" +
-	"\x06values\x18\x01 \x03(\v2V.cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValueR\x06values\x1a\xc6\x03\n" +
-	"\x12EnumParameterValue\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\x12&\n" +
-	"\fdisplay_name\x18\x02 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x125\n" +
-	"\x14increases_model_cost\x18\x03 \x01(\bH\x01R\x12increasesModelCost\x88\x01\x01\x12@\n" +
-	"\x1ablocked_by_admin_allowlist\x18\x04 \x01(\bH\x02R\x17blockedByAdminAllowlist\x88\x01\x01\x12.\n" +
-	"\x10markdown_tooltip\x18\x05 \x01(\tH\x03R\x0fmarkdownTooltip\x88\x01\x01\x12k\n" +
-	"\x13model_picker_badges\x18\x06 \x03(\v2;.cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadgeR\x11modelPickerBadgesB\x0f\n" +
-	"\r_display_nameB\x17\n" +
-	"\x15_increases_model_costB\x1d\n" +
 	"\x1b_blocked_by_admin_allowlistB\x13\n" +
-	"\x11_markdown_tooltip\x1a\xa8\x02\n" +
-	"\x12ModelParameterType\x12x\n" +
-	"\x11boolean_parameter\x18\x01 \x01(\v2F.cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinitionH\x00R\x10booleanParameter\x88\x01\x01\x12o\n" +
-	"\x0eenum_parameter\x18\x02 \x01(\v2C.cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinitionH\x01R\renumParameter\x88\x01\x01B\x14\n" +
-	"\x12_boolean_parameterB\x11\n" +
-	"\x0f_enum_parameterB\x13\n" +
 	"\x11_markdown_tooltipB\x19\n" +
 	"\x17_is_cycleable_by_hotkey\x1a\xa3\x01\n" +
 	"\x14NewRepoFlowCondition\x126\n" +
@@ -79855,8 +79855,8 @@ var file_cursor_proto_goTypes = []any{
 	(AiserverV1_ScmConnectAdProvider)(0),                                      // 62: cursor.AiserverV1.ScmConnectAdProvider
 	(AiserverV1_AvailableModelsResponse_ModelVendorId)(0),                     // 63: cursor.AiserverV1.AvailableModelsResponse.ModelVendorId
 	(AiserverV1_AvailableModelsResponse_DegradationStatus)(0),                 // 64: cursor.AiserverV1.AvailableModelsResponse.DegradationStatus
-	(AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant)(0),          // 65: cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant
-	(AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation)(0), // 66: cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation
+	(AiserverV1_AvailableModelsResponse_ConfirmationDialogue_Presentation)(0), // 65: cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation
+	(AiserverV1_AvailableModelsResponse_ModelPickerBadge_Variant)(0),          // 66: cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant
 	(AiserverV1_ErrorDetails_Error)(0),                                        // 67: cursor.AiserverV1.ErrorDetails.Error
 	(AiserverV1_GetDiffRequest_OutputFormat)(0),                               // 68: cursor.AiserverV1.GetDiffRequest.OutputFormat
 	(AiserverV1_GitDiff_DiffType)(0),                                          // 69: cursor.AiserverV1.GitDiff.DiffType
@@ -80672,8 +80672,8 @@ var file_cursor_proto_goTypes = []any{
 	(*AgentV1_WriteShellStdinSuccess)(nil),                                    // 879: cursor.AgentV1.WriteShellStdinSuccess
 	(*AgentV1_WriteShellStdinToolCall)(nil),                                   // 880: cursor.AgentV1.WriteShellStdinToolCall
 	(*AgentV1_WriteSuccess)(nil),                                              // 881: cursor.AgentV1.WriteSuccess
-	(*AgentV1_AskQuestionArgs_Option)(nil),                                    // 882: cursor.AgentV1.AskQuestionArgs.Option
-	(*AgentV1_AskQuestionArgs_Question)(nil),                                  // 883: cursor.AgentV1.AskQuestionArgs.Question
+	(*AgentV1_AskQuestionArgs_Question)(nil),                                  // 882: cursor.AgentV1.AskQuestionArgs.Question
+	(*AgentV1_AskQuestionArgs_Option)(nil),                                    // 883: cursor.AgentV1.AskQuestionArgs.Option
 	(*AgentV1_AskQuestionSuccess_Answer)(nil),                                 // 884: cursor.AgentV1.AskQuestionSuccess.Answer
 	(*AgentV1_CommandClassifierResult_ClassifiedCommand)(nil),                 // 885: cursor.AgentV1.CommandClassifierResult.ClassifiedCommand
 	nil, // 886: cursor.AgentV1.ConversationStateStructure.FileStatesEntry
@@ -80686,12 +80686,12 @@ var file_cursor_proto_goTypes = []any{
 	nil, // 893: cursor.AgentV1.ConversationStateStructure.SubagentStateRefsEntry
 	nil, // 894: cursor.AgentV1.CreateAgentArgs.LabelsEntry
 	nil, // 895: cursor.AgentV1.GrepSuccess.WorkspaceResultsEntry
-	(*AgentV1_InvocationContext_GithubPR)(nil),                     // 896: cursor.AgentV1.InvocationContext.GithubPR
+	(*AgentV1_InvocationContext_SlackThread)(nil),                  // 896: cursor.AgentV1.InvocationContext.SlackThread
 	(*AgentV1_InvocationContext_IdeState)(nil),                     // 897: cursor.AgentV1.InvocationContext.IdeState
 	(*AgentV1_InvocationContext_MicrosoftTeamsThread)(nil),         // 898: cursor.AgentV1.InvocationContext.MicrosoftTeamsThread
-	(*AgentV1_InvocationContext_SlackThread)(nil),                  // 899: cursor.AgentV1.InvocationContext.SlackThread
-	(*AgentV1_InvocationContext_IdeState_ViewedPullRequest)(nil),   // 900: cursor.AgentV1.InvocationContext.IdeState.ViewedPullRequest
-	(*AgentV1_InvocationContext_IdeState_File)(nil),                // 901: cursor.AgentV1.InvocationContext.IdeState.File
+	(*AgentV1_InvocationContext_GithubPR)(nil),                     // 899: cursor.AgentV1.InvocationContext.GithubPR
+	(*AgentV1_InvocationContext_IdeState_File)(nil),                // 900: cursor.AgentV1.InvocationContext.IdeState.File
+	(*AgentV1_InvocationContext_IdeState_ViewedPullRequest)(nil),   // 901: cursor.AgentV1.InvocationContext.IdeState.ViewedPullRequest
 	(*AgentV1_InvocationContext_IdeState_File_CursorPosition)(nil), // 902: cursor.AgentV1.InvocationContext.IdeState.File.CursorPosition
 	(*AgentV1_ListMcpResourcesExecResult_McpResource)(nil),         // 903: cursor.AgentV1.ListMcpResourcesExecResult.McpResource
 	nil,                                      // 904: cursor.AgentV1.ListMcpResourcesExecResult.McpResource.AnnotationsEntry
@@ -80705,11 +80705,11 @@ var file_cursor_proto_goTypes = []any{
 	(*AgentV1_SelectedDocument_BlobIdWithData)(nil),                            // 912: cursor.AgentV1.SelectedDocument.BlobIdWithData
 	(*AgentV1_SelectedImage_Dimension)(nil),                                    // 913: cursor.AgentV1.SelectedImage.Dimension
 	(*AgentV1_SelectedImage_BlobIdWithData)(nil),                               // 914: cursor.AgentV1.SelectedImage.BlobIdWithData
-	(*AgentV1_SelectedVideo_SignedUrl)(nil),                                    // 915: cursor.AgentV1.SelectedVideo.SignedUrl
-	(*AgentV1_SelectedVideo_BlobIdWithData)(nil),                               // 916: cursor.AgentV1.SelectedVideo.BlobIdWithData
-	(*AgentV1_ShellCommandParsingResult_Redirect)(nil),                         // 917: cursor.AgentV1.ShellCommandParsingResult.Redirect
-	(*AgentV1_ShellCommandParsingResult_ExecutableCommandArg)(nil),             // 918: cursor.AgentV1.ShellCommandParsingResult.ExecutableCommandArg
-	(*AgentV1_ShellCommandParsingResult_ExecutableCommand)(nil),                // 919: cursor.AgentV1.ShellCommandParsingResult.ExecutableCommand
+	(*AgentV1_SelectedVideo_BlobIdWithData)(nil),                               // 915: cursor.AgentV1.SelectedVideo.BlobIdWithData
+	(*AgentV1_SelectedVideo_SignedUrl)(nil),                                    // 916: cursor.AgentV1.SelectedVideo.SignedUrl
+	(*AgentV1_ShellCommandParsingResult_ExecutableCommand)(nil),                // 917: cursor.AgentV1.ShellCommandParsingResult.ExecutableCommand
+	(*AgentV1_ShellCommandParsingResult_Redirect)(nil),                         // 918: cursor.AgentV1.ShellCommandParsingResult.Redirect
+	(*AgentV1_ShellCommandParsingResult_ExecutableCommandArg)(nil),             // 919: cursor.AgentV1.ShellCommandParsingResult.ExecutableCommandArg
 	(*AgentV1_TerminalMetadata_Command)(nil),                                   // 920: cursor.AgentV1.TerminalMetadata.Command
 	(*AgentV1_UserMessage_SimulatedMessageMetadata)(nil),                       // 921: cursor.AgentV1.UserMessage.SimulatedMessageMetadata
 	(*AiserverV1_AdButton)(nil),                                                // 922: cursor.AiserverV1.AdButton
@@ -80799,36 +80799,36 @@ var file_cursor_proto_goTypes = []any{
 	(*AiserverV1_VscodeCPUProperties)(nil),                                     // 1006: cursor.AiserverV1.VscodeCPUProperties
 	(*AiserverV1_VscodeOSProperties)(nil),                                      // 1007: cursor.AiserverV1.VscodeOSProperties
 	(*AiserverV1_VscodeOSStatistics)(nil),                                      // 1008: cursor.AiserverV1.VscodeOSStatistics
-	(*AiserverV1_AvailableModelsResponse_ModelVariantConfig)(nil),              // 1009: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig
-	(*AiserverV1_AvailableModelsResponse_TooltipData)(nil),                     // 1010: cursor.AiserverV1.AvailableModelsResponse.TooltipData
-	(*AiserverV1_AvailableModelsResponse_AvailableModel)(nil),                  // 1011: cursor.AiserverV1.AvailableModelsResponse.AvailableModel
-	(*AiserverV1_AvailableModelsResponse_ModelVendor)(nil),                     // 1012: cursor.AiserverV1.AvailableModelsResponse.ModelVendor
-	(*AiserverV1_AvailableModelsResponse_ModelPickerBadge)(nil),                // 1013: cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge
-	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration)(nil), // 1014: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration
-	(*AiserverV1_AvailableModelsResponse_FeatureModelConfig)(nil),              // 1015: cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	(*AiserverV1_AvailableModelsResponse_ConfirmationDialogue)(nil),            // 1016: cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue
+	(*AiserverV1_AvailableModelsResponse_AvailableModel)(nil),                  // 1009: cursor.AiserverV1.AvailableModelsResponse.AvailableModel
+	(*AiserverV1_AvailableModelsResponse_ModelVendor)(nil),                     // 1010: cursor.AiserverV1.AvailableModelsResponse.ModelVendor
+	(*AiserverV1_AvailableModelsResponse_ModelVariantConfig)(nil),              // 1011: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig
+	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration)(nil), // 1012: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration
+	(*AiserverV1_AvailableModelsResponse_ConfirmationDialogue)(nil),            // 1013: cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue
+	(*AiserverV1_AvailableModelsResponse_FeatureModelConfig)(nil),              // 1014: cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	(*AiserverV1_AvailableModelsResponse_TooltipData)(nil),                     // 1015: cursor.AiserverV1.AvailableModelsResponse.TooltipData
+	(*AiserverV1_AvailableModelsResponse_ModelPickerBadge)(nil),                // 1016: cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge
 	nil, // 1017: cursor.AiserverV1.AvailableModelsResponse.SubagentModelConfigsEntry
 	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig)(nil),                                    // 1018: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig
 	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig)(nil),                                    // 1019: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig
-	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton)(nil),   // 1020: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton
-	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle)(nil),   // 1021: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle
+	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewToggle)(nil),   // 1020: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle
+	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_RoutedModelViewConfig_RoutedModelViewToNamedViewButton)(nil),   // 1021: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton
 	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewToggle)(nil),   // 1022: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle
-	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewNoButton)(nil), // 1023: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton
-	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton)(nil),   // 1024: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton
+	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewButton)(nil),   // 1023: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton
+	(*AiserverV1_AvailableModelsResponse_ModelPickerDisplayConfiguration_NamedModelsViewConfig_NamedViewToRoutedModelViewNoButton)(nil), // 1024: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton
 	(*AiserverV1_BugConfigResponse_LinterStrategyV2)(nil),                                                                               // 1025: cursor.AiserverV1.BugConfigResponse.LinterStrategyV2
-	(*AiserverV1_BugConfigResponse_LinterStrategyV1)(nil),                                                                               // 1026: cursor.AiserverV1.BugConfigResponse.LinterStrategyV1
-	(*AiserverV1_BugConfigResponse_BugBotV1)(nil),                                                                                       // 1027: cursor.AiserverV1.BugConfigResponse.BugBotV1
+	(*AiserverV1_BugConfigResponse_BugBotV1)(nil),                                                                                       // 1026: cursor.AiserverV1.BugConfigResponse.BugBotV1
+	(*AiserverV1_BugConfigResponse_LinterStrategyV1)(nil),                                                                               // 1027: cursor.AiserverV1.BugConfigResponse.LinterStrategyV1
 	nil,                                     // 1028: cursor.AiserverV1.ClientAction.ArgsEntry
 	(*AiserverV1_CodeBlock_Signatures)(nil), // 1029: cursor.AiserverV1.CodeBlock.Signatures
 	nil,                                     // 1030: cursor.AiserverV1.CustomErrorDetails.AdditionalInfoEntry
 	nil,                                     // 1031: cursor.AiserverV1.DashboardAction.ArgsEntry
 	(*AiserverV1_FileDiff_Chunk)(nil),       // 1032: cursor.AiserverV1.FileDiff.Chunk
 	(*AiserverV1_GetDiffResponse_SubmoduleDiff)(nil),                                             // 1033: cursor.AiserverV1.GetDiffResponse.SubmoduleDiff
-	(*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition)(nil),                       // 1034: cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition
+	(*AiserverV1_ModelParameterDefinition_ModelParameterType)(nil),                               // 1034: cursor.AiserverV1.ModelParameterDefinition.ModelParameterType
 	(*AiserverV1_ModelParameterDefinition_EnumParameterDefinition)(nil),                          // 1035: cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition
-	(*AiserverV1_ModelParameterDefinition_ModelParameterType)(nil),                               // 1036: cursor.AiserverV1.ModelParameterDefinition.ModelParameterType
-	(*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue)(nil), // 1037: cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue
-	(*AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue)(nil),       // 1038: cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue
+	(*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition)(nil),                       // 1036: cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition
+	(*AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue)(nil),       // 1037: cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue
+	(*AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue)(nil), // 1038: cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue
 	nil, // 1039: cursor.AiserverV1.NewRepoFlowConfig.ServerFactsEntry
 	nil, // 1040: cursor.AiserverV1.NewRepoFlowInstallPluginAction.RedirectMetadataEntry
 	(*AiserverV1_ProfileScheduleConfig_ScheduleConfig)(nil),  // 1041: cursor.AiserverV1.ProfileScheduleConfig.ScheduleConfig
@@ -80877,7 +80877,7 @@ var file_cursor_proto_depIdxs = []int32{
 	96,   // 39: cursor.AgentV1.ApplyAgentDiffSuccess.applied_changes:type_name -> cursor.AgentV1.AppliedAgentChange
 	97,   // 40: cursor.AgentV1.ApplyAgentDiffToolCall.args:type_name -> cursor.AgentV1.ApplyAgentDiffArgs
 	99,   // 41: cursor.AgentV1.ApplyAgentDiffToolCall.result:type_name -> cursor.AgentV1.ApplyAgentDiffResult
-	883,  // 42: cursor.AgentV1.AskQuestionArgs.questions:type_name -> cursor.AgentV1.AskQuestionArgs.Question
+	882,  // 42: cursor.AgentV1.AskQuestionArgs.questions:type_name -> cursor.AgentV1.AskQuestionArgs.Question
 	102,  // 43: cursor.AgentV1.AskQuestionInteractionQuery.args:type_name -> cursor.AgentV1.AskQuestionArgs
 	108,  // 44: cursor.AgentV1.AskQuestionResult.success:type_name -> cursor.AgentV1.AskQuestionSuccess
 	104,  // 45: cursor.AgentV1.AskQuestionResult.error:type_name -> cursor.AgentV1.AskQuestionError
@@ -81283,8 +81283,8 @@ var file_cursor_proto_depIdxs = []int32{
 	707,  // 445: cursor.AgentV1.InterruptedPendingToolCallResolution.shell_result:type_name -> cursor.AgentV1.ShellResult
 	805,  // 446: cursor.AgentV1.InterruptedPendingToolCallResolution.task_result:type_name -> cursor.AgentV1.TaskResult
 	347,  // 447: cursor.AgentV1.InterruptedPendingToolCallResolutions.resolutions:type_name -> cursor.AgentV1.InterruptedPendingToolCallResolution
-	899,  // 448: cursor.AgentV1.InvocationContext.slack_thread:type_name -> cursor.AgentV1.InvocationContext.SlackThread
-	896,  // 449: cursor.AgentV1.InvocationContext.github_pr:type_name -> cursor.AgentV1.InvocationContext.GithubPR
+	896,  // 448: cursor.AgentV1.InvocationContext.slack_thread:type_name -> cursor.AgentV1.InvocationContext.SlackThread
+	899,  // 449: cursor.AgentV1.InvocationContext.github_pr:type_name -> cursor.AgentV1.InvocationContext.GithubPR
 	897,  // 450: cursor.AgentV1.InvocationContext.ide_state:type_name -> cursor.AgentV1.InvocationContext.IdeState
 	898,  // 451: cursor.AgentV1.InvocationContext.microsoft_teams_thread:type_name -> cursor.AgentV1.InvocationContext.MicrosoftTeamsThread
 	732,  // 452: cursor.AgentV1.KvServerMessage.span_context:type_name -> cursor.AgentV1.SpanContext
@@ -81626,8 +81626,8 @@ var file_cursor_proto_depIdxs = []int32{
 	519,  // 788: cursor.AgentV1.SelectedImage.prompt_upload_ref:type_name -> cursor.AgentV1.PromptUploadRef
 	25,   // 789: cursor.AgentV1.SelectedPluginCapabilityRef.capability_type:type_name -> cursor.AgentV1.SelectedPluginCapabilityType
 	520,  // 790: cursor.AgentV1.SelectedTerminalSelection.range:type_name -> cursor.AgentV1.Range
-	916,  // 791: cursor.AgentV1.SelectedVideo.blob_id_with_data:type_name -> cursor.AgentV1.SelectedVideo.BlobIdWithData
-	915,  // 792: cursor.AgentV1.SelectedVideo.signed_url:type_name -> cursor.AgentV1.SelectedVideo.SignedUrl
+	915,  // 791: cursor.AgentV1.SelectedVideo.blob_id_with_data:type_name -> cursor.AgentV1.SelectedVideo.BlobIdWithData
+	916,  // 792: cursor.AgentV1.SelectedVideo.signed_url:type_name -> cursor.AgentV1.SelectedVideo.SignedUrl
 	655,  // 793: cursor.AgentV1.SelfHostedPoolTarget.labels:type_name -> cursor.AgentV1.SelfHostedWorkerLabel
 	657,  // 794: cursor.AgentV1.SemSearchToolCall.args:type_name -> cursor.AgentV1.SemSearchToolArgs
 	660,  // 795: cursor.AgentV1.SemSearchToolCall.result:type_name -> cursor.AgentV1.SemSearchToolResult
@@ -81670,8 +81670,8 @@ var file_cursor_proto_depIdxs = []int32{
 	725,  // 832: cursor.AgentV1.ShellArgs.smart_mode_approval:type_name -> cursor.AgentV1.SmartModeApproval
 	702,  // 833: cursor.AgentV1.ShellArgs.hook_approval_requirement:type_name -> cursor.AgentV1.ShellHookApprovalRequirement
 	698,  // 834: cursor.AgentV1.ShellCommandAction.shell_command:type_name -> cursor.AgentV1.ShellCommand
-	919,  // 835: cursor.AgentV1.ShellCommandParsingResult.executable_commands:type_name -> cursor.AgentV1.ShellCommandParsingResult.ExecutableCommand
-	917,  // 836: cursor.AgentV1.ShellCommandParsingResult.redirects:type_name -> cursor.AgentV1.ShellCommandParsingResult.Redirect
+	917,  // 835: cursor.AgentV1.ShellCommandParsingResult.executable_commands:type_name -> cursor.AgentV1.ShellCommandParsingResult.ExecutableCommand
+	918,  // 836: cursor.AgentV1.ShellCommandParsingResult.redirects:type_name -> cursor.AgentV1.ShellCommandParsingResult.Redirect
 	412,  // 837: cursor.AgentV1.ShellFailure.output_location:type_name -> cursor.AgentV1.OutputLocation
 	26,   // 838: cursor.AgentV1.ShellFailure.abort_reason:type_name -> cursor.AgentV1.ShellAbortReason
 	44,   // 839: cursor.AgentV1.ShellHookApprovalRequirement.kind:type_name -> cursor.AgentV1.ShellHookApprovalRequirement.Kind
@@ -81932,39 +81932,39 @@ var file_cursor_proto_depIdxs = []int32{
 	877,  // 1094: cursor.AgentV1.WriteShellStdinResult.error:type_name -> cursor.AgentV1.WriteShellStdinError
 	876,  // 1095: cursor.AgentV1.WriteShellStdinToolCall.args:type_name -> cursor.AgentV1.WriteShellStdinArgs
 	878,  // 1096: cursor.AgentV1.WriteShellStdinToolCall.result:type_name -> cursor.AgentV1.WriteShellStdinResult
-	882,  // 1097: cursor.AgentV1.AskQuestionArgs.Question.options:type_name -> cursor.AgentV1.AskQuestionArgs.Option
+	883,  // 1097: cursor.AgentV1.AskQuestionArgs.Question.options:type_name -> cursor.AgentV1.AskQuestionArgs.Option
 	291,  // 1098: cursor.AgentV1.ConversationStateStructure.FileStatesV2Entry.value:type_name -> cursor.AgentV1.FileStateStructure
 	764,  // 1099: cursor.AgentV1.ConversationStateStructure.SubagentStatesEntry.value:type_name -> cursor.AgentV1.SubagentPersistedState
 	485,  // 1100: cursor.AgentV1.ConversationStateStructure.PlansEntry.value:type_name -> cursor.AgentV1.PlanRegistryEntry
 	156,  // 1101: cursor.AgentV1.ConversationStateStructure.CommunicateUpdateStatesByParentToolCallIdEntry.value:type_name -> cursor.AgentV1.CommunicateUpdateTurnState
 	766,  // 1102: cursor.AgentV1.ConversationStateStructure.SubagentRunsByParentToolCallIdEntry.value:type_name -> cursor.AgentV1.SubagentRunState
 	340,  // 1103: cursor.AgentV1.GrepSuccess.WorkspaceResultsEntry.value:type_name -> cursor.AgentV1.GrepUnionResult
-	901,  // 1104: cursor.AgentV1.InvocationContext.IdeState.visible_files:type_name -> cursor.AgentV1.InvocationContext.IdeState.File
-	901,  // 1105: cursor.AgentV1.InvocationContext.IdeState.recently_viewed_files:type_name -> cursor.AgentV1.InvocationContext.IdeState.File
-	900,  // 1106: cursor.AgentV1.InvocationContext.IdeState.currently_viewed_prs:type_name -> cursor.AgentV1.InvocationContext.IdeState.ViewedPullRequest
+	900,  // 1104: cursor.AgentV1.InvocationContext.IdeState.visible_files:type_name -> cursor.AgentV1.InvocationContext.IdeState.File
+	900,  // 1105: cursor.AgentV1.InvocationContext.IdeState.recently_viewed_files:type_name -> cursor.AgentV1.InvocationContext.IdeState.File
+	901,  // 1106: cursor.AgentV1.InvocationContext.IdeState.currently_viewed_prs:type_name -> cursor.AgentV1.InvocationContext.IdeState.ViewedPullRequest
 	902,  // 1107: cursor.AgentV1.InvocationContext.IdeState.File.cursor_position:type_name -> cursor.AgentV1.InvocationContext.IdeState.File.CursorPosition
 	904,  // 1108: cursor.AgentV1.ListMcpResourcesExecResult.McpResource.annotations:type_name -> cursor.AgentV1.ListMcpResourcesExecResult.McpResource.AnnotationsEntry
 	809,  // 1109: cursor.AgentV1.LsDirectoryTreeNode.File.terminal_metadata:type_name -> cursor.AgentV1.TerminalMetadata
-	918,  // 1110: cursor.AgentV1.ShellCommandParsingResult.ExecutableCommand.args:type_name -> cursor.AgentV1.ShellCommandParsingResult.ExecutableCommandArg
+	919,  // 1110: cursor.AgentV1.ShellCommandParsingResult.ExecutableCommand.args:type_name -> cursor.AgentV1.ShellCommandParsingResult.ExecutableCommandArg
 	33,   // 1111: cursor.AgentV1.UserMessage.SimulatedMessageMetadata.subscription_source:type_name -> cursor.AgentV1.SubscriptionSource
 	787,  // 1112: cursor.AgentV1.UserMessage.SimulatedMessageMetadata.subscription_event_display:type_name -> cursor.AgentV1.SubscriptionEventDisplay
 	47,   // 1113: cursor.AiserverV1.AdButton.button_type:type_name -> cursor.AiserverV1.ButtonType
 	939,  // 1114: cursor.AiserverV1.AdButton.client_action:type_name -> cursor.AiserverV1.ClientAction
 	925,  // 1115: cursor.AiserverV1.AdContent.sections:type_name -> cursor.AiserverV1.AdSection
 	45,   // 1116: cursor.AiserverV1.AvailableModelsRequest.scope:type_name -> cursor.AiserverV1.AvailableModelsScope
-	1011, // 1117: cursor.AiserverV1.AvailableModelsResponse.models:type_name -> cursor.AiserverV1.AvailableModelsResponse.AvailableModel
-	1015, // 1118: cursor.AiserverV1.AvailableModelsResponse.composer_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1015, // 1119: cursor.AiserverV1.AvailableModelsResponse.cmd_k_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1015, // 1120: cursor.AiserverV1.AvailableModelsResponse.background_composer_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1015, // 1121: cursor.AiserverV1.AvailableModelsResponse.plan_execution_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1015, // 1122: cursor.AiserverV1.AvailableModelsResponse.spec_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1015, // 1123: cursor.AiserverV1.AvailableModelsResponse.deep_search_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1015, // 1124: cursor.AiserverV1.AvailableModelsResponse.quick_agent_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1014, // 1125: cursor.AiserverV1.AvailableModelsResponse.display_configuration:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration
+	1009, // 1117: cursor.AiserverV1.AvailableModelsResponse.models:type_name -> cursor.AiserverV1.AvailableModelsResponse.AvailableModel
+	1014, // 1118: cursor.AiserverV1.AvailableModelsResponse.composer_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1014, // 1119: cursor.AiserverV1.AvailableModelsResponse.cmd_k_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1014, // 1120: cursor.AiserverV1.AvailableModelsResponse.background_composer_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1014, // 1121: cursor.AiserverV1.AvailableModelsResponse.plan_execution_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1014, // 1122: cursor.AiserverV1.AvailableModelsResponse.spec_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1014, // 1123: cursor.AiserverV1.AvailableModelsResponse.deep_search_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1014, // 1124: cursor.AiserverV1.AvailableModelsResponse.quick_agent_model_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1012, // 1125: cursor.AiserverV1.AvailableModelsResponse.display_configuration:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration
 	1017, // 1126: cursor.AiserverV1.AvailableModelsResponse.subagent_model_configs:type_name -> cursor.AiserverV1.AvailableModelsResponse.SubagentModelConfigsEntry
 	935,  // 1127: cursor.AiserverV1.BidiAppendRequest.request_id:type_name -> cursor.AiserverV1.BidiRequestId
-	1026, // 1128: cursor.AiserverV1.BugConfigResponse.linter_strategy_v1:type_name -> cursor.AiserverV1.BugConfigResponse.LinterStrategyV1
-	1027, // 1129: cursor.AiserverV1.BugConfigResponse.bug_bot_v1:type_name -> cursor.AiserverV1.BugConfigResponse.BugBotV1
+	1027, // 1128: cursor.AiserverV1.BugConfigResponse.linter_strategy_v1:type_name -> cursor.AiserverV1.BugConfigResponse.LinterStrategyV1
+	1026, // 1129: cursor.AiserverV1.BugConfigResponse.bug_bot_v1:type_name -> cursor.AiserverV1.BugConfigResponse.BugBotV1
 	1025, // 1130: cursor.AiserverV1.BugConfigResponse.linter_strategy_v2:type_name -> cursor.AiserverV1.BugConfigResponse.LinterStrategyV2
 	46,   // 1131: cursor.AiserverV1.BugbotConfig.bugbot_plan_type:type_name -> cursor.AiserverV1.BugbotPlanType
 	1028, // 1132: cursor.AiserverV1.ClientAction.args:type_name -> cursor.AiserverV1.ClientAction.ArgsEntry
@@ -82044,7 +82044,7 @@ var file_cursor_proto_depIdxs = []int32{
 	976,  // 1206: cursor.AiserverV1.InAppAd.modal_display_config:type_name -> cursor.AiserverV1.ModalDisplayConfig
 	48,   // 1207: cursor.AiserverV1.InAppAd.target_surfaces:type_name -> cursor.AiserverV1.ClientSurface
 	54,   // 1208: cursor.AiserverV1.InferenceProviderWarning.trigger:type_name -> cursor.AiserverV1.InferenceProviderWarningTrigger
-	1036, // 1209: cursor.AiserverV1.ModelParameterDefinition.parameter_type:type_name -> cursor.AiserverV1.ModelParameterDefinition.ModelParameterType
+	1034, // 1209: cursor.AiserverV1.ModelParameterDefinition.parameter_type:type_name -> cursor.AiserverV1.ModelParameterDefinition.ModelParameterType
 	55,   // 1210: cursor.AiserverV1.NewRepoFlowCondition.fact:type_name -> cursor.AiserverV1.NewRepoFlowFact
 	984,  // 1211: cursor.AiserverV1.NewRepoFlowConfig.probes:type_name -> cursor.AiserverV1.NewRepoFlowProbe
 	985,  // 1212: cursor.AiserverV1.NewRepoFlowConfig.steps:type_name -> cursor.AiserverV1.NewRepoFlowStep
@@ -82073,36 +82073,36 @@ var file_cursor_proto_depIdxs = []int32{
 	1042, // 1235: cursor.AiserverV1.SwitchModelAction.parameters:type_name -> cursor.AiserverV1.SwitchModelAction.ModelParameterValue
 	70,   // 1236: cursor.AiserverV1.UpdateConfig.mode:type_name -> cursor.AiserverV1.UpdateConfig.UpdateMode
 	1006, // 1237: cursor.AiserverV1.VscodeOSProperties.cpus:type_name -> cursor.AiserverV1.VscodeCPUProperties
-	911,  // 1238: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig.parameter_values:type_name -> cursor.AgentV1.RequestedModel.ModelParameterValue
-	1010, // 1239: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig.tooltip_data:type_name -> cursor.AiserverV1.AvailableModelsResponse.TooltipData
-	1016, // 1240: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig.confirmation_dialogue:type_name -> cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue
-	64,   // 1241: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.degradation_status:type_name -> cursor.AiserverV1.AvailableModelsResponse.DegradationStatus
-	1010, // 1242: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.tooltip_data:type_name -> cursor.AiserverV1.AvailableModelsResponse.TooltipData
-	1010, // 1243: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.tooltip_data_for_max_mode:type_name -> cursor.AiserverV1.AvailableModelsResponse.TooltipData
-	978,  // 1244: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.parameter_definitions:type_name -> cursor.AiserverV1.ModelParameterDefinition
-	1009, // 1245: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.variants:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig
-	50,   // 1246: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.cloud_agent_effort_mode:type_name -> cursor.AiserverV1.CloudAgentEffortMode
-	1012, // 1247: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.vendor:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelVendor
-	50,   // 1248: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.cloud_agent_effort_modes:type_name -> cursor.AiserverV1.CloudAgentEffortMode
-	1013, // 1249: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.model_picker_badges:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge
-	63,   // 1250: cursor.AiserverV1.AvailableModelsResponse.ModelVendor.id:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelVendorId
-	65,   // 1251: cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.variant:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant
-	1018, // 1252: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.routed_model_view_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig
-	1019, // 1253: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.named_models_view_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig
-	66,   // 1254: cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue.presentation:type_name -> cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation
-	1015, // 1255: cursor.AiserverV1.AvailableModelsResponse.SubagentModelConfigsEntry.value:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
-	1021, // 1256: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.routed_model_view_to_named_view_toggle:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle
-	1020, // 1257: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.routed_model_view_to_named_view_button:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton
+	64,   // 1238: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.degradation_status:type_name -> cursor.AiserverV1.AvailableModelsResponse.DegradationStatus
+	1015, // 1239: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.tooltip_data:type_name -> cursor.AiserverV1.AvailableModelsResponse.TooltipData
+	1015, // 1240: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.tooltip_data_for_max_mode:type_name -> cursor.AiserverV1.AvailableModelsResponse.TooltipData
+	978,  // 1241: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.parameter_definitions:type_name -> cursor.AiserverV1.ModelParameterDefinition
+	1011, // 1242: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.variants:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig
+	50,   // 1243: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.cloud_agent_effort_mode:type_name -> cursor.AiserverV1.CloudAgentEffortMode
+	1010, // 1244: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.vendor:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelVendor
+	50,   // 1245: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.cloud_agent_effort_modes:type_name -> cursor.AiserverV1.CloudAgentEffortMode
+	1016, // 1246: cursor.AiserverV1.AvailableModelsResponse.AvailableModel.model_picker_badges:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge
+	63,   // 1247: cursor.AiserverV1.AvailableModelsResponse.ModelVendor.id:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelVendorId
+	911,  // 1248: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig.parameter_values:type_name -> cursor.AgentV1.RequestedModel.ModelParameterValue
+	1015, // 1249: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig.tooltip_data:type_name -> cursor.AiserverV1.AvailableModelsResponse.TooltipData
+	1013, // 1250: cursor.AiserverV1.AvailableModelsResponse.ModelVariantConfig.confirmation_dialogue:type_name -> cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue
+	1018, // 1251: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.routed_model_view_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig
+	1019, // 1252: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.named_models_view_config:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig
+	65,   // 1253: cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue.presentation:type_name -> cursor.AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation
+	66,   // 1254: cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.variant:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant
+	1014, // 1255: cursor.AiserverV1.AvailableModelsResponse.SubagentModelConfigsEntry.value:type_name -> cursor.AiserverV1.AvailableModelsResponse.FeatureModelConfig
+	1020, // 1256: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.routed_model_view_to_named_view_toggle:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle
+	1021, // 1257: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.routed_model_view_to_named_view_button:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton
 	1022, // 1258: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.named_view_to_routed_model_view_toggle:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle
-	1023, // 1259: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.named_view_to_routed_model_view_no_button:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton
-	1024, // 1260: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.named_view_to_routed_model_view_button:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton
+	1024, // 1259: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.named_view_to_routed_model_view_no_button:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton
+	1023, // 1260: cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.named_view_to_routed_model_view_button:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton
 	948,  // 1261: cursor.AiserverV1.CodeBlock.Signatures.ranges:type_name -> cursor.AiserverV1.CursorRange
 	966,  // 1262: cursor.AiserverV1.GetDiffResponse.SubmoduleDiff.diff:type_name -> cursor.AiserverV1.GitDiff
-	1037, // 1263: cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.values:type_name -> cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue
-	1038, // 1264: cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.values:type_name -> cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue
-	1034, // 1265: cursor.AiserverV1.ModelParameterDefinition.ModelParameterType.boolean_parameter:type_name -> cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition
-	1035, // 1266: cursor.AiserverV1.ModelParameterDefinition.ModelParameterType.enum_parameter:type_name -> cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition
-	1013, // 1267: cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue.model_picker_badges:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge
+	1036, // 1263: cursor.AiserverV1.ModelParameterDefinition.ModelParameterType.boolean_parameter:type_name -> cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition
+	1035, // 1264: cursor.AiserverV1.ModelParameterDefinition.ModelParameterType.enum_parameter:type_name -> cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition
+	1037, // 1265: cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.values:type_name -> cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue
+	1038, // 1266: cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.values:type_name -> cursor.AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue
+	1016, // 1267: cursor.AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue.model_picker_badges:type_name -> cursor.AiserverV1.AvailableModelsResponse.ModelPickerBadge
 	1268, // [1268:1268] is the sub-list for method output_type
 	1268, // [1268:1268] is the sub-list for method input_type
 	1268, // [1268:1268] is the sub-list for extension type_name
@@ -83217,7 +83217,7 @@ func file_cursor_proto_init() {
 	file_cursor_proto_msgTypes[830].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[832].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[834].OneofWrappers = []any{}
-	file_cursor_proto_msgTypes[846].OneofWrappers = []any{}
+	file_cursor_proto_msgTypes[847].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[849].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[850].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[851].OneofWrappers = []any{
@@ -83277,15 +83277,15 @@ func file_cursor_proto_init() {
 	file_cursor_proto_msgTypes[931].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[932].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[938].OneofWrappers = []any{}
-	file_cursor_proto_msgTypes[939].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[940].OneofWrappers = []any{}
-	file_cursor_proto_msgTypes[943].OneofWrappers = []any{}
-	file_cursor_proto_msgTypes[945].OneofWrappers = []any{}
+	file_cursor_proto_msgTypes[941].OneofWrappers = []any{}
+	file_cursor_proto_msgTypes[942].OneofWrappers = []any{}
+	file_cursor_proto_msgTypes[944].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[947].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[948].OneofWrappers = []any{}
-	file_cursor_proto_msgTypes[950].OneofWrappers = []any{}
-	file_cursor_proto_msgTypes[956].OneofWrappers = []any{}
-	file_cursor_proto_msgTypes[965].OneofWrappers = []any{}
+	file_cursor_proto_msgTypes[949].OneofWrappers = []any{}
+	file_cursor_proto_msgTypes[955].OneofWrappers = []any{}
+	file_cursor_proto_msgTypes[963].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[966].OneofWrappers = []any{}
 	file_cursor_proto_msgTypes[967].OneofWrappers = []any{}
 	type x struct{}

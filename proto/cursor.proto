@@ -4,8 +4,8 @@ package cursor;
 
 option go_package = "github.com/router-for-me/cursor-proto/gen/cursor;cursorpb";
 
-// Generated from Cursor 3.10.20 workbench.desktop.main.js
-// commit: 23b9fb205fe595ea2be29da7214e19762d037fc0
+// Generated from Cursor 3.19.7 workbench.desktop.main.js
+// commit: 90de2327392570a5f5f625c656c6749d228e6430
 // Mode: core, 949 messages, 71 enums
 
 // ============================================================
@@ -563,16 +563,16 @@ message AgentV1 {
   }
 
   message AskQuestionArgs {
-    message Option {
-      string id = 1;
-      string label = 2;
-    }
-
     message Question {
       string id = 1;
       string prompt = 2;
       repeated AgentV1.AskQuestionArgs.Option options = 3;
       bool allow_multiple = 4;
+    }
+
+    message Option {
+      string id = 1;
+      string label = 2;
     }
 
     string title = 1;
@@ -2322,23 +2322,18 @@ message AgentV1 {
   }
 
   message InvocationContext {
-    message GithubPR {
-      string title = 1;
-      string description = 2;
-      string comments = 3;
-      optional string ci_failures = 4;
+    message SlackThread {
+      string thread = 1;
+      optional string channel_name = 2;
+      optional string channel_purpose = 3;
+      optional string channel_topic = 4;
+      optional string sender_name = 5;
+      optional string sender_id = 6;
+      optional string sender_type = 7;
+      optional bool is_directly_addressed = 8;
     }
 
     message IdeState {
-      message ViewedPullRequest {
-        int32 number = 1;
-        string url = 2;
-        optional string title = 3;
-        optional string folder_path = 4;
-        optional string summary_json = 5;
-        optional string description = 6;
-      }
-
       message File {
         message CursorPosition {
           int32 line = 1;
@@ -2350,6 +2345,15 @@ message AgentV1 {
         optional AgentV1.InvocationContext.IdeState.File.CursorPosition cursor_position = 3;
         int32 total_lines = 4;
         optional string active_command = 5;
+      }
+
+      message ViewedPullRequest {
+        int32 number = 1;
+        string url = 2;
+        optional string title = 3;
+        optional string folder_path = 4;
+        optional string summary_json = 5;
+        optional string description = 6;
       }
 
       repeated AgentV1.InvocationContext.IdeState.File visible_files = 1;
@@ -2365,15 +2369,11 @@ message AgentV1 {
       optional string team_description = 5;
     }
 
-    message SlackThread {
-      string thread = 1;
-      optional string channel_name = 2;
-      optional string channel_purpose = 3;
-      optional string channel_topic = 4;
-      optional string sender_name = 5;
-      optional string sender_id = 6;
-      optional string sender_type = 7;
-      optional bool is_directly_addressed = 8;
+    message GithubPR {
+      string title = 1;
+      string description = 2;
+      string comments = 3;
+      optional string ci_failures = 4;
     }
 
     oneof data {
@@ -4466,17 +4466,17 @@ message AgentV1 {
   }
 
   message SelectedVideo {
+    message BlobIdWithData {
+      bytes blob_id = 1;
+      bytes data = 2;
+    }
+
     message SignedUrl {
       string url = 1;
       string key = 2;
       int64 expires_at_unix_ms = 3;
       int64 refresh_after_unix_ms = 4;
       string conversation_id = 5;
-    }
-
-    message BlobIdWithData {
-      bytes blob_id = 1;
-      bytes data = 2;
     }
 
     string uuid = 2;
@@ -4752,6 +4752,12 @@ message AgentV1 {
   }
 
   message ShellCommandParsingResult {
+    message ExecutableCommand {
+      string name = 1;
+      repeated AgentV1.ShellCommandParsingResult.ExecutableCommandArg args = 2;
+      string full_text = 3;
+    }
+
     message Redirect {
       string operator = 1;
       repeated uint32 destination_fds = 2;
@@ -4762,12 +4768,6 @@ message AgentV1 {
     message ExecutableCommandArg {
       string type = 1;
       string value = 2;
-    }
-
-    message ExecutableCommand {
-      string name = 1;
-      repeated AgentV1.ShellCommandParsingResult.ExecutableCommandArg args = 2;
-      string full_text = 3;
     }
 
     bool parsing_failed = 1;
@@ -6258,30 +6258,6 @@ message AiserverV1 {
       DEGRADATION_STATUS_DISABLED = 2;
     }
 
-    message ModelVariantConfig {
-      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
-      string display_name = 2;
-      bool is_max_mode = 3;
-      optional bool is_default_max_config = 4;
-      optional bool is_default_non_max_config = 5;
-      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
-      optional string tagline = 7;
-      optional string display_name_outside_picker = 8;
-      optional string variant_string_representation = 9;
-      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
-      optional string legacy_slug = 11;
-    }
-
-    message TooltipData {
-      string primary_text = 1;
-      string secondary_text = 2;
-      bool secondary_warning_text = 3;
-      string icon = 4;
-      string tertiary_text = 5;
-      string tertiary_text_url = 6;
-      optional string markdown_content = 7;
-    }
-
     message AvailableModel {
       string name = 1;
       bool default_on = 2;
@@ -6337,31 +6313,30 @@ message AiserverV1 {
       string display_name = 2;
     }
 
-    message ModelPickerBadge {
-      enum Variant {
-        VARIANT_UNSPECIFIED = 0;
-        VARIANT_ACCENT = 1;
-        VARIANT_NEUTRAL = 2;
-        VARIANT_SUCCESS = 3;
-        VARIANT_WARN = 4;
-        VARIANT_DANGER = 5;
-      }
-
-      string label = 1;
-      AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant variant = 2;
-      bool dismiss_on_selection = 3;
+    message ModelVariantConfig {
+      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
+      string display_name = 2;
+      bool is_max_mode = 3;
+      optional bool is_default_max_config = 4;
+      optional bool is_default_non_max_config = 5;
+      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
+      optional string tagline = 7;
+      optional string display_name_outside_picker = 8;
+      optional string variant_string_representation = 9;
+      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
+      optional string legacy_slug = 11;
     }
 
     message ModelPickerDisplayConfiguration {
       message RoutedModelViewConfig {
-        message RoutedModelViewToNamedViewButton {
-          string markdown = 1;
-        }
-
         message RoutedModelViewToNamedViewToggle {
           string title_markdown = 1;
           optional string subtitle = 2;
           optional bool set_to_last_named_model = 3;
+        }
+
+        message RoutedModelViewToNamedViewButton {
+          string markdown = 1;
         }
 
         optional string title = 1;
@@ -6376,11 +6351,11 @@ message AiserverV1 {
           string markdown = 1;
         }
 
-        message NamedViewToRoutedModelViewNoButton {
-        }
-
         message NamedViewToRoutedModelViewButton {
           string markdown = 1;
+        }
+
+        message NamedViewToRoutedModelViewNoButton {
         }
 
         optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle named_view_to_routed_model_view_toggle = 2;
@@ -6395,12 +6370,6 @@ message AiserverV1 {
       optional string model_selection_restriction_message = 5;
     }
 
-    message FeatureModelConfig {
-      string default_model = 1;
-      repeated string fallback_models = 2;
-      repeated string best_of_n_default_models = 3;
-    }
-
     message ConfirmationDialogue {
       enum Presentation {
         PRESENTATION_UNSPECIFIED = 0;
@@ -6412,6 +6381,37 @@ message AiserverV1 {
       string key = 3;
       bool blocks_submission = 4;
       optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation presentation = 5;
+    }
+
+    message FeatureModelConfig {
+      string default_model = 1;
+      repeated string fallback_models = 2;
+      repeated string best_of_n_default_models = 3;
+    }
+
+    message TooltipData {
+      string primary_text = 1;
+      string secondary_text = 2;
+      bool secondary_warning_text = 3;
+      string icon = 4;
+      string tertiary_text = 5;
+      string tertiary_text_url = 6;
+      optional string markdown_content = 7;
+    }
+
+    message ModelPickerBadge {
+      enum Variant {
+        VARIANT_UNSPECIFIED = 0;
+        VARIANT_ACCENT = 1;
+        VARIANT_NEUTRAL = 2;
+        VARIANT_SUCCESS = 3;
+        VARIANT_WARN = 4;
+        VARIANT_DANGER = 5;
+      }
+
+      string label = 1;
+      AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant variant = 2;
+      bool dismiss_on_selection = 3;
     }
 
     repeated string model_names = 1;
@@ -6469,12 +6469,6 @@ message AiserverV1 {
       bool prevent_triggering_when_lints = 6;
     }
 
-    message LinterStrategyV1 {
-      bool enabled = 1;
-      bool try_trigger_on_save = 2;
-      double wait_between_triggers_ms = 3;
-    }
-
     message BugBotV1 {
       bool enabled = 1;
       bool is_subsidized = 2;
@@ -6495,6 +6489,12 @@ message AiserverV1 {
       optional string cheap_model_name = 17;
       optional int32 cheap_absolute_max_tokens = 18;
       optional int32 expensive_absolute_max_tokens = 19;
+    }
+
+    message LinterStrategyV1 {
+      bool enabled = 1;
+      bool try_trigger_on_save = 2;
+      double wait_between_triggers_ms = 3;
     }
 
     AiserverV1.BugConfigResponse.LinterStrategyV1 linter_strategy_v1 = 1;
@@ -6970,17 +6970,9 @@ message AiserverV1 {
   }
 
   message ModelParameterDefinition {
-    message BooleanParameterDefinition {
-      message BooleanParameterValue {
-        string value = 1;
-        optional string display_name = 2;
-        optional bool increases_model_cost = 3;
-        optional bool default_blocked_in_admin_allowlist = 4;
-        optional bool hide_from_user_picker_when_admin_blocked = 5;
-        optional bool blocked_by_admin_allowlist = 6;
-      }
-
-      repeated AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue values = 1;
+    message ModelParameterType {
+      optional AiserverV1.ModelParameterDefinition.BooleanParameterDefinition boolean_parameter = 1;
+      optional AiserverV1.ModelParameterDefinition.EnumParameterDefinition enum_parameter = 2;
     }
 
     message EnumParameterDefinition {
@@ -6996,9 +6988,17 @@ message AiserverV1 {
       repeated AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue values = 1;
     }
 
-    message ModelParameterType {
-      optional AiserverV1.ModelParameterDefinition.BooleanParameterDefinition boolean_parameter = 1;
-      optional AiserverV1.ModelParameterDefinition.EnumParameterDefinition enum_parameter = 2;
+    message BooleanParameterDefinition {
+      message BooleanParameterValue {
+        string value = 1;
+        optional string display_name = 2;
+        optional bool increases_model_cost = 3;
+        optional bool default_blocked_in_admin_allowlist = 4;
+        optional bool hide_from_user_picker_when_admin_blocked = 5;
+        optional bool blocked_by_admin_allowlist = 6;
+      }
+
+      repeated AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue values = 1;
     }
 
     string id = 1;
