@@ -60,7 +60,11 @@ cmd/test-proxy/
 # ============================================================================
 # Big binary reference material (keep locally, don't push)
 # ============================================================================
-captures/wb-*.js         # 40 MB Cursor.app JS bundle
+# ~40 MB Cursor.app JS bundle per version. Note: gitignore has no inline
+# comments, so the trailing "# 40 MB ..." that used to sit on this line was
+# parsed as part of the pattern and matched nothing — which is how three
+# wb-*.js bundles ended up tracked.
+captures/wb-*.js
 captures/wb-*.js.gz
 
 # ============================================================================
