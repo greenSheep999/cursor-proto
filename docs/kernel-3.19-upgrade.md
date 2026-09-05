@@ -177,3 +177,26 @@ still applies. Two additions from this pass:
   (v1.36.11 here): `go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11`.
 - After extracting the schema, check the unresolved-ref count and confirm no
   `$`-prefixed refs remain before trusting the generated Go.
+- **Set all three extractor env vars, not just the bundle path.**
+  `CURSOR_PROTO_VERSION` and `CURSOR_PROTO_COMMIT` are independent of
+  `CURSOR_PROTO_WB` and both default to `3.10.20`. Setting only the bundle
+  path yields a schema with correct message data but a `cursor_version` of
+  `3.10.20`, which `gen_proto.py` then stamps into the generated header as
+  `// Generated from Cursor 3.10.20 …`. It compiles and tests pass — the
+  codegen only reads messages/enums — so nothing catches it, and the
+  artefact quietly lies about its provenance. Every line in this upgrade was
+  committed wrong once and fixed in a follow-up;
+  `captures/schema-3.11.19.raw.json` still carries the bad stamp.
+
+  ```bash
+  CURSOR_PROTO_WB=captures/wb-<ver>.js \
+  CURSOR_PROTO_VERSION=<ver> \
+  CURSOR_PROTO_COMMIT=<product.json commit> \
+    python3 scripts/extract_schema.py > captures/schema-<ver>.raw.json
+  ```
+
+  Then confirm before generating:
+
+  ```bash
+  grep -n "Generated from Cursor" proto/cursor.proto | head -1
+  ```
