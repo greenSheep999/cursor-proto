@@ -584,9 +584,13 @@ func buildClaudeNonStreaming(model string, shape chatShape, limiter *translator.
 					input = parsed
 				}
 			}
+			toolID := translator.CanonicalAnthropicToolID(trEv.ToolCallID, false)
+			if toolID == "" {
+				toolID = translator.NewAnthropicToolUseID()
+			}
 			toolUses = append(toolUses, map[string]any{
 				"type":  "tool_use",
-				"id":    trEv.ToolCallID,
+				"id":    toolID,
 				"name":  trEv.ToolName,
 				"input": input,
 			})

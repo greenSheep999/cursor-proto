@@ -77,6 +77,26 @@ func TestAnthropicToolUseShape(t *testing.T) {
 	}
 }
 
+func TestAnthropicToolUseSynthesizesIDWhenEmpty(t *testing.T) {
+	w := NewAnthropicStreamWriter("claude-sonnet-4-6")
+	start := string(w.Encode(&Event{
+		Kind:          EventToolCallStarted,
+		ToolCallID:    "",
+		ToolName:      "Bash",
+		ToolArgsDelta: `{"command":"uname -sm"}`,
+	}))
+	if !strings.Contains(start, `"type":"tool_use"`) || !strings.Contains(start, `"name":"Bash"`) {
+		t.Fatalf("missing tool_use Bash:\n%s", start)
+	}
+	if !strings.Contains(start, `"id":"toolu_`) {
+		t.Fatalf("empty tool id must be synthesized:\n%s", start)
+	}
+	stop := string(w.Encode(&Event{Kind: EventToolCallCompleted, ToolCallID: ""}))
+	if !strings.Contains(stop, "content_block_stop") {
+		t.Fatalf("empty-id completed must close the synthesized block:\n%s", stop)
+	}
+}
+
 func TestExtractToolArgsFromStartRoundTrip(t *testing.T) {
 	// Build a fake McpArgs and confirm extractToolArgsFromStart yields a
 	// valid JSON object with sorted keys.

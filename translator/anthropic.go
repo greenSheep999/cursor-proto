@@ -56,6 +56,7 @@ type AnthropicStreamWriter struct {
 	// downstream detectors (cctest.ai WebSearch dimension) see the
 	// canonical citation-bearing text shape. Cleared after each flush.
 	webSearchCitations []map[string]any
+	anonClientToolID   string
 }
 
 func NewAnthropicStreamWriter(model string) *AnthropicStreamWriter {
@@ -91,6 +92,35 @@ func NewAnthropicRequestID() string {
 		random[index] = anthropicIDAlphabet[int(random[index])%len(anthropicIDAlphabet)]
 	}
 	return "req_011" + string(random)
+}
+
+func NewAnthropicToolUseID() string {
+	random := make([]byte, 22)
+	if _, err := rand.Read(random); err != nil {
+		return "toolu_01" + strings.Repeat("0", len(random))
+	}
+	for index := range random {
+		random[index] = anthropicIDAlphabet[int(random[index])%len(anthropicIDAlphabet)]
+	}
+	return "toolu_01" + string(random)
+}
+
+func (w *AnthropicStreamWriter) resolveClientToolID(id string) string {
+	if w == nil {
+		id = CanonicalAnthropicToolID(id, false)
+		if id != "" {
+			return id
+		}
+		return NewAnthropicToolUseID()
+	}
+	id = CanonicalAnthropicToolID(id, false)
+	if id != "" {
+		return id
+	}
+	if w.anonClientToolID == "" {
+		w.anonClientToolID = NewAnthropicToolUseID()
+	}
+	return w.anonClientToolID
 }
 
 // CanonicalAnthropicToolID rewrites a Cursor tool id into the Anthropic
@@ -320,7 +350,8 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		if w.toolBlocks == nil {
 			w.toolBlocks = map[string]int{}
 		}
-		toolIdx, seen := w.toolBlocks[ev.ToolCallID]
+		toolID := w.resolveClientToolID(ev.ToolCallID)
+		toolIdx, seen := w.toolBlocks[toolID]
 		if seen {
 			// Upstream sent tool_call_started twice for the same call_id
 			// (happens when Cursor re-emits during retries or when a
@@ -331,7 +362,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			return nil
 		}
 		toolIdx = w.blockIndex
-		w.toolBlocks[ev.ToolCallID] = toolIdx
+		w.toolBlocks[toolID] = toolIdx
 		w.blockIndex++
 		w.sawToolCall = true
 		buf = append(buf, w.frame("content_block_start", map[string]any{
@@ -339,7 +370,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 			"index": toolIdx,
 			"content_block": map[string]any{
 				"type":  "tool_use",
-				"id":    ev.ToolCallID,
+				"id":    toolID,
 				"name":  ev.ToolName,
 				"input": map[string]any{},
 			},
@@ -360,7 +391,7 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		if ev.ToolArgsDelta == "" || w.toolBlocks == nil {
 			return nil
 		}
-		toolIdx, ok := w.toolBlocks[ev.ToolCallID]
+		toolIdx, ok := w.toolBlocks[w.resolveClientToolID(ev.ToolCallID)]
 		if !ok {
 			return nil
 		}
@@ -377,11 +408,12 @@ func (w *AnthropicStreamWriter) Encode(ev *Event) []byte {
 		if w.toolBlocks == nil {
 			return nil
 		}
-		toolIdx, ok := w.toolBlocks[ev.ToolCallID]
+		toolID := w.resolveClientToolID(ev.ToolCallID)
+		toolIdx, ok := w.toolBlocks[toolID]
 		if !ok {
 			return nil
 		}
-		delete(w.toolBlocks, ev.ToolCallID)
+		delete(w.toolBlocks, toolID)
 		return w.frame("content_block_stop", map[string]any{
 			"type":  "content_block_stop",
 			"index": toolIdx,
