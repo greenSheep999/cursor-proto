@@ -47,6 +47,10 @@ func fakeSnapshot() *usage.Snapshot {
 		Email:                            "pool@example.com",
 		Country:                          "US",
 		SignUpType:                       "personal",
+		BotUnlocked:                      true,
+		BotHasAvailable:                  true,
+		BotPercentUsed:                   0.33,
+		BotPlanLabel:                     "Grok Bot",
 		Fetched: usage.Fetched{
 			CurrentPeriodUsage: true,
 			BillingCycle:       true,

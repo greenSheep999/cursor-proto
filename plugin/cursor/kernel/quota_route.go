@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/cursor-proto/auth"
+	"github.com/router-for-me/cursor-proto/executor"
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
@@ -229,6 +230,21 @@ func quotaExhaustedBot(q accountQuota) bool {
 	return !q.BotHasAvailable
 }
 
+func botCanOverflow(q accountQuota) bool {
+	return q.BotFetched && q.BotUnlocked && q.BotHasAvailable
+}
+
+func nativeBucketExhausted(q accountQuota, bucket string) bool {
+	switch bucket {
+	case quotaBucketCursor:
+		return quotaExhaustedAuto(q.Auto)
+	case quotaBucketBot:
+		return quotaExhaustedBot(q)
+	default:
+		return quotaExhaustedOther(q)
+	}
+}
+
 func filterModelsForQuota(authID string, acc *auth.Account, names []string) []string {
 	if len(names) == 0 {
 		return names
@@ -240,6 +256,7 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 	dropCursor := quotaExhaustedAuto(quota.Auto)
 	dropOther := quotaExhaustedOther(quota)
 	dropBot := quotaExhaustedBot(quota)
+	overflow := botCanOverflow(quota)
 	if !dropCursor && !dropOther && !dropBot {
 		return names
 	}
@@ -248,7 +265,7 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 	for _, name := range names {
 		switch modelQuotaBucket(name) {
 		case quotaBucketCursor:
-			if dropCursor {
+			if dropCursor && !overflow {
 				droppedCursor++
 				continue
 			}
@@ -258,7 +275,7 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 				continue
 			}
 		default:
-			if dropOther {
+			if dropOther && !overflow {
 				droppedOther++
 				continue
 			}
@@ -276,44 +293,86 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 	return out
 }
 
-func quotaSkipFromStorage(storage []byte, model string) (bool, string) {
-	if len(storage) == 0 {
-		return false, ""
-	}
-	file, err := cpaformat.Unmarshal(storage)
-	if err != nil {
-		return false, ""
-	}
-	acc, err := file.ToAccount()
-	if err != nil || acc == nil {
-		return false, ""
-	}
-	quota, ok := loadAccountQuota(acc.Email, acc)
-	if !ok {
-		return false, ""
-	}
+const (
+	quotaLaneNative = "native"
+	quotaLaneBot    = "bot"
+)
+
+type quotaDecision struct {
+	Skip    bool
+	Message string
+	Lane    string
+}
+
+func decideQuotaLaneFromQuota(model string, quota accountQuota, email string) quotaDecision {
 	bucket := modelQuotaBucket(model)
-	var exhausted bool
-	switch bucket {
-	case quotaBucketCursor:
-		exhausted = quotaExhaustedAuto(quota.Auto)
-	case quotaBucketBot:
-		exhausted = quotaExhaustedBot(quota)
-	default:
-		exhausted = quotaExhaustedOther(quota)
+	if !nativeBucketExhausted(quota, bucket) {
+		if bucket == quotaBucketBot {
+			return quotaDecision{Lane: quotaLaneBot}
+		}
+		return quotaDecision{Lane: quotaLaneNative}
 	}
-	if !exhausted {
-		return false, ""
+	if bucket != quotaBucketBot && botCanOverflow(quota) {
+		fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route overflow email=%s model=%s from=%s to=bot auto=%.4f slow_pool=%v no_usage_based=%v bot_pct=%.4f\n",
+			email, model, bucket, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed, quota.BotPercentUsed)
+		return quotaDecision{Lane: quotaLaneBot}
 	}
 	if bucket == quotaBucketBot {
 		fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route skip email=%s model=%s bucket=bot unlocked=%v avail=%v pct=%.4f plan=%q\n",
-			acc.Email, model, quota.BotUnlocked, quota.BotHasAvailable, quota.BotPercentUsed, quota.BotPlanLabel)
+			email, model, quota.BotUnlocked, quota.BotHasAvailable, quota.BotPercentUsed, quota.BotPlanLabel)
 		if !quota.BotUnlocked {
-			return true, fmt.Sprintf("cursor bot-models quota unavailable for %s (account has no Sand/Grok Bot entitlement)", model)
+			return quotaDecision{Skip: true, Message: fmt.Sprintf("cursor bot-models quota unavailable for %s (account has no Sand/Grok Bot entitlement)", model)}
 		}
-		return true, fmt.Sprintf("cursor bot-models quota exhausted for %s (pct=%.4f plan=%q)", model, quota.BotPercentUsed, quota.BotPlanLabel)
+		return quotaDecision{Skip: true, Message: fmt.Sprintf("cursor bot-models quota exhausted for %s (pct=%.4f plan=%q)", model, quota.BotPercentUsed, quota.BotPlanLabel)}
 	}
 	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route skip email=%s model=%s bucket=%s auto=%.4f slow_pool=%v no_usage_based=%v\n",
-		acc.Email, model, bucket, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed)
-	return true, fmt.Sprintf("cursor %s-models quota exhausted for %s (auto=%.4f slow_pool=%v no_usage_based=%v)", bucket, model, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed)
+		email, model, bucket, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed)
+	return quotaDecision{Skip: true, Message: fmt.Sprintf("cursor %s-models quota exhausted for %s (auto=%.4f slow_pool=%v no_usage_based=%v)", bucket, model, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed)}
+}
+
+func decideQuotaLane(storage []byte, model string) quotaDecision {
+	if len(storage) == 0 {
+		return quotaDecision{Lane: quotaLaneNative}
+	}
+	file, err := cpaformat.Unmarshal(storage)
+	if err != nil {
+		return quotaDecision{Lane: quotaLaneNative}
+	}
+	acc, err := file.ToAccount()
+	if err != nil || acc == nil {
+		return quotaDecision{Lane: quotaLaneNative}
+	}
+	quota, ok := loadAccountQuota(acc.Email, acc)
+	if !ok {
+		return quotaDecision{Lane: quotaLaneNative}
+	}
+	return decideQuotaLaneFromQuota(model, quota, acc.Email)
+}
+
+func quotaSkipFromStorage(storage []byte, model string) (bool, string) {
+	dec := decideQuotaLane(storage, model)
+	return dec.Skip, dec.Message
+}
+
+func applyQuotaLane(chatReq *executor.ChatRequest, storage []byte, model string) quotaDecision {
+	dec := decideQuotaLane(storage, model)
+	if dec.Skip || chatReq == nil || dec.Lane != quotaLaneBot {
+		return dec
+	}
+	chatReq.RPCMode = executor.ChatRPCModeInferenceStream
+	chatReq.ClientTypeOverride = "sand"
+	file, err := cpaformat.Unmarshal(storage)
+	if err != nil {
+		return dec
+	}
+	if file.RelayURL == "" || file.BoxToken == "" {
+		return dec
+	}
+	if file.BoxMintedAtMs > 0 && time.Since(time.UnixMilli(file.BoxMintedAtMs)) >= 48*time.Minute {
+		return dec
+	}
+	chatReq.BoxRelayURL = file.RelayURL
+	chatReq.BoxToken = file.BoxToken
+	chatReq.BoxNetworkToken = file.NetworkToken
+	return dec
 }

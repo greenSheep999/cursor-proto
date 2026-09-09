@@ -154,6 +154,9 @@ type ChatRequest struct {
 	// "sand" also adds the official Grok Bot client version and
 	// x-sand-box-namespace=prod, matching SandClaimer's request shim.
 	ClientTypeOverride string
+	BoxRelayURL        string
+	BoxToken           string
+	BoxNetworkToken    string
 
 	resolvedModel *cursorpb.AgentV1_RequestedModel
 	runID         string

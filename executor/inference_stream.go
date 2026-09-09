@@ -364,19 +364,37 @@ func (c *Client) runInferenceStream(ctx context.Context, req *ChatRequest, acc *
 	if inferenceReq == nil {
 		return nil, fmt.Errorf("inference stream request is required")
 	}
+	if req != nil && req.RPCMode == ChatRPCModeInferenceStream && (req.ClientTypeOverride == "sand" || req.BoxRelayURL != "" || req.BoxToken != "") {
+		if err := c.ensureBoxRelay(ctx, req); err != nil {
+			return nil, err
+		}
+	}
 	payload, err := proto.Marshal(inferenceReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal InferenceStreamRequest: %w", err)
 	}
 	url := strings.TrimRight(c.API3, "/") + inferenceStreamPath
+	contentType := "application/grpc-web+proto"
+	useBox := req != nil && req.BoxRelayURL != "" && req.BoxToken != ""
+	if useBox {
+		url = strings.TrimRight(req.BoxRelayURL, "/") + sandRelayStreamPath
+		contentType = "application/connect+proto"
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(addConnectEnvelope(payload, false)))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("content-type", "application/grpc-web+proto")
-	httpReq.Header.Set("accept", "application/grpc-web+proto")
+	httpReq.Header.Set("content-type", contentType)
+	httpReq.Header.Set("accept", contentType)
 	ApplyCommonHeadersWithClientType(httpReq, acc, requestID, req.ClientTypeOverride)
-	c.applySidecarToken(httpReq)
+	if useBox {
+		httpReq.Header.Set("Authorization", "Bearer "+req.BoxToken)
+		if req.BoxNetworkToken != "" {
+			httpReq.Header.Set("x-anyrun-network-token", req.BoxNetworkToken)
+		}
+	} else {
+		c.applySidecarToken(httpReq)
+	}
 	httpReq.Header.Set("x-original-request-id", runID)
 
 	resp, err := c.NewStreamClient().Do(httpReq)

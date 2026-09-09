@@ -128,6 +128,11 @@ type CursorTokenStorage struct {
 	// Stored as a raw int so the field round-trips as a Go
 	// time.Duration without importing that type into CPA.
 	RefreshLeadNanos int64 `json:"refresh_lead,omitempty"`
+
+	RelayURL      string `json:"relay_url,omitempty"`
+	BoxToken      string `json:"box_token,omitempty"`
+	NetworkToken  string `json:"network_token,omitempty"`
+	BoxMintedAtMs int64  `json:"box_minted_at_ms,omitempty"`
 }
 
 // AuthFile is the exact on-disk shape written by the converter and read

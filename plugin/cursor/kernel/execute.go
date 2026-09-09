@@ -79,16 +79,15 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	if excluded {
 		return errorEnvelope("model_excluded", fmt.Sprintf("model %s is excluded for this cursor account", shape.Model), true), 0
 	}
-	if skip, msg := quotaSkipFromStorage(req.StorageJSON, shape.Model); skip {
-		return errorEnvelopeQuota(msg), 0
+	chatReq := buildChatRequest(shape, req.Headers)
+	if dec := applyQuotaLane(chatReq, req.StorageJSON, shape.Model); dec.Skip {
+		return errorEnvelopeQuota(dec.Message), 0
 	}
 
 	runner, _, errClient := runnerFactory(req.AuthID, req.StorageJSON)
 	if errClient != nil {
 		return errorEnvelope("bad_auth", errClient.Error(), true), 0
 	}
-
-	chatReq := buildChatRequest(shape, req.Headers)
 	ctx, cancel := context.WithTimeout(context.Background(), requestDeadline())
 	defer cancel()
 	events, errRun := runner.RunChat(ctx, chatReq)
@@ -798,15 +797,15 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 	if excluded {
 		return errorEnvelope("model_excluded", fmt.Sprintf("model %s is excluded for this cursor account", shape.Model), true), 0
 	}
-	if skip, msg := quotaSkipFromStorage(req.StorageJSON, shape.Model); skip {
-		return errorEnvelopeQuota(msg), 0
+	chatReq := buildChatRequest(shape, req.Headers)
+	if dec := applyQuotaLane(chatReq, req.StorageJSON, shape.Model); dec.Skip {
+		return errorEnvelopeQuota(dec.Message), 0
 	}
 
 	runner, _, errClient := runnerFactory(req.AuthID, req.StorageJSON)
 	if errClient != nil {
 		return errorEnvelope("bad_auth", errClient.Error(), true), 0
 	}
-	chatReq := buildChatRequest(shape, req.Headers)
 
 	// Kick off the run before returning so any immediate wire errors
 	// surface as an envelope failure instead of a silent stream close.

@@ -346,6 +346,108 @@ func TestExecuteRejectsOtherModelsWhenQuotaExhausted(t *testing.T) {
 	}
 }
 
+func TestFilterModelsForQuotaKeepsOtherWhenBotCanOverflow(t *testing.T) {
+	previous := fetchAccountQuota
+	resetQuotaCache()
+	fetchAccountQuota = func(*auth.Account) (accountQuota, bool) {
+		return accountQuota{
+			Auto:                0.10,
+			InSlowPool:          true,
+			NoUsageBasedAllowed: true,
+			BotFetched:          true,
+			BotUnlocked:         true,
+			BotHasAvailable:     true,
+		}, true
+	}
+	t.Cleanup(func() {
+		fetchAccountQuota = previous
+		resetQuotaCache()
+	})
+	acc := &auth.Account{Email: "overflow@example.com", AccessToken: "tok"}
+	got := filterModelsForQuota("overflow@example.com", acc, []string{
+		"composer-2.5", "claude-sonnet-4-6", "grok-4.6",
+	})
+	if len(got) != 3 {
+		t.Fatalf("got %v, want composer+claude+grok (other overflows to bot)", got)
+	}
+}
+
+func TestExecuteOverflowsClaudeToBotWhenOtherExhausted(t *testing.T) {
+	previous := fetchAccountQuota
+	resetQuotaCache()
+	fetchAccountQuota = func(*auth.Account) (accountQuota, bool) {
+		return accountQuota{
+			Auto:                0.04,
+			InSlowPool:          true,
+			NoUsageBasedAllowed: true,
+			BotFetched:          true,
+			BotUnlocked:         true,
+			BotHasAvailable:     true,
+		}, true
+	}
+	t.Cleanup(func() {
+		fetchAccountQuota = previous
+		resetQuotaCache()
+	})
+	var gotReq *executor.ChatRequest
+	runner := &fakeRunner{
+		events: []executor.ChatEvent{
+			buildTextDeltaEvent("ok"),
+			buildTurnEndedEvent(4, 1),
+		},
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) {
+			return captureRunner{inner: runner, got: &gotReq}, "unit@example.com", nil
+		},
+		nil,
+	)()
+
+	file := &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:        cpaformat.ProviderType,
+			AccessToken: "AT",
+			Email:       "api-full@example.com",
+		},
+	}
+	storage, err := file.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := executorRequest{
+		AuthID:       "api-full@example.com",
+		AuthProvider: "cursor",
+		Model:        "claude-sonnet-4-6",
+		Format:       "claude",
+		Payload:      []byte(`{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"hi"}]}`),
+		StorageJSON:  storage,
+	}
+	rawRequest, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, rc := dispatch("executor.execute", rawRequest)
+	if rc != 0 {
+		t.Fatalf("rc = %d envelope=%s", rc, raw)
+	}
+	var env envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatal(err)
+	}
+	if !env.OK {
+		t.Fatalf("claude should overflow to bot, got %s", raw)
+	}
+	if gotReq == nil {
+		t.Fatal("runner was not called")
+	}
+	if gotReq.RPCMode != executor.ChatRPCModeInferenceStream {
+		t.Fatalf("RPCMode = %q, want inference_stream", gotReq.RPCMode)
+	}
+	if gotReq.ClientTypeOverride != "sand" {
+		t.Fatalf("ClientTypeOverride = %q, want sand", gotReq.ClientTypeOverride)
+	}
+}
+
 func TestExecuteAllowsComposerWhenOnlyOtherQuotaExhausted(t *testing.T) {
 	stubQuota(t, 0.04, true, true, true)
 	runner := &fakeRunner{

@@ -53,6 +53,10 @@ func FromAccount(a *auth.Account) (*AuthFile, error) {
 			Expired:           FormatTime(a.ExpiresAt),
 			Refreshable:       a.Refreshable,
 			RefreshLeadNanos:  int64(a.RefreshLead),
+			RelayURL:          a.RelayURL,
+			BoxToken:          a.BoxToken,
+			NetworkToken:      a.NetworkToken,
+			BoxMintedAtMs:     a.BoxMintedAtMs,
 		},
 		ProxyURL: a.ProxyURL,
 	}
@@ -105,6 +109,10 @@ func (a *AuthFile) ToAccount() (*auth.Account, error) {
 		ProxyURL:          a.ProxyURL,
 		Refreshable:       a.Refreshable,
 		RefreshLead:       time.Duration(a.RefreshLeadNanos),
+		RelayURL:          a.RelayURL,
+		BoxToken:          a.BoxToken,
+		NetworkToken:      a.NetworkToken,
+		BoxMintedAtMs:     a.BoxMintedAtMs,
 	}
 	return acc, nil
 }

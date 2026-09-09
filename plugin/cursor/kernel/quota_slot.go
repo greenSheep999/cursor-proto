@@ -44,6 +44,11 @@ type quotaRow struct {
 	TotalPercent float64 `json:"total_percent"`
 	AutoPercent  float64 `json:"auto_percent"`
 	APIPercent   float64 `json:"api_percent"`
+	OtherPercent float64 `json:"other_percent"`
+	BotPercent   float64 `json:"bot_percent"`
+	BotUnlocked  bool    `json:"bot_unlocked"`
+	BotAvailable bool    `json:"bot_available"`
+	BotPlan      string  `json:"bot_plan,omitempty"`
 	Spend24h     int64   `json:"spend_24h_cents"`
 	Spend7d      int64   `json:"spend_7d_cents"`
 	Spend30d     int64   `json:"spend_30d_cents"`
@@ -117,6 +122,11 @@ func rowFromStatus(s *AccountStatus) quotaRow {
 		TotalPercent: s.TotalPercentUsed,
 		AutoPercent:  s.AutoPercentUsed,
 		APIPercent:   s.APIPercentUsed,
+		OtherPercent: s.APIPercentUsed,
+		BotPercent:   s.BotPercentUsed,
+		BotUnlocked:  s.BotUnlocked,
+		BotAvailable: s.BotHasAvailable,
+		BotPlan:      s.BotPlanLabel,
 		Spend24h:     s.Spend24hCents,
 		Spend7d:      s.Spend7dCents,
 		Spend30d:     s.Spend30dCents,
@@ -152,7 +162,7 @@ func quotaSlotManifest() map[string]any {
 		"title_i18n_key":       "quota.cursor.title",
 		"title_fallback":       "Cursor accounts",
 		"description_i18n_key": "quota.cursor.description",
-		"description_fallback": "Cursor accounts — plan, categorised spend (total / auto+composer / API), and 7-day cache-token usage. Refreshed from Cursor's usage API on the same 30-second cache as the plugin page.",
+		"description_fallback": "Cursor accounts — Auto+Composer, Other, and Bot bars. Refreshed from Cursor's usage API on the same 30-second cache as the plugin page.",
 		"data_path":            managementBasePath + routePrefix + "/quota-rows",
 		"columns": []map[string]any{
 			{"key": "email", "label": "Account", "type": "identifier"},
@@ -165,9 +175,12 @@ func quotaSlotManifest() map[string]any {
 			// the panel's progress bar reads 90%+ as red instead of
 			// green — visual matches the semantic. Built-in providers
 			// all report remaining percentages so they omit the flag.
-			{"key": "total_percent", "label": "Total used", "type": "percent_bar", "inverse": true},
 			{"key": "auto_percent", "label": "Auto+Composer", "type": "percent_bar", "inverse": true},
-			{"key": "api_percent", "label": "API", "type": "percent_bar", "inverse": true},
+			{"key": "other_percent", "label": "Other", "type": "percent_bar", "inverse": true},
+			{"key": "bot_percent", "label": "Bot", "type": "percent_bar", "inverse": true},
+			{"key": "bot_unlocked", "label": "Bot unlocked", "type": "boolean"},
+			{"key": "bot_available", "label": "Bot available", "type": "boolean"},
+			{"key": "bot_plan", "label": "Bot plan", "type": "tag"},
 			{"key": "cache_read_7d", "label": "Cache-read 7d", "type": "int", "hint": "tokens"},
 			{"key": "cache_write_7d", "label": "Cache-write 7d", "type": "int", "hint": "tokens"},
 			{"key": "in_slow_pool", "label": "Slow pool", "type": "boolean"},

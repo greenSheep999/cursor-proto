@@ -50,6 +50,18 @@ func (r *channelRunner) RunChat(context.Context, *executor.ChatRequest) (<-chan 
 	return r.events, nil
 }
 
+type captureRunner struct {
+	inner chatRunner
+	got   **executor.ChatRequest
+}
+
+func (r captureRunner) RunChat(ctx context.Context, req *executor.ChatRequest) (<-chan executor.ChatEvent, error) {
+	if r.got != nil {
+		*r.got = req
+	}
+	return r.inner.RunChat(ctx, req)
+}
+
 func (f *fakeRunner) RunChat(ctx context.Context, req *executor.ChatRequest) (<-chan executor.ChatEvent, error) {
 	if f.err != nil {
 		return nil, f.err

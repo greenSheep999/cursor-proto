@@ -73,6 +73,11 @@ type Account struct {
 	ConfigVersion   string `json:"config_version,omitempty"`
 	ClientKey       string `json:"client_key,omitempty"`
 	ChecksumSession string `json:"-"` // pre-computed x-cursor-checksum value
+
+	RelayURL      string `json:"relay_url,omitempty"`
+	BoxToken      string `json:"box_token,omitempty"`
+	NetworkToken  string `json:"network_token,omitempty"`
+	BoxMintedAtMs int64  `json:"box_minted_at_ms,omitempty"`
 }
 
 // AccountFilePath returns the on-disk path for a given account.

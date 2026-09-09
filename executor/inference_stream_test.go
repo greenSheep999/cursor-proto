@@ -168,6 +168,44 @@ func TestRunInferenceStreamUsesConnectPathBodyAndSandHeaders(t *testing.T) {
 	}
 }
 
+func TestRunInferenceStreamUsesBoxRelayWhenConfigured(t *testing.T) {
+	account := &auth.Account{AccessToken: "session-token", Email: "test@example.com"}
+	var receivedRequest *http.Request
+	response := &cursorpb.AiserverV1_InferenceStreamResponse{Response: &cursorpb.AiserverV1_InferenceStreamResponse_TextPart{TextPart: &cursorpb.AiserverV1_InferenceTextStreamPart{Text: "hello"}}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedRequest = r
+		w.Header().Set("content-type", "application/connect+proto")
+		_, _ = w.Write(addConnectEnvelope(mustMarshal(t, response), false))
+	}))
+	defer server.Close()
+
+	client := NewClient(account)
+	events, err := client.runInferenceStream(context.Background(), &ChatRequest{
+		RPCMode:            ChatRPCModeInferenceStream,
+		ClientTypeOverride: "sand",
+		BoxRelayURL:        server.URL,
+		BoxToken:           "box-token",
+		BoxNetworkToken:    "net-token",
+	}, account, "request-id", "run-id", &cursorpb.AiserverV1_InferenceStreamRequest{RequestedModel: &cursorpb.AiserverV1_InferenceRequestedModel{ModelId: "grok-4.6"}})
+	if err != nil {
+		t.Fatalf("runInferenceStream: %v", err)
+	}
+	for range events {
+	}
+	if receivedRequest == nil || receivedRequest.URL.Path != sandRelayStreamPath {
+		t.Fatalf("request path = %v, want %s", receivedRequest.URL, sandRelayStreamPath)
+	}
+	if got := receivedRequest.Header.Get("Authorization"); got != "Bearer box-token" {
+		t.Fatalf("Authorization = %q", got)
+	}
+	if got := receivedRequest.Header.Get("x-anyrun-network-token"); got != "net-token" {
+		t.Fatalf("network token = %q", got)
+	}
+	if got := receivedRequest.Header.Get("content-type"); got != "application/connect+proto" {
+		t.Fatalf("content-type = %q", got)
+	}
+}
+
 func TestRunInferenceStreamRestoresIDEVersionForExplicitIDEOverride(t *testing.T) {
 	account := &auth.Account{AccessToken: "session-token", ClientType: "sand"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

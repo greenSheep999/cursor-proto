@@ -88,6 +88,11 @@ type AccountStatus struct {
 	APIPercentUsed   float64 `json:"api_percent_used"`
 	TotalPercentUsed float64 `json:"total_percent_used"`
 
+	BotUnlocked     bool    `json:"bot_unlocked"`
+	BotHasAvailable bool    `json:"bot_has_available"`
+	BotPercentUsed  float64 `json:"bot_percent_used"`
+	BotPlanLabel    string  `json:"bot_plan_label,omitempty"`
+
 	// Windowed token breakdown, one bucket per window. Same fields
 	// downstream saw appear on /v1/usage in v0.2.7 — surfacing them
 	// on the admin panel here so per-account drilldown gets the
@@ -250,6 +255,10 @@ func applySnapshot(s *AccountStatus, snap *usage.Snapshot) {
 	s.APILimitCents = snap.APILimit
 	s.APIPercentUsed = snap.APIPercentUsed
 	s.TotalPercentUsed = snap.TotalPercentUsed
+	s.BotUnlocked = snap.BotUnlocked
+	s.BotHasAvailable = snap.BotHasAvailable
+	s.BotPercentUsed = snap.BotPercentUsed
+	s.BotPlanLabel = snap.BotPlanLabel
 	// Windowed token breakdown (v0.2.7). All four counters × three
 	// windows come from the same GetAggregatedUsageEvents RPC that
 	// already filled Spend24h/7d/30d — zero extra upstream calls.
