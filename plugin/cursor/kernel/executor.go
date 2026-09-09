@@ -417,8 +417,8 @@ func flattenOpenAIToolCalls(calls []struct {
 			input = map[string]any{"raw": args}
 		}
 		block := map[string]any{"type": "tool_use", "name": name, "input": input}
-		if strings.TrimSpace(call.ID) != "" {
-			block["id"] = call.ID
+		if id := strings.TrimSpace(call.ID); id != "" {
+			block["id"] = id
 		}
 		encoded, err := json.Marshal(block)
 		if err != nil {
@@ -526,6 +526,7 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 			InputSchema map[string]any `json:"input_schema"`
 		} `json:"tools"`
 	}
+	body = executor.RepairClaudeMessagesJSON(body)
 	if err := json.Unmarshal(body, &req); err != nil {
 		return chatShape{}, fmt.Errorf("parse claude payload: %w", err)
 	}
@@ -612,23 +613,17 @@ func pairEmptyToolUseIDs(shape *chatShape, currentUserFlat string) {
 			ids = append(ids, fragment.ToolID)
 		}
 	}
-	if len(ids) == 0 {
-		return
-	}
 	next := 0
 	for i := range shape.History {
 		if shape.History[i].Role != "assistant" {
 			continue
 		}
 		shape.History[i].Content, next = rewriteEmptyToolUseIDs(shape.History[i].Content, ids, next)
-		if next >= len(ids) {
-			return
-		}
 	}
 }
 
 func rewriteEmptyToolUseIDs(content string, ids []string, next int) (string, int) {
-	if next >= len(ids) || content == "" {
+	if content == "" {
 		return content, next
 	}
 	lines := strings.Split(content, "\n")
@@ -641,11 +636,15 @@ func rewriteEmptyToolUseIDs(content string, ids []string, next int) (string, int
 			continue
 		}
 		id, _ := block["id"].(string)
-		if strings.TrimSpace(id) != "" || next >= len(ids) {
+		if strings.TrimSpace(id) != "" {
 			continue
 		}
-		block["id"] = ids[next]
-		next++
+		if next < len(ids) {
+			block["id"] = ids[next]
+			next++
+		} else {
+			block["id"] = executor.NewToolUseID()
+		}
 		encoded, err := json.Marshal(block)
 		if err == nil {
 			lines[i] = string(encoded)
@@ -727,7 +726,15 @@ func flattenClaudeContent(raw json.RawMessage) string {
 		switch bType {
 		case "", "text":
 			content, _ = block["text"].(string)
-		case "tool_use", "tool_result":
+		case "tool_use":
+			if id, _ := block["id"].(string); strings.TrimSpace(id) == "" {
+				block["id"] = executor.NewToolUseID()
+			}
+			encoded, err := json.Marshal(block)
+			if err == nil {
+				content = string(encoded)
+			}
+		case "tool_result":
 			encoded, err := json.Marshal(block)
 			if err == nil {
 				content = string(encoded)
