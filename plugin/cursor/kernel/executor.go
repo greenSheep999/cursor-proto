@@ -462,10 +462,11 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 	if lastUserIdx < 0 {
 		return chatShape{}, errors.New("claude payload has no user message")
 	}
+	lastUserFlat := flattenClaudeContent(req.Messages[lastUserIdx].Content)
 	shape := chatShape{
 		Model:         req.Model,
 		SystemPrompt:  systemPrompt,
-		UserMessage:   continueFromToolResults(flattenClaudeContent(req.Messages[lastUserIdx].Content)),
+		UserMessage:   continueFromToolResults(lastUserFlat),
 		Stream:        req.Stream,
 		Attachments:   extractClaudeAttachments(req.Messages[lastUserIdx].Content),
 		MaxTokens:     req.MaxTokens,
@@ -515,7 +516,64 @@ func parseClaudePayload(body []byte) (chatShape, error) {
 		})
 	}
 	shape.ForceTool = parseToolChoice(req.ToolChoice)
+	pairEmptyToolUseIDs(&shape, lastUserFlat)
 	return shape, nil
+}
+
+// pairEmptyToolUseIDs copies tool_result.tool_use_id onto a preceding
+// assistant tool_use that arrived without id. TokenSheep remarshals
+// Anthropic history with `id,omitempty`, so the current user turn still
+// has the id while ConversationHistory does not — Vertex then 400s.
+func pairEmptyToolUseIDs(shape *chatShape, currentUserFlat string) {
+	if shape == nil {
+		return
+	}
+	var ids []string
+	for _, fragment := range executor.ParseContentFragments(currentUserFlat) {
+		if fragment.Kind == executor.ContentToolResult && strings.TrimSpace(fragment.ToolID) != "" {
+			ids = append(ids, fragment.ToolID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	next := 0
+	for i := range shape.History {
+		if shape.History[i].Role != "assistant" {
+			continue
+		}
+		shape.History[i].Content, next = rewriteEmptyToolUseIDs(shape.History[i].Content, ids, next)
+		if next >= len(ids) {
+			return
+		}
+	}
+}
+
+func rewriteEmptyToolUseIDs(content string, ids []string, next int) (string, int) {
+	if next >= len(ids) || content == "" {
+		return content, next
+	}
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		var block map[string]any
+		if json.Unmarshal([]byte(line), &block) != nil {
+			continue
+		}
+		if block["type"] != "tool_use" {
+			continue
+		}
+		id, _ := block["id"].(string)
+		if strings.TrimSpace(id) != "" || next >= len(ids) {
+			continue
+		}
+		block["id"] = ids[next]
+		next++
+		encoded, err := json.Marshal(block)
+		if err == nil {
+			lines[i] = string(encoded)
+		}
+	}
+	return strings.Join(lines, "\n"), next
 }
 
 // flattenClaudeSystem handles the string / array-of-block system field.

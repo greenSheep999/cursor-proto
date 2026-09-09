@@ -1609,6 +1609,26 @@ func TestParseOpenAIPayload_NoUser(t *testing.T) {
 	}
 }
 
+func TestParseClaudePayload_PairsEmptyToolUseIDFromCurrentResult(t *testing.T) {
+	shape, err := parseClaudePayload([]byte(`{
+		"model":"claude-sonnet-4-6",
+		"messages":[
+			{"role":"user","content":"uname"},
+			{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"uname -sm"}}]},
+			{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_abc123","content":"Darwin arm64"}]}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("parseClaudePayload: %v", err)
+	}
+	if len(shape.History) < 2 {
+		t.Fatalf("history = %#v", shape.History)
+	}
+	if !strings.Contains(shape.History[1].Content, `"id":"call_abc123"`) {
+		t.Fatalf("empty tool_use id was not paired: %q", shape.History[1].Content)
+	}
+}
+
 func TestParseClaudePayload_PreservesToolUseAndToolResultHistory(t *testing.T) {
 	payload := []byte(`{
 		"model":"claude-opus-5",
