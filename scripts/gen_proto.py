@@ -28,6 +28,7 @@ SCALAR = {
 
 CORE_ROOTS = {
     "agent.v1.AgentRunRequest",
+    "agent.v1.AgentClientMessage",
     "agent.v1.AgentServerMessage",
     "agent.v1.ExecClientMessage",
     "agent.v1.ExecServerMessage",
@@ -41,6 +42,18 @@ CORE_ROOTS = {
     "aiserver.v1.ErrorDetails",
     "aiserver.v1.GetServerConfigRequest",
     "aiserver.v1.GetServerConfigResponse",
+    # Sand / Grok Bot dashboard RPCs. These are also mirrored in
+    # proto/cursor_usage.proto for the lightweight usage client, but keeping
+    # the roots here makes a core extraction from a newer Cursor schema
+    # reproducible instead of silently dropping the messages.
+    "aiserver.v1.GetSandUsageStatusRequest",
+    "aiserver.v1.GetSandAccessStatusRequest",
+    # SandClaimer's direct Sand path rewrites AgentService/Run to the
+    # server-streaming InferenceService/Stream RPC. Keep both message roots
+    # in the reproducible core closure so the proxy can run the same wire
+    # experiment instead of hand-encoding an undocumented subset.
+    "aiserver.v1.InferenceStreamRequest",
+    "aiserver.v1.InferenceStreamResponse",
 }
 
 # proto3 reserved words that can't appear as field names

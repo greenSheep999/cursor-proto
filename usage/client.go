@@ -109,6 +109,23 @@ type Snapshot struct {
 	// Premium request flag — from GetUsageBasedPremiumRequests.
 	UsageBasedPremiumRequestsEnabled bool `json:"usage_based_premium_requests_enabled"`
 
+	// Sand / Grok Bot — Cursor's third included-usage bar, from
+	// GetSandUsageStatus. The dashboard shows three independent allowances:
+	// auto (Auto+Composer), other (Claude/GPT/Gemini/…), and bot (Sand).
+	//
+	// BotUnlocked is the account-level "has this bar at all" answer, derived
+	// the same way Cursor does it: a zero included limit or a missing
+	// non-zero limit both mean the account never had Sand. BotHasAvailable
+	// is the per-request "can it still spend" answer — prefer it over
+	// comparing BotPercentUsed against a threshold, since Cursor computes
+	// banked resets and pooled enterprise allowance into it.
+	BotUnlocked     bool       `json:"bot_unlocked"`
+	BotHasAvailable bool       `json:"bot_has_available"`
+	BotPercentUsed  float64    `json:"bot_percent_used"`
+	BotPlanLabel    string     `json:"bot_plan_label,omitempty"`
+	BotNextResetAt  *time.Time `json:"bot_next_reset_at,omitempty"`
+	BotTrialExpires *time.Time `json:"bot_trial_expires_at,omitempty"`
+
 	// Identity / account metadata — from GetMe. Country is critical for CPA's
 	// per-account model gating (e.g. CN accounts get a restricted model set).
 	Email      string `json:"email,omitempty"`
@@ -148,6 +165,7 @@ type Fetched struct {
 	HardLimit          bool `json:"hard_limit"`
 	PremiumRequests    bool `json:"premium_requests"`
 	Me                 bool `json:"me"`
+	SandUsage          bool `json:"sand_usage"`
 }
 
 // Client wraps an authenticated executor.Client to make usage RPCs.
@@ -313,6 +331,36 @@ func (c *Client) Fetch(ctx context.Context) (*Snapshot, error) {
 				defer mu.Unlock()
 				snap.UsageBasedPremiumRequestsEnabled = resp.GetUsageBasedPremiumRequests()
 				snap.Fetched.PremiumRequests = true
+				return nil
+			},
+		},
+		{
+			// Sand / Grok Bot bar. Accounts that never had Sand still answer
+			// this RPC — they come back with included_limit_zero set — so a
+			// hard error here means a transport/permission problem, not
+			// "no Sand", and is reported like any other failed job.
+			name: "sand_usage",
+			run: func() error {
+				req := &usagepb.GetSandUsageStatusRequest{}
+				resp := &usagepb.GetSandUsageStatusResponse{}
+				if err := c.call(ctx, "aiserver.v1.DashboardService", "GetSandUsageStatus", req, resp); err != nil {
+					return err
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				snap.BotUnlocked = !resp.GetIncludedLimitZero() && resp.GetHasNonZeroIncludedLimit()
+				snap.BotHasAvailable = resp.GetHasAvailableUsage()
+				snap.BotPercentUsed = resp.GetUsagePercent()
+				snap.BotPlanLabel = strings.TrimSpace(resp.GetGrokPlanLabel())
+				if ts := resp.GetNextResetTimestampUtc(); ts != nil && ts.GetSeconds() > 0 {
+					t := time.Unix(ts.GetSeconds(), int64(ts.GetNanos())).UTC()
+					snap.BotNextResetAt = &t
+				}
+				if ts := resp.GetSandTrialExpiresAt(); ts != nil && ts.GetSeconds() > 0 {
+					t := time.Unix(ts.GetSeconds(), int64(ts.GetNanos())).UTC()
+					snap.BotTrialExpires = &t
+				}
+				snap.Fetched.SandUsage = true
 				return nil
 			},
 		},

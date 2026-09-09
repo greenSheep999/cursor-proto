@@ -35,6 +35,17 @@ type Attachment struct {
 	Data     []byte
 }
 
+// ChatRPCMode selects the upstream Cursor RPC used for a chat request.
+// Empty and ChatRPCModeRunSSE preserve the production RunSSE+BidiAppend
+// protocol. ChatRPCModeInferenceStream is an explicit opt-in used to mirror
+// the direct SandClaimer path while its billing behaviour is being measured.
+type ChatRPCMode string
+
+const (
+	ChatRPCModeRunSSE          ChatRPCMode = "run_sse"
+	ChatRPCModeInferenceStream ChatRPCMode = "inference_stream"
+)
+
 // ChatRequest carries the minimum parameters needed to start an agent run.
 type ChatRequest struct {
 	Model          string // e.g. "composer-2.5"
@@ -135,6 +146,15 @@ type ChatRequest struct {
 	// (field 3). Nil leaves the field unset. Exposed for research probes.
 	SendToInteractionListener *bool
 
+	// RPCMode is intentionally opt-in. The zero value uses the established
+	// RunSSE+BidiAppend flow; InferenceStream sends the separate
+	// aiserver.v1.InferenceService/Stream request used by Cursor's Sand shim.
+	RPCMode ChatRPCMode
+	// ClientTypeOverride changes only this request's x-cursor-client-type.
+	// "sand" also adds the official Grok Bot client version and
+	// x-sand-box-namespace=prod, matching SandClaimer's request shim.
+	ClientTypeOverride string
+
 	resolvedModel *cursorpb.AgentV1_RequestedModel
 	runID         string
 }
@@ -166,12 +186,30 @@ type ChatEvent struct {
 //
 // Cursor pairs the two via the shared request-id string.
 func (c *Client) RunChat(ctx context.Context, req *ChatRequest) (<-chan ChatEvent, error) {
+	if req == nil {
+		return nil, fmt.Errorf("chat request is required")
+	}
 	acc := c.CurrentAccount()
 	requestID, runID, agentClientMsg, err := c.prepareChatRequest(req, acc)
 	if err != nil {
 		return nil, err
 	}
-	return c.runChatHTTP1SSE(ctx, req, acc, requestID, runID, agentClientMsg)
+	switch req.RPCMode {
+	case "", ChatRPCModeRunSSE:
+		return c.runChatHTTP1SSE(ctx, req, acc, requestID, runID, agentClientMsg)
+	case ChatRPCModeInferenceStream:
+		var clientMsg cursorpb.AgentV1_AgentClientMessage
+		if err := proto.Unmarshal(agentClientMsg, &clientMsg); err != nil {
+			return nil, fmt.Errorf("decode AgentClientMessage for inference stream: %w", err)
+		}
+		inferenceReq, err := inferenceRequestFromAgentRun(clientMsg.GetRunRequest())
+		if err != nil {
+			return nil, err
+		}
+		return c.runInferenceStream(ctx, req, acc, requestID, runID, inferenceReq)
+	default:
+		return nil, fmt.Errorf("unsupported chat RPC mode %q", req.RPCMode)
+	}
 }
 
 func (c *Client) prepareChatRequest(req *ChatRequest, acc *auth.Account) (string, string, []byte, error) {
@@ -262,7 +300,7 @@ func (c *Client) runChatHTTP1SSE(ctx context.Context, req *ChatRequest, acc *aut
 		return nil, err
 	}
 	sseReq.Header.Set("content-type", "application/grpc-web+proto")
-	ApplyCommonHeaders(sseReq, acc, requestID)
+	ApplyCommonHeadersWithClientType(sseReq, acc, requestID, req.ClientTypeOverride)
 	c.applySidecarToken(sseReq)
 	sseReq.Header.Set("x-original-request-id", runID)
 

@@ -105,6 +105,16 @@ func TestFetch_HappyPath(t *testing.T) {
 		"aiserver.v1.DashboardService/GetUsageBasedPremiumRequests": &usagepb.GetUsageBasedPremiumRequestsResponse{
 			UsageBasedPremiumRequests: true,
 		},
+		// Sand bar: unlocked (non-zero included limit, limit not zero) with
+		// 30% consumed and allowance still available.
+		"aiserver.v1.DashboardService/GetSandUsageStatus": &usagepb.GetSandUsageStatusResponse{
+			UsagePercent:            0.30,
+			IncludedLimitZero:       false,
+			HasAvailableUsage:       true,
+			HasNonZeroIncludedLimit: true,
+			GrokPlanLabel:           "Grok Bot Pro",
+			NextResetTimestampUtc:   &usagepb.SandTimestamp{Seconds: 1793491200},
+		},
 		"aiserver.v1.DashboardService/GetMe": &usagepb.GetMeResponse{
 			AuthId:          "auth0|xyz",
 			UserId:          42,
@@ -223,6 +233,7 @@ func TestFetch_TeamScopedPermissionDenied(t *testing.T) {
 		"aiserver.v1.DashboardService/GetHardLimit":                 true,
 		"aiserver.v1.DashboardService/GetUsageBasedPremiumRequests": true,
 		"aiserver.v1.DashboardService/GetMe":                        true,
+		"aiserver.v1.DashboardService/GetSandUsageStatus":           true,
 	}
 	srv := newFakeServer(t, routes, denied)
 	defer srv.Close()
@@ -235,11 +246,11 @@ func TestFetch_TeamScopedPermissionDenied(t *testing.T) {
 	if snap.TotalSpend != 42 {
 		t.Errorf("personal total_spend not filled: %d", snap.TotalSpend)
 	}
-	if snap.Fetched.HardLimit || snap.Fetched.PremiumRequests || snap.Fetched.Me {
+	if snap.Fetched.HardLimit || snap.Fetched.PremiumRequests || snap.Fetched.Me || snap.Fetched.SandUsage {
 		t.Errorf("denied groups should NOT be marked fetched: %+v", snap.Fetched)
 	}
-	if len(snap.Errors) != 3 {
-		t.Errorf("expected 3 errors, got %d: %v", len(snap.Errors), snap.Errors)
+	if len(snap.Errors) != 4 {
+		t.Errorf("expected 4 errors, got %d: %v", len(snap.Errors), snap.Errors)
 	}
 	if !IsPermissionDenied(errors.New(snap.Errors["hard_limit"])) {
 		t.Errorf("hard_limit error should classify as permission denied: %q", snap.Errors["hard_limit"])

@@ -92,6 +92,18 @@ phase-*-verify.log
 review/
 
 # ============================================================================
+# Local caches / agent scratch — never commit
+# ============================================================================
+# GOCACHE dumped into the repo when a probe sets GOCACHE=$PWD/.gocache
+.gocache/
+# Isolated Cursor.app copies, go-build trees, and cursorctl binaries
+# from sand / quota experiments.
+.tmp/
+# Claude Code local plans (not project docs).
+.claude/
+.cursorctl-tmp/
+
+# ============================================================================
 # OS junk
 # ============================================================================
 .DS_Store

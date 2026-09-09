@@ -348,3 +348,111 @@ enum UsageEventKind {
   USAGE_EVENT_KIND_INCLUDED_IN_ULTRA = 9;
   USAGE_EVENT_KIND_FREE_CREDIT = 10;
 }
+
+// ---------- DashboardService/GetSandUsageStatus ----------
+//
+// Sand (Grok Bot) is Cursor's THIRD included-usage bar. The dashboard shows
+// three independent allowances:
+//
+//   auto   — Auto + Composer            (GetCurrentPeriodUsage.auto_spend)
+//   other  — Claude / GPT / Gemini / …  (GetCurrentPeriodUsage.api_spend)
+//   bot    — Grok Bot / Sand            (this RPC)
+//
+// Field numbers and types transcribed from
+// captures/schema-3.19.7.raw.json (aiserver.v1.GetSandUsageStatusResponse).
+
+// SandTimestamp mirrors google.protobuf.Timestamp on the wire. Declared
+// locally rather than importing the well-known type so this file stays
+// dependency-free, matching how the rest of it is written. The extracted
+// schema leaves these fields' type unresolved (T_ref "Fo"), but the wire
+// shape of a Timestamp submessage is fixed: field 1 seconds, field 2 nanos.
+message SandTimestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+message GetSandUsageStatusRequest {}
+
+message GetSandUsageStatusResponse {
+  optional SandTimestamp current_period_start = 1;
+  optional SandTimestamp next_reset_timestamp_utc = 2;
+  // 0.0-1.0+ ratio of the included allowance consumed.
+  double usage_percent = 3;
+  // True when the account has no Sand allowance at all.
+  bool included_limit_zero = 4;
+  int64 available_banked_reset_count = 5;
+  bool uses_pooled_enterprise_allowance = 6;
+  // The direct "can this account still make Sand calls" signal. Prefer this
+  // over deriving exhaustion from usage_percent.
+  bool has_available_usage = 7;
+  // Combined with included_limit_zero this is how Cursor decides the bar is
+  // unlocked at all: unlocked = !included_limit_zero && has_non_zero_included_limit.
+  bool has_non_zero_included_limit = 8;
+  optional SandUpgradeRecommendation upgrade_recommendation = 9;
+  optional SandTimestamp sand_trial_expires_at = 10;
+  bool sand_trial_cancelable = 11;
+  repeated SandUpgradeRecommendation upgrade_recommendations = 12;
+  optional SandOnDemandSettings on_demand_settings = 13;
+  string included_usage_super_grok_plan = 14;
+  // Human-readable plan name, e.g. what the dashboard prints on the bar.
+  string grok_plan_label = 15;
+}
+
+message SandOnDemandSettings {
+  bool visible = 1;
+  bool eligible = 2;
+  bool enabled = 3;
+  string dashboard_url = 4;
+}
+
+// SandUpgradeRecommendation carries the dashboard's upsell copy. The `cta`
+// field is an aiserver.v1.ErrorButton in Cursor's schema; we only need the
+// text here, so the button is omitted rather than pulling that dependency in.
+message SandUpgradeRecommendation {
+  bool disabled = 2;
+  string supporting_text = 3;
+  string kind = 4;
+}
+
+// ---------- DashboardService/GetSandAccessStatus ----------
+
+message GetSandAccessStatusRequest {}
+
+message GetSandAccessStatusResponse {
+  enum SandAccessState {
+    SAND_ACCESS_STATE_UNSPECIFIED = 0;
+    SAND_ACCESS_STATE_GRANTED = 1;
+    SAND_ACCESS_STATE_UNAVAILABLE = 2;
+    SAND_ACCESS_STATE_PAYMENT_REQUIRED = 3;
+  }
+
+  enum SandPurchaseChannel {
+    SAND_PURCHASE_CHANNEL_UNSPECIFIED = 0;
+    SAND_PURCHASE_CHANNEL_IN_APP = 1;
+    SAND_PURCHASE_CHANNEL_MANAGE_IN_CURSOR = 2;
+    SAND_PURCHASE_CHANNEL_MANAGE_ON_WEB = 3;
+  }
+
+  enum SandAccessBlockReason {
+    SAND_ACCESS_BLOCK_REASON_UNSPECIFIED = 0;
+    SAND_ACCESS_BLOCK_REASON_NONE = 1;
+    SAND_ACCESS_BLOCK_REASON_TEAM_PRIVACY_MODE = 2;
+    SAND_ACCESS_BLOCK_REASON_TEAM_SETUP_REQUIRED = 3;
+    SAND_ACCESS_BLOCK_REASON_TEAM_ACCESS_REQUIRED = 4;
+    SAND_ACCESS_BLOCK_REASON_NOT_OFFERED = 5;
+    SAND_ACCESS_BLOCK_REASON_FREE_TRIAL_AVAILABLE = 6;
+    SAND_ACCESS_BLOCK_REASON_PAYWALL_INDIVIDUAL = 7;
+    SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_MEMBER = 8;
+    SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_ADMIN = 9;
+  }
+
+  SandAccessState state = 1;
+  SandPurchaseChannel purchase_channel = 2;
+  SandAccessBlockReason block_reason = 3;
+  repeated string purchasable_tiers = 4;
+  bool is_paid_trial_plan = 6;
+  bool unpaid_admin_needs_paid_seat = 7;
+  bool privacy_disclaimer_required = 9;
+  bool can_skip_onboarding = 10;
+  bool pro_and_super_grok_plans_grant_access = 11;
+}

@@ -3,6 +3,7 @@ package kernel
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/router-for-me/cursor-proto/auth"
@@ -40,6 +41,89 @@ func stubQuota(t *testing.T, auto float64, slowPool, noUsageBased, ok bool) {
 		fetchAccountQuota = previous
 		resetQuotaCache()
 	})
+}
+
+// stubQuotaBot stubs a healthy cursor/other pair plus an explicit Sand bar
+// state, so bot-bucket gating can be exercised on its own. stubQuota leaves
+// BotFetched false (bot gating disabled, fail open), which is what keeps the
+// pre-Sand tests meaningful.
+func stubQuotaBot(t *testing.T, botFetched, botUnlocked, botHasAvailable bool) {
+	t.Helper()
+	previous := fetchAccountQuota
+	resetQuotaCache()
+	fetchAccountQuota = func(*auth.Account) (accountQuota, bool) {
+		return accountQuota{
+			Auto:            0.10,
+			BotFetched:      botFetched,
+			BotUnlocked:     botUnlocked,
+			BotHasAvailable: botHasAvailable,
+			BotPercentUsed:  0.42,
+			BotPlanLabel:    "Grok Bot Pro",
+		}, true
+	}
+	t.Cleanup(func() {
+		fetchAccountQuota = previous
+		resetQuotaCache()
+	})
+}
+
+func TestQuotaExhaustedBot(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		quota accountQuota
+		want  bool
+	}{
+		{"not fetched fails open", accountQuota{BotFetched: false}, false},
+		{"locked bar is exhausted", accountQuota{BotFetched: true, BotUnlocked: false}, true},
+		{"unlocked with allowance", accountQuota{BotFetched: true, BotUnlocked: true, BotHasAvailable: true}, false},
+		{"unlocked but spent", accountQuota{BotFetched: true, BotUnlocked: true, BotHasAvailable: false}, true},
+	}
+	for _, tc := range cases {
+		if got := quotaExhaustedBot(tc.quota); got != tc.want {
+			t.Errorf("%s: quotaExhaustedBot() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestFilterModelsForQuotaDropsGrokWhenSandLocked(t *testing.T) {
+	// Account never claimed Sand: grok must not be advertised even though
+	// the Auto bar is healthy.
+	stubQuotaBot(t, true, false, false)
+	acc := &auth.Account{Email: "nosand@example.com", AccessToken: "tok"}
+	got := filterModelsForQuota("nosand@example.com", acc, []string{
+		"composer-2.5", "grok-4.6", "claude-sonnet-4-6",
+	})
+	for _, id := range got {
+		if strings.Contains(id, "grok") {
+			t.Fatalf("grok advertised on a Sand-locked account: %v", got)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %v, want composer+claude", got)
+	}
+}
+
+func TestFilterModelsForQuotaKeepsGrokWhenSandAvailable(t *testing.T) {
+	stubQuotaBot(t, true, true, true)
+	acc := &auth.Account{Email: "sand@example.com", AccessToken: "tok"}
+	got := filterModelsForQuota("sand@example.com", acc, []string{
+		"composer-2.5", "grok-4.6", "claude-sonnet-4-6",
+	})
+	if len(got) != 3 {
+		t.Fatalf("got %v, want all three kept", got)
+	}
+}
+
+func TestFilterModelsForQuotaDropsGrokWhenSandSpent(t *testing.T) {
+	stubQuotaBot(t, true, true, false)
+	acc := &auth.Account{Email: "spent@example.com", AccessToken: "tok"}
+	got := filterModelsForQuota("spent@example.com", acc, []string{
+		"grok-4.6", "composer-2.5",
+	})
+	if len(got) != 1 || got[0] != "composer-2.5" {
+		t.Fatalf("got %v, want composer only", got)
+	}
 }
 
 func TestNormalizeAutoPercent(t *testing.T) {
@@ -121,8 +205,6 @@ func TestModelQuotaBucket(t *testing.T) {
 		"composer-2.5-fast",
 		"composer-2.5[fast=true]",
 		"cursor-small",
-		"cursor-grok-4.6-high-fast",
-		"grok-4.6",
 		"auto-smart",
 		"default",
 	}
@@ -135,6 +217,16 @@ func TestModelQuotaBucket(t *testing.T) {
 		"kimi-k2.7-code",
 		"glm-5.2",
 	}
+	// Grok bills against the Sand/Grok Bot bar, not Auto+Composer. The
+	// cursor-prefixed id must land in bot too, which is why the grok test
+	// runs before the cursor-/composer- prefix tests.
+	bot := []string{
+		"grok-4.6",
+		"grok-4.6-high",
+		"cursor-grok-4.6-high-fast",
+		"cursor/grok-4.6",
+		"grok-4.6[fast=true]",
+	}
 	for _, id := range cursor {
 		if got := modelQuotaBucket(id); got != quotaBucketCursor {
 			t.Errorf("modelQuotaBucket(%q) = %s, want cursor", id, got)
@@ -143,6 +235,11 @@ func TestModelQuotaBucket(t *testing.T) {
 	for _, id := range other {
 		if got := modelQuotaBucket(id); got != quotaBucketOther {
 			t.Errorf("modelQuotaBucket(%q) = %s, want other", id, got)
+		}
+	}
+	for _, id := range bot {
+		if got := modelQuotaBucket(id); got != quotaBucketBot {
+			t.Errorf("modelQuotaBucket(%q) = %s, want bot", id, got)
 		}
 	}
 }

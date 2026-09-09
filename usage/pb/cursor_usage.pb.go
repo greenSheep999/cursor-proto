@@ -105,6 +105,180 @@ func (UsageEventKind) EnumDescriptor() ([]byte, []int) {
 	return file_cursor_usage_proto_rawDescGZIP(), []int{0}
 }
 
+type GetSandAccessStatusResponse_SandAccessState int32
+
+const (
+	GetSandAccessStatusResponse_SAND_ACCESS_STATE_UNSPECIFIED      GetSandAccessStatusResponse_SandAccessState = 0
+	GetSandAccessStatusResponse_SAND_ACCESS_STATE_GRANTED          GetSandAccessStatusResponse_SandAccessState = 1
+	GetSandAccessStatusResponse_SAND_ACCESS_STATE_UNAVAILABLE      GetSandAccessStatusResponse_SandAccessState = 2
+	GetSandAccessStatusResponse_SAND_ACCESS_STATE_PAYMENT_REQUIRED GetSandAccessStatusResponse_SandAccessState = 3
+)
+
+// Enum value maps for GetSandAccessStatusResponse_SandAccessState.
+var (
+	GetSandAccessStatusResponse_SandAccessState_name = map[int32]string{
+		0: "SAND_ACCESS_STATE_UNSPECIFIED",
+		1: "SAND_ACCESS_STATE_GRANTED",
+		2: "SAND_ACCESS_STATE_UNAVAILABLE",
+		3: "SAND_ACCESS_STATE_PAYMENT_REQUIRED",
+	}
+	GetSandAccessStatusResponse_SandAccessState_value = map[string]int32{
+		"SAND_ACCESS_STATE_UNSPECIFIED":      0,
+		"SAND_ACCESS_STATE_GRANTED":          1,
+		"SAND_ACCESS_STATE_UNAVAILABLE":      2,
+		"SAND_ACCESS_STATE_PAYMENT_REQUIRED": 3,
+	}
+)
+
+func (x GetSandAccessStatusResponse_SandAccessState) Enum() *GetSandAccessStatusResponse_SandAccessState {
+	p := new(GetSandAccessStatusResponse_SandAccessState)
+	*p = x
+	return p
+}
+
+func (x GetSandAccessStatusResponse_SandAccessState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GetSandAccessStatusResponse_SandAccessState) Descriptor() protoreflect.EnumDescriptor {
+	return file_cursor_usage_proto_enumTypes[1].Descriptor()
+}
+
+func (GetSandAccessStatusResponse_SandAccessState) Type() protoreflect.EnumType {
+	return &file_cursor_usage_proto_enumTypes[1]
+}
+
+func (x GetSandAccessStatusResponse_SandAccessState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GetSandAccessStatusResponse_SandAccessState.Descriptor instead.
+func (GetSandAccessStatusResponse_SandAccessState) EnumDescriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{28, 0}
+}
+
+type GetSandAccessStatusResponse_SandPurchaseChannel int32
+
+const (
+	GetSandAccessStatusResponse_SAND_PURCHASE_CHANNEL_UNSPECIFIED      GetSandAccessStatusResponse_SandPurchaseChannel = 0
+	GetSandAccessStatusResponse_SAND_PURCHASE_CHANNEL_IN_APP           GetSandAccessStatusResponse_SandPurchaseChannel = 1
+	GetSandAccessStatusResponse_SAND_PURCHASE_CHANNEL_MANAGE_IN_CURSOR GetSandAccessStatusResponse_SandPurchaseChannel = 2
+	GetSandAccessStatusResponse_SAND_PURCHASE_CHANNEL_MANAGE_ON_WEB    GetSandAccessStatusResponse_SandPurchaseChannel = 3
+)
+
+// Enum value maps for GetSandAccessStatusResponse_SandPurchaseChannel.
+var (
+	GetSandAccessStatusResponse_SandPurchaseChannel_name = map[int32]string{
+		0: "SAND_PURCHASE_CHANNEL_UNSPECIFIED",
+		1: "SAND_PURCHASE_CHANNEL_IN_APP",
+		2: "SAND_PURCHASE_CHANNEL_MANAGE_IN_CURSOR",
+		3: "SAND_PURCHASE_CHANNEL_MANAGE_ON_WEB",
+	}
+	GetSandAccessStatusResponse_SandPurchaseChannel_value = map[string]int32{
+		"SAND_PURCHASE_CHANNEL_UNSPECIFIED":      0,
+		"SAND_PURCHASE_CHANNEL_IN_APP":           1,
+		"SAND_PURCHASE_CHANNEL_MANAGE_IN_CURSOR": 2,
+		"SAND_PURCHASE_CHANNEL_MANAGE_ON_WEB":    3,
+	}
+)
+
+func (x GetSandAccessStatusResponse_SandPurchaseChannel) Enum() *GetSandAccessStatusResponse_SandPurchaseChannel {
+	p := new(GetSandAccessStatusResponse_SandPurchaseChannel)
+	*p = x
+	return p
+}
+
+func (x GetSandAccessStatusResponse_SandPurchaseChannel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GetSandAccessStatusResponse_SandPurchaseChannel) Descriptor() protoreflect.EnumDescriptor {
+	return file_cursor_usage_proto_enumTypes[2].Descriptor()
+}
+
+func (GetSandAccessStatusResponse_SandPurchaseChannel) Type() protoreflect.EnumType {
+	return &file_cursor_usage_proto_enumTypes[2]
+}
+
+func (x GetSandAccessStatusResponse_SandPurchaseChannel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GetSandAccessStatusResponse_SandPurchaseChannel.Descriptor instead.
+func (GetSandAccessStatusResponse_SandPurchaseChannel) EnumDescriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{28, 1}
+}
+
+type GetSandAccessStatusResponse_SandAccessBlockReason int32
+
+const (
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_UNSPECIFIED          GetSandAccessStatusResponse_SandAccessBlockReason = 0
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_NONE                 GetSandAccessStatusResponse_SandAccessBlockReason = 1
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_TEAM_PRIVACY_MODE    GetSandAccessStatusResponse_SandAccessBlockReason = 2
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_TEAM_SETUP_REQUIRED  GetSandAccessStatusResponse_SandAccessBlockReason = 3
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_TEAM_ACCESS_REQUIRED GetSandAccessStatusResponse_SandAccessBlockReason = 4
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_NOT_OFFERED          GetSandAccessStatusResponse_SandAccessBlockReason = 5
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_FREE_TRIAL_AVAILABLE GetSandAccessStatusResponse_SandAccessBlockReason = 6
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_PAYWALL_INDIVIDUAL   GetSandAccessStatusResponse_SandAccessBlockReason = 7
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_MEMBER  GetSandAccessStatusResponse_SandAccessBlockReason = 8
+	GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_ADMIN   GetSandAccessStatusResponse_SandAccessBlockReason = 9
+)
+
+// Enum value maps for GetSandAccessStatusResponse_SandAccessBlockReason.
+var (
+	GetSandAccessStatusResponse_SandAccessBlockReason_name = map[int32]string{
+		0: "SAND_ACCESS_BLOCK_REASON_UNSPECIFIED",
+		1: "SAND_ACCESS_BLOCK_REASON_NONE",
+		2: "SAND_ACCESS_BLOCK_REASON_TEAM_PRIVACY_MODE",
+		3: "SAND_ACCESS_BLOCK_REASON_TEAM_SETUP_REQUIRED",
+		4: "SAND_ACCESS_BLOCK_REASON_TEAM_ACCESS_REQUIRED",
+		5: "SAND_ACCESS_BLOCK_REASON_NOT_OFFERED",
+		6: "SAND_ACCESS_BLOCK_REASON_FREE_TRIAL_AVAILABLE",
+		7: "SAND_ACCESS_BLOCK_REASON_PAYWALL_INDIVIDUAL",
+		8: "SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_MEMBER",
+		9: "SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_ADMIN",
+	}
+	GetSandAccessStatusResponse_SandAccessBlockReason_value = map[string]int32{
+		"SAND_ACCESS_BLOCK_REASON_UNSPECIFIED":          0,
+		"SAND_ACCESS_BLOCK_REASON_NONE":                 1,
+		"SAND_ACCESS_BLOCK_REASON_TEAM_PRIVACY_MODE":    2,
+		"SAND_ACCESS_BLOCK_REASON_TEAM_SETUP_REQUIRED":  3,
+		"SAND_ACCESS_BLOCK_REASON_TEAM_ACCESS_REQUIRED": 4,
+		"SAND_ACCESS_BLOCK_REASON_NOT_OFFERED":          5,
+		"SAND_ACCESS_BLOCK_REASON_FREE_TRIAL_AVAILABLE": 6,
+		"SAND_ACCESS_BLOCK_REASON_PAYWALL_INDIVIDUAL":   7,
+		"SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_MEMBER":  8,
+		"SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_ADMIN":   9,
+	}
+)
+
+func (x GetSandAccessStatusResponse_SandAccessBlockReason) Enum() *GetSandAccessStatusResponse_SandAccessBlockReason {
+	p := new(GetSandAccessStatusResponse_SandAccessBlockReason)
+	*p = x
+	return p
+}
+
+func (x GetSandAccessStatusResponse_SandAccessBlockReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GetSandAccessStatusResponse_SandAccessBlockReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_cursor_usage_proto_enumTypes[3].Descriptor()
+}
+
+func (GetSandAccessStatusResponse_SandAccessBlockReason) Type() protoreflect.EnumType {
+	return &file_cursor_usage_proto_enumTypes[3]
+}
+
+func (x GetSandAccessStatusResponse_SandAccessBlockReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GetSandAccessStatusResponse_SandAccessBlockReason.Descriptor instead.
+func (GetSandAccessStatusResponse_SandAccessBlockReason) EnumDescriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{28, 2}
+}
+
 type GetCurrentPeriodUsageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TeamId        *int32                 `protobuf:"varint,1,opt,name=team_id,json=teamId,proto3,oneof" json:"team_id,omitempty"`
@@ -2088,6 +2262,537 @@ func (x *TokenUsage) GetEnterpriseUsageDiscountPercent() float32 {
 	return 0
 }
 
+// SandTimestamp mirrors google.protobuf.Timestamp on the wire. Declared
+// locally rather than importing the well-known type so this file stays
+// dependency-free, matching how the rest of it is written. The extracted
+// schema leaves these fields' type unresolved (T_ref "Fo"), but the wire
+// shape of a Timestamp submessage is fixed: field 1 seconds, field 2 nanos.
+type SandTimestamp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Seconds       int64                  `protobuf:"varint,1,opt,name=seconds,proto3" json:"seconds,omitempty"`
+	Nanos         int32                  `protobuf:"varint,2,opt,name=nanos,proto3" json:"nanos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandTimestamp) Reset() {
+	*x = SandTimestamp{}
+	mi := &file_cursor_usage_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandTimestamp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandTimestamp) ProtoMessage() {}
+
+func (x *SandTimestamp) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandTimestamp.ProtoReflect.Descriptor instead.
+func (*SandTimestamp) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *SandTimestamp) GetSeconds() int64 {
+	if x != nil {
+		return x.Seconds
+	}
+	return 0
+}
+
+func (x *SandTimestamp) GetNanos() int32 {
+	if x != nil {
+		return x.Nanos
+	}
+	return 0
+}
+
+type GetSandUsageStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSandUsageStatusRequest) Reset() {
+	*x = GetSandUsageStatusRequest{}
+	mi := &file_cursor_usage_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSandUsageStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSandUsageStatusRequest) ProtoMessage() {}
+
+func (x *GetSandUsageStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSandUsageStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetSandUsageStatusRequest) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{23}
+}
+
+type GetSandUsageStatusResponse struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	CurrentPeriodStart    *SandTimestamp         `protobuf:"bytes,1,opt,name=current_period_start,json=currentPeriodStart,proto3,oneof" json:"current_period_start,omitempty"`
+	NextResetTimestampUtc *SandTimestamp         `protobuf:"bytes,2,opt,name=next_reset_timestamp_utc,json=nextResetTimestampUtc,proto3,oneof" json:"next_reset_timestamp_utc,omitempty"`
+	// 0.0-1.0+ ratio of the included allowance consumed.
+	UsagePercent float64 `protobuf:"fixed64,3,opt,name=usage_percent,json=usagePercent,proto3" json:"usage_percent,omitempty"`
+	// True when the account has no Sand allowance at all.
+	IncludedLimitZero             bool  `protobuf:"varint,4,opt,name=included_limit_zero,json=includedLimitZero,proto3" json:"included_limit_zero,omitempty"`
+	AvailableBankedResetCount     int64 `protobuf:"varint,5,opt,name=available_banked_reset_count,json=availableBankedResetCount,proto3" json:"available_banked_reset_count,omitempty"`
+	UsesPooledEnterpriseAllowance bool  `protobuf:"varint,6,opt,name=uses_pooled_enterprise_allowance,json=usesPooledEnterpriseAllowance,proto3" json:"uses_pooled_enterprise_allowance,omitempty"`
+	// The direct "can this account still make Sand calls" signal. Prefer this
+	// over deriving exhaustion from usage_percent.
+	HasAvailableUsage bool `protobuf:"varint,7,opt,name=has_available_usage,json=hasAvailableUsage,proto3" json:"has_available_usage,omitempty"`
+	// Combined with included_limit_zero this is how Cursor decides the bar is
+	// unlocked at all: unlocked = !included_limit_zero && has_non_zero_included_limit.
+	HasNonZeroIncludedLimit    bool                         `protobuf:"varint,8,opt,name=has_non_zero_included_limit,json=hasNonZeroIncludedLimit,proto3" json:"has_non_zero_included_limit,omitempty"`
+	UpgradeRecommendation      *SandUpgradeRecommendation   `protobuf:"bytes,9,opt,name=upgrade_recommendation,json=upgradeRecommendation,proto3,oneof" json:"upgrade_recommendation,omitempty"`
+	SandTrialExpiresAt         *SandTimestamp               `protobuf:"bytes,10,opt,name=sand_trial_expires_at,json=sandTrialExpiresAt,proto3,oneof" json:"sand_trial_expires_at,omitempty"`
+	SandTrialCancelable        bool                         `protobuf:"varint,11,opt,name=sand_trial_cancelable,json=sandTrialCancelable,proto3" json:"sand_trial_cancelable,omitempty"`
+	UpgradeRecommendations     []*SandUpgradeRecommendation `protobuf:"bytes,12,rep,name=upgrade_recommendations,json=upgradeRecommendations,proto3" json:"upgrade_recommendations,omitempty"`
+	OnDemandSettings           *SandOnDemandSettings        `protobuf:"bytes,13,opt,name=on_demand_settings,json=onDemandSettings,proto3,oneof" json:"on_demand_settings,omitempty"`
+	IncludedUsageSuperGrokPlan string                       `protobuf:"bytes,14,opt,name=included_usage_super_grok_plan,json=includedUsageSuperGrokPlan,proto3" json:"included_usage_super_grok_plan,omitempty"`
+	// Human-readable plan name, e.g. what the dashboard prints on the bar.
+	GrokPlanLabel string `protobuf:"bytes,15,opt,name=grok_plan_label,json=grokPlanLabel,proto3" json:"grok_plan_label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSandUsageStatusResponse) Reset() {
+	*x = GetSandUsageStatusResponse{}
+	mi := &file_cursor_usage_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSandUsageStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSandUsageStatusResponse) ProtoMessage() {}
+
+func (x *GetSandUsageStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSandUsageStatusResponse.ProtoReflect.Descriptor instead.
+func (*GetSandUsageStatusResponse) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *GetSandUsageStatusResponse) GetCurrentPeriodStart() *SandTimestamp {
+	if x != nil {
+		return x.CurrentPeriodStart
+	}
+	return nil
+}
+
+func (x *GetSandUsageStatusResponse) GetNextResetTimestampUtc() *SandTimestamp {
+	if x != nil {
+		return x.NextResetTimestampUtc
+	}
+	return nil
+}
+
+func (x *GetSandUsageStatusResponse) GetUsagePercent() float64 {
+	if x != nil {
+		return x.UsagePercent
+	}
+	return 0
+}
+
+func (x *GetSandUsageStatusResponse) GetIncludedLimitZero() bool {
+	if x != nil {
+		return x.IncludedLimitZero
+	}
+	return false
+}
+
+func (x *GetSandUsageStatusResponse) GetAvailableBankedResetCount() int64 {
+	if x != nil {
+		return x.AvailableBankedResetCount
+	}
+	return 0
+}
+
+func (x *GetSandUsageStatusResponse) GetUsesPooledEnterpriseAllowance() bool {
+	if x != nil {
+		return x.UsesPooledEnterpriseAllowance
+	}
+	return false
+}
+
+func (x *GetSandUsageStatusResponse) GetHasAvailableUsage() bool {
+	if x != nil {
+		return x.HasAvailableUsage
+	}
+	return false
+}
+
+func (x *GetSandUsageStatusResponse) GetHasNonZeroIncludedLimit() bool {
+	if x != nil {
+		return x.HasNonZeroIncludedLimit
+	}
+	return false
+}
+
+func (x *GetSandUsageStatusResponse) GetUpgradeRecommendation() *SandUpgradeRecommendation {
+	if x != nil {
+		return x.UpgradeRecommendation
+	}
+	return nil
+}
+
+func (x *GetSandUsageStatusResponse) GetSandTrialExpiresAt() *SandTimestamp {
+	if x != nil {
+		return x.SandTrialExpiresAt
+	}
+	return nil
+}
+
+func (x *GetSandUsageStatusResponse) GetSandTrialCancelable() bool {
+	if x != nil {
+		return x.SandTrialCancelable
+	}
+	return false
+}
+
+func (x *GetSandUsageStatusResponse) GetUpgradeRecommendations() []*SandUpgradeRecommendation {
+	if x != nil {
+		return x.UpgradeRecommendations
+	}
+	return nil
+}
+
+func (x *GetSandUsageStatusResponse) GetOnDemandSettings() *SandOnDemandSettings {
+	if x != nil {
+		return x.OnDemandSettings
+	}
+	return nil
+}
+
+func (x *GetSandUsageStatusResponse) GetIncludedUsageSuperGrokPlan() string {
+	if x != nil {
+		return x.IncludedUsageSuperGrokPlan
+	}
+	return ""
+}
+
+func (x *GetSandUsageStatusResponse) GetGrokPlanLabel() string {
+	if x != nil {
+		return x.GrokPlanLabel
+	}
+	return ""
+}
+
+type SandOnDemandSettings struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Visible       bool                   `protobuf:"varint,1,opt,name=visible,proto3" json:"visible,omitempty"`
+	Eligible      bool                   `protobuf:"varint,2,opt,name=eligible,proto3" json:"eligible,omitempty"`
+	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	DashboardUrl  string                 `protobuf:"bytes,4,opt,name=dashboard_url,json=dashboardUrl,proto3" json:"dashboard_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandOnDemandSettings) Reset() {
+	*x = SandOnDemandSettings{}
+	mi := &file_cursor_usage_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandOnDemandSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandOnDemandSettings) ProtoMessage() {}
+
+func (x *SandOnDemandSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandOnDemandSettings.ProtoReflect.Descriptor instead.
+func (*SandOnDemandSettings) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SandOnDemandSettings) GetVisible() bool {
+	if x != nil {
+		return x.Visible
+	}
+	return false
+}
+
+func (x *SandOnDemandSettings) GetEligible() bool {
+	if x != nil {
+		return x.Eligible
+	}
+	return false
+}
+
+func (x *SandOnDemandSettings) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *SandOnDemandSettings) GetDashboardUrl() string {
+	if x != nil {
+		return x.DashboardUrl
+	}
+	return ""
+}
+
+// SandUpgradeRecommendation carries the dashboard's upsell copy. The `cta`
+// field is an aiserver.v1.ErrorButton in Cursor's schema; we only need the
+// text here, so the button is omitted rather than pulling that dependency in.
+type SandUpgradeRecommendation struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Disabled       bool                   `protobuf:"varint,2,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	SupportingText string                 `protobuf:"bytes,3,opt,name=supporting_text,json=supportingText,proto3" json:"supporting_text,omitempty"`
+	Kind           string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SandUpgradeRecommendation) Reset() {
+	*x = SandUpgradeRecommendation{}
+	mi := &file_cursor_usage_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandUpgradeRecommendation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandUpgradeRecommendation) ProtoMessage() {}
+
+func (x *SandUpgradeRecommendation) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandUpgradeRecommendation.ProtoReflect.Descriptor instead.
+func (*SandUpgradeRecommendation) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *SandUpgradeRecommendation) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
+}
+
+func (x *SandUpgradeRecommendation) GetSupportingText() string {
+	if x != nil {
+		return x.SupportingText
+	}
+	return ""
+}
+
+func (x *SandUpgradeRecommendation) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+type GetSandAccessStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSandAccessStatusRequest) Reset() {
+	*x = GetSandAccessStatusRequest{}
+	mi := &file_cursor_usage_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSandAccessStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSandAccessStatusRequest) ProtoMessage() {}
+
+func (x *GetSandAccessStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSandAccessStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetSandAccessStatusRequest) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{27}
+}
+
+type GetSandAccessStatusResponse struct {
+	state                           protoimpl.MessageState                            `protogen:"open.v1"`
+	State                           GetSandAccessStatusResponse_SandAccessState       `protobuf:"varint,1,opt,name=state,proto3,enum=cursor_usage.GetSandAccessStatusResponse_SandAccessState" json:"state,omitempty"`
+	PurchaseChannel                 GetSandAccessStatusResponse_SandPurchaseChannel   `protobuf:"varint,2,opt,name=purchase_channel,json=purchaseChannel,proto3,enum=cursor_usage.GetSandAccessStatusResponse_SandPurchaseChannel" json:"purchase_channel,omitempty"`
+	BlockReason                     GetSandAccessStatusResponse_SandAccessBlockReason `protobuf:"varint,3,opt,name=block_reason,json=blockReason,proto3,enum=cursor_usage.GetSandAccessStatusResponse_SandAccessBlockReason" json:"block_reason,omitempty"`
+	PurchasableTiers                []string                                          `protobuf:"bytes,4,rep,name=purchasable_tiers,json=purchasableTiers,proto3" json:"purchasable_tiers,omitempty"`
+	IsPaidTrialPlan                 bool                                              `protobuf:"varint,6,opt,name=is_paid_trial_plan,json=isPaidTrialPlan,proto3" json:"is_paid_trial_plan,omitempty"`
+	UnpaidAdminNeedsPaidSeat        bool                                              `protobuf:"varint,7,opt,name=unpaid_admin_needs_paid_seat,json=unpaidAdminNeedsPaidSeat,proto3" json:"unpaid_admin_needs_paid_seat,omitempty"`
+	PrivacyDisclaimerRequired       bool                                              `protobuf:"varint,9,opt,name=privacy_disclaimer_required,json=privacyDisclaimerRequired,proto3" json:"privacy_disclaimer_required,omitempty"`
+	CanSkipOnboarding               bool                                              `protobuf:"varint,10,opt,name=can_skip_onboarding,json=canSkipOnboarding,proto3" json:"can_skip_onboarding,omitempty"`
+	ProAndSuperGrokPlansGrantAccess bool                                              `protobuf:"varint,11,opt,name=pro_and_super_grok_plans_grant_access,json=proAndSuperGrokPlansGrantAccess,proto3" json:"pro_and_super_grok_plans_grant_access,omitempty"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
+}
+
+func (x *GetSandAccessStatusResponse) Reset() {
+	*x = GetSandAccessStatusResponse{}
+	mi := &file_cursor_usage_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSandAccessStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSandAccessStatusResponse) ProtoMessage() {}
+
+func (x *GetSandAccessStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_cursor_usage_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSandAccessStatusResponse.ProtoReflect.Descriptor instead.
+func (*GetSandAccessStatusResponse) Descriptor() ([]byte, []int) {
+	return file_cursor_usage_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetSandAccessStatusResponse) GetState() GetSandAccessStatusResponse_SandAccessState {
+	if x != nil {
+		return x.State
+	}
+	return GetSandAccessStatusResponse_SAND_ACCESS_STATE_UNSPECIFIED
+}
+
+func (x *GetSandAccessStatusResponse) GetPurchaseChannel() GetSandAccessStatusResponse_SandPurchaseChannel {
+	if x != nil {
+		return x.PurchaseChannel
+	}
+	return GetSandAccessStatusResponse_SAND_PURCHASE_CHANNEL_UNSPECIFIED
+}
+
+func (x *GetSandAccessStatusResponse) GetBlockReason() GetSandAccessStatusResponse_SandAccessBlockReason {
+	if x != nil {
+		return x.BlockReason
+	}
+	return GetSandAccessStatusResponse_SAND_ACCESS_BLOCK_REASON_UNSPECIFIED
+}
+
+func (x *GetSandAccessStatusResponse) GetPurchasableTiers() []string {
+	if x != nil {
+		return x.PurchasableTiers
+	}
+	return nil
+}
+
+func (x *GetSandAccessStatusResponse) GetIsPaidTrialPlan() bool {
+	if x != nil {
+		return x.IsPaidTrialPlan
+	}
+	return false
+}
+
+func (x *GetSandAccessStatusResponse) GetUnpaidAdminNeedsPaidSeat() bool {
+	if x != nil {
+		return x.UnpaidAdminNeedsPaidSeat
+	}
+	return false
+}
+
+func (x *GetSandAccessStatusResponse) GetPrivacyDisclaimerRequired() bool {
+	if x != nil {
+		return x.PrivacyDisclaimerRequired
+	}
+	return false
+}
+
+func (x *GetSandAccessStatusResponse) GetCanSkipOnboarding() bool {
+	if x != nil {
+		return x.CanSkipOnboarding
+	}
+	return false
+}
+
+func (x *GetSandAccessStatusResponse) GetProAndSuperGrokPlansGrantAccess() bool {
+	if x != nil {
+		return x.ProAndSuperGrokPlansGrantAccess
+	}
+	return false
+}
+
 type GetCurrentPeriodUsageResponse_PlanUsage struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	TotalSpend       int32                  `protobuf:"varint,1,opt,name=total_spend,json=totalSpend,proto3" json:"total_spend,omitempty"`
@@ -2110,7 +2815,7 @@ type GetCurrentPeriodUsageResponse_PlanUsage struct {
 
 func (x *GetCurrentPeriodUsageResponse_PlanUsage) Reset() {
 	*x = GetCurrentPeriodUsageResponse_PlanUsage{}
-	mi := &file_cursor_usage_proto_msgTypes[22]
+	mi := &file_cursor_usage_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2122,7 +2827,7 @@ func (x *GetCurrentPeriodUsageResponse_PlanUsage) String() string {
 func (*GetCurrentPeriodUsageResponse_PlanUsage) ProtoMessage() {}
 
 func (x *GetCurrentPeriodUsageResponse_PlanUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[22]
+	mi := &file_cursor_usage_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2255,7 +2960,7 @@ type GetCurrentPeriodUsageResponse_SpendLimitUsage struct {
 
 func (x *GetCurrentPeriodUsageResponse_SpendLimitUsage) Reset() {
 	*x = GetCurrentPeriodUsageResponse_SpendLimitUsage{}
-	mi := &file_cursor_usage_proto_msgTypes[23]
+	mi := &file_cursor_usage_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2267,7 +2972,7 @@ func (x *GetCurrentPeriodUsageResponse_SpendLimitUsage) String() string {
 func (*GetCurrentPeriodUsageResponse_SpendLimitUsage) ProtoMessage() {}
 
 func (x *GetCurrentPeriodUsageResponse_SpendLimitUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[23]
+	mi := &file_cursor_usage_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2370,7 +3075,7 @@ type GetCurrentPeriodUsageResponse_FreeBestOfNPromotion struct {
 
 func (x *GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) Reset() {
 	*x = GetCurrentPeriodUsageResponse_FreeBestOfNPromotion{}
-	mi := &file_cursor_usage_proto_msgTypes[24]
+	mi := &file_cursor_usage_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2382,7 +3087,7 @@ func (x *GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) String() string {
 func (*GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) ProtoMessage() {}
 
 func (x *GetCurrentPeriodUsageResponse_FreeBestOfNPromotion) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[24]
+	mi := &file_cursor_usage_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2428,7 +3133,7 @@ type GetAggregatedUsageEventsResponse_ModelUsageAggregation struct {
 
 func (x *GetAggregatedUsageEventsResponse_ModelUsageAggregation) Reset() {
 	*x = GetAggregatedUsageEventsResponse_ModelUsageAggregation{}
-	mi := &file_cursor_usage_proto_msgTypes[25]
+	mi := &file_cursor_usage_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2440,7 +3145,7 @@ func (x *GetAggregatedUsageEventsResponse_ModelUsageAggregation) String() string
 func (*GetAggregatedUsageEventsResponse_ModelUsageAggregation) ProtoMessage() {}
 
 func (x *GetAggregatedUsageEventsResponse_ModelUsageAggregation) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[25]
+	mi := &file_cursor_usage_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2543,7 +3248,7 @@ type GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus struct {
 
 func (x *GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) Reset() {
 	*x = GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus{}
-	mi := &file_cursor_usage_proto_msgTypes[26]
+	mi := &file_cursor_usage_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2555,7 +3260,7 @@ func (x *GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) Stri
 func (*GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) ProtoMessage() {}
 
 func (x *GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_cursor_usage_proto_msgTypes[26]
+	mi := &file_cursor_usage_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3147,7 +3852,75 @@ const file_cursor_usage_proto_rawDesc = "" +
 	"\x14discount_percent_off\x18\x06 \x01(\x05H\x00R\x12discountPercentOff\x88\x01\x01\x12N\n" +
 	"!enterprise_usage_discount_percent\x18\a \x01(\x02H\x01R\x1eenterpriseUsageDiscountPercent\x88\x01\x01B\x17\n" +
 	"\x15_discount_percent_offB$\n" +
-	"\"_enterprise_usage_discount_percent*\xbb\x03\n" +
+	"\"_enterprise_usage_discount_percent\"?\n" +
+	"\rSandTimestamp\x12\x18\n" +
+	"\aseconds\x18\x01 \x01(\x03R\aseconds\x12\x14\n" +
+	"\x05nanos\x18\x02 \x01(\x05R\x05nanos\"\x1b\n" +
+	"\x19GetSandUsageStatusRequest\"\xad\t\n" +
+	"\x1aGetSandUsageStatusResponse\x12R\n" +
+	"\x14current_period_start\x18\x01 \x01(\v2\x1b.cursor_usage.SandTimestampH\x00R\x12currentPeriodStart\x88\x01\x01\x12Y\n" +
+	"\x18next_reset_timestamp_utc\x18\x02 \x01(\v2\x1b.cursor_usage.SandTimestampH\x01R\x15nextResetTimestampUtc\x88\x01\x01\x12#\n" +
+	"\rusage_percent\x18\x03 \x01(\x01R\fusagePercent\x12.\n" +
+	"\x13included_limit_zero\x18\x04 \x01(\bR\x11includedLimitZero\x12?\n" +
+	"\x1cavailable_banked_reset_count\x18\x05 \x01(\x03R\x19availableBankedResetCount\x12G\n" +
+	" uses_pooled_enterprise_allowance\x18\x06 \x01(\bR\x1dusesPooledEnterpriseAllowance\x12.\n" +
+	"\x13has_available_usage\x18\a \x01(\bR\x11hasAvailableUsage\x12<\n" +
+	"\x1bhas_non_zero_included_limit\x18\b \x01(\bR\x17hasNonZeroIncludedLimit\x12c\n" +
+	"\x16upgrade_recommendation\x18\t \x01(\v2'.cursor_usage.SandUpgradeRecommendationH\x02R\x15upgradeRecommendation\x88\x01\x01\x12S\n" +
+	"\x15sand_trial_expires_at\x18\n" +
+	" \x01(\v2\x1b.cursor_usage.SandTimestampH\x03R\x12sandTrialExpiresAt\x88\x01\x01\x122\n" +
+	"\x15sand_trial_cancelable\x18\v \x01(\bR\x13sandTrialCancelable\x12`\n" +
+	"\x17upgrade_recommendations\x18\f \x03(\v2'.cursor_usage.SandUpgradeRecommendationR\x16upgradeRecommendations\x12U\n" +
+	"\x12on_demand_settings\x18\r \x01(\v2\".cursor_usage.SandOnDemandSettingsH\x04R\x10onDemandSettings\x88\x01\x01\x12B\n" +
+	"\x1eincluded_usage_super_grok_plan\x18\x0e \x01(\tR\x1aincludedUsageSuperGrokPlan\x12&\n" +
+	"\x0fgrok_plan_label\x18\x0f \x01(\tR\rgrokPlanLabelB\x17\n" +
+	"\x15_current_period_startB\x1b\n" +
+	"\x19_next_reset_timestamp_utcB\x19\n" +
+	"\x17_upgrade_recommendationB\x18\n" +
+	"\x16_sand_trial_expires_atB\x15\n" +
+	"\x13_on_demand_settings\"\x8b\x01\n" +
+	"\x14SandOnDemandSettings\x12\x18\n" +
+	"\avisible\x18\x01 \x01(\bR\avisible\x12\x1a\n" +
+	"\beligible\x18\x02 \x01(\bR\beligible\x12\x18\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\x12#\n" +
+	"\rdashboard_url\x18\x04 \x01(\tR\fdashboardUrl\"t\n" +
+	"\x19SandUpgradeRecommendation\x12\x1a\n" +
+	"\bdisabled\x18\x02 \x01(\bR\bdisabled\x12'\n" +
+	"\x0fsupporting_text\x18\x03 \x01(\tR\x0esupportingText\x12\x12\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\"\x1c\n" +
+	"\x1aGetSandAccessStatusRequest\"\xda\v\n" +
+	"\x1bGetSandAccessStatusResponse\x12O\n" +
+	"\x05state\x18\x01 \x01(\x0e29.cursor_usage.GetSandAccessStatusResponse.SandAccessStateR\x05state\x12h\n" +
+	"\x10purchase_channel\x18\x02 \x01(\x0e2=.cursor_usage.GetSandAccessStatusResponse.SandPurchaseChannelR\x0fpurchaseChannel\x12b\n" +
+	"\fblock_reason\x18\x03 \x01(\x0e2?.cursor_usage.GetSandAccessStatusResponse.SandAccessBlockReasonR\vblockReason\x12+\n" +
+	"\x11purchasable_tiers\x18\x04 \x03(\tR\x10purchasableTiers\x12+\n" +
+	"\x12is_paid_trial_plan\x18\x06 \x01(\bR\x0fisPaidTrialPlan\x12>\n" +
+	"\x1cunpaid_admin_needs_paid_seat\x18\a \x01(\bR\x18unpaidAdminNeedsPaidSeat\x12>\n" +
+	"\x1bprivacy_disclaimer_required\x18\t \x01(\bR\x19privacyDisclaimerRequired\x12.\n" +
+	"\x13can_skip_onboarding\x18\n" +
+	" \x01(\bR\x11canSkipOnboarding\x12N\n" +
+	"%pro_and_super_grok_plans_grant_access\x18\v \x01(\bR\x1fproAndSuperGrokPlansGrantAccess\"\x9e\x01\n" +
+	"\x0fSandAccessState\x12!\n" +
+	"\x1dSAND_ACCESS_STATE_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19SAND_ACCESS_STATE_GRANTED\x10\x01\x12!\n" +
+	"\x1dSAND_ACCESS_STATE_UNAVAILABLE\x10\x02\x12&\n" +
+	"\"SAND_ACCESS_STATE_PAYMENT_REQUIRED\x10\x03\"\xb3\x01\n" +
+	"\x13SandPurchaseChannel\x12%\n" +
+	"!SAND_PURCHASE_CHANNEL_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cSAND_PURCHASE_CHANNEL_IN_APP\x10\x01\x12*\n" +
+	"&SAND_PURCHASE_CHANNEL_MANAGE_IN_CURSOR\x10\x02\x12'\n" +
+	"#SAND_PURCHASE_CHANNEL_MANAGE_ON_WEB\x10\x03\"\xea\x03\n" +
+	"\x15SandAccessBlockReason\x12(\n" +
+	"$SAND_ACCESS_BLOCK_REASON_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dSAND_ACCESS_BLOCK_REASON_NONE\x10\x01\x12.\n" +
+	"*SAND_ACCESS_BLOCK_REASON_TEAM_PRIVACY_MODE\x10\x02\x120\n" +
+	",SAND_ACCESS_BLOCK_REASON_TEAM_SETUP_REQUIRED\x10\x03\x121\n" +
+	"-SAND_ACCESS_BLOCK_REASON_TEAM_ACCESS_REQUIRED\x10\x04\x12(\n" +
+	"$SAND_ACCESS_BLOCK_REASON_NOT_OFFERED\x10\x05\x121\n" +
+	"-SAND_ACCESS_BLOCK_REASON_FREE_TRIAL_AVAILABLE\x10\x06\x12/\n" +
+	"+SAND_ACCESS_BLOCK_REASON_PAYWALL_INDIVIDUAL\x10\a\x120\n" +
+	",SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_MEMBER\x10\b\x12/\n" +
+	"+SAND_ACCESS_BLOCK_REASON_PAYWALL_TEAM_ADMIN\x10\t*\xbb\x03\n" +
 	"\x0eUsageEventKind\x12 \n" +
 	"\x1cUSAGE_EVENT_KIND_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cUSAGE_EVENT_KIND_USAGE_BASED\x10\x01\x12!\n" +
@@ -3174,58 +3947,77 @@ func file_cursor_usage_proto_rawDescGZIP() []byte {
 	return file_cursor_usage_proto_rawDescData
 }
 
-var file_cursor_usage_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_cursor_usage_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_cursor_usage_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_cursor_usage_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_cursor_usage_proto_goTypes = []any{
-	(UsageEventKind)(0),                                                       // 0: cursor_usage.UsageEventKind
-	(*GetCurrentPeriodUsageRequest)(nil),                                      // 1: cursor_usage.GetCurrentPeriodUsageRequest
-	(*GetCurrentPeriodUsageResponse)(nil),                                     // 2: cursor_usage.GetCurrentPeriodUsageResponse
-	(*GetCurrentBillingCycleRequest)(nil),                                     // 3: cursor_usage.GetCurrentBillingCycleRequest
-	(*GetCurrentBillingCycleResponse)(nil),                                    // 4: cursor_usage.GetCurrentBillingCycleResponse
-	(*GetAggregatedUsageEventsRequest)(nil),                                   // 5: cursor_usage.GetAggregatedUsageEventsRequest
-	(*GetAggregatedUsageEventsResponse)(nil),                                  // 6: cursor_usage.GetAggregatedUsageEventsResponse
-	(*GetUsageBasedPremiumRequestsRequest)(nil),                               // 7: cursor_usage.GetUsageBasedPremiumRequestsRequest
-	(*GetUsageBasedPremiumRequestsResponse)(nil),                              // 8: cursor_usage.GetUsageBasedPremiumRequestsResponse
-	(*GetHardLimitRequest)(nil),                                               // 9: cursor_usage.GetHardLimitRequest
-	(*GetHardLimitResponse)(nil),                                              // 10: cursor_usage.GetHardLimitResponse
-	(*ActiveCreditGrant)(nil),                                                 // 11: cursor_usage.ActiveCreditGrant
-	(*GetUsageLimitStatusAndActiveGrantsRequest)(nil),                         // 12: cursor_usage.GetUsageLimitStatusAndActiveGrantsRequest
-	(*GetUsageLimitStatusAndActiveGrantsResponse)(nil),                        // 13: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse
-	(*GetMeRequest)(nil),                                                      // 14: cursor_usage.GetMeRequest
-	(*GetMeResponse)(nil),                                                     // 15: cursor_usage.GetMeResponse
-	(*GetUsageLimitPolicyStatusRequest)(nil),                                  // 16: cursor_usage.GetUsageLimitPolicyStatusRequest
-	(*GetUsageLimitPolicyStatusResponse)(nil),                                 // 17: cursor_usage.GetUsageLimitPolicyStatusResponse
-	(*GetFilteredUsageEventsRequest)(nil),                                     // 18: cursor_usage.GetFilteredUsageEventsRequest
-	(*GetFilteredUsageEventsResponse)(nil),                                    // 19: cursor_usage.GetFilteredUsageEventsResponse
-	(*UsageEvent)(nil),                                                        // 20: cursor_usage.UsageEvent
-	(*UsageEventDisplay)(nil),                                                 // 21: cursor_usage.UsageEventDisplay
-	(*TokenUsage)(nil),                                                        // 22: cursor_usage.TokenUsage
-	(*GetCurrentPeriodUsageResponse_PlanUsage)(nil),                           // 23: cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
-	(*GetCurrentPeriodUsageResponse_SpendLimitUsage)(nil),                     // 24: cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
-	(*GetCurrentPeriodUsageResponse_FreeBestOfNPromotion)(nil),                // 25: cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
-	(*GetAggregatedUsageEventsResponse_ModelUsageAggregation)(nil),            // 26: cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
-	(*GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus)(nil), // 27: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
-	nil, // 28: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
-	nil, // 29: cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
+	(UsageEventKind)(0), // 0: cursor_usage.UsageEventKind
+	(GetSandAccessStatusResponse_SandAccessState)(0),                          // 1: cursor_usage.GetSandAccessStatusResponse.SandAccessState
+	(GetSandAccessStatusResponse_SandPurchaseChannel)(0),                      // 2: cursor_usage.GetSandAccessStatusResponse.SandPurchaseChannel
+	(GetSandAccessStatusResponse_SandAccessBlockReason)(0),                    // 3: cursor_usage.GetSandAccessStatusResponse.SandAccessBlockReason
+	(*GetCurrentPeriodUsageRequest)(nil),                                      // 4: cursor_usage.GetCurrentPeriodUsageRequest
+	(*GetCurrentPeriodUsageResponse)(nil),                                     // 5: cursor_usage.GetCurrentPeriodUsageResponse
+	(*GetCurrentBillingCycleRequest)(nil),                                     // 6: cursor_usage.GetCurrentBillingCycleRequest
+	(*GetCurrentBillingCycleResponse)(nil),                                    // 7: cursor_usage.GetCurrentBillingCycleResponse
+	(*GetAggregatedUsageEventsRequest)(nil),                                   // 8: cursor_usage.GetAggregatedUsageEventsRequest
+	(*GetAggregatedUsageEventsResponse)(nil),                                  // 9: cursor_usage.GetAggregatedUsageEventsResponse
+	(*GetUsageBasedPremiumRequestsRequest)(nil),                               // 10: cursor_usage.GetUsageBasedPremiumRequestsRequest
+	(*GetUsageBasedPremiumRequestsResponse)(nil),                              // 11: cursor_usage.GetUsageBasedPremiumRequestsResponse
+	(*GetHardLimitRequest)(nil),                                               // 12: cursor_usage.GetHardLimitRequest
+	(*GetHardLimitResponse)(nil),                                              // 13: cursor_usage.GetHardLimitResponse
+	(*ActiveCreditGrant)(nil),                                                 // 14: cursor_usage.ActiveCreditGrant
+	(*GetUsageLimitStatusAndActiveGrantsRequest)(nil),                         // 15: cursor_usage.GetUsageLimitStatusAndActiveGrantsRequest
+	(*GetUsageLimitStatusAndActiveGrantsResponse)(nil),                        // 16: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse
+	(*GetMeRequest)(nil),                                                      // 17: cursor_usage.GetMeRequest
+	(*GetMeResponse)(nil),                                                     // 18: cursor_usage.GetMeResponse
+	(*GetUsageLimitPolicyStatusRequest)(nil),                                  // 19: cursor_usage.GetUsageLimitPolicyStatusRequest
+	(*GetUsageLimitPolicyStatusResponse)(nil),                                 // 20: cursor_usage.GetUsageLimitPolicyStatusResponse
+	(*GetFilteredUsageEventsRequest)(nil),                                     // 21: cursor_usage.GetFilteredUsageEventsRequest
+	(*GetFilteredUsageEventsResponse)(nil),                                    // 22: cursor_usage.GetFilteredUsageEventsResponse
+	(*UsageEvent)(nil),                                                        // 23: cursor_usage.UsageEvent
+	(*UsageEventDisplay)(nil),                                                 // 24: cursor_usage.UsageEventDisplay
+	(*TokenUsage)(nil),                                                        // 25: cursor_usage.TokenUsage
+	(*SandTimestamp)(nil),                                                     // 26: cursor_usage.SandTimestamp
+	(*GetSandUsageStatusRequest)(nil),                                         // 27: cursor_usage.GetSandUsageStatusRequest
+	(*GetSandUsageStatusResponse)(nil),                                        // 28: cursor_usage.GetSandUsageStatusResponse
+	(*SandOnDemandSettings)(nil),                                              // 29: cursor_usage.SandOnDemandSettings
+	(*SandUpgradeRecommendation)(nil),                                         // 30: cursor_usage.SandUpgradeRecommendation
+	(*GetSandAccessStatusRequest)(nil),                                        // 31: cursor_usage.GetSandAccessStatusRequest
+	(*GetSandAccessStatusResponse)(nil),                                       // 32: cursor_usage.GetSandAccessStatusResponse
+	(*GetCurrentPeriodUsageResponse_PlanUsage)(nil),                           // 33: cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
+	(*GetCurrentPeriodUsageResponse_SpendLimitUsage)(nil),                     // 34: cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
+	(*GetCurrentPeriodUsageResponse_FreeBestOfNPromotion)(nil),                // 35: cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
+	(*GetAggregatedUsageEventsResponse_ModelUsageAggregation)(nil),            // 36: cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
+	(*GetUsageLimitStatusAndActiveGrantsResponse_UsageLimitPolicyStatus)(nil), // 37: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
+	nil, // 38: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
+	nil, // 39: cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
 }
 var file_cursor_usage_proto_depIdxs = []int32{
-	23, // 0: cursor_usage.GetCurrentPeriodUsageResponse.plan_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
-	24, // 1: cursor_usage.GetCurrentPeriodUsageResponse.spend_limit_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
-	25, // 2: cursor_usage.GetCurrentPeriodUsageResponse.free_best_of_n_promotion:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
-	26, // 3: cursor_usage.GetAggregatedUsageEventsResponse.aggregations:type_name -> cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
-	27, // 4: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.usage_limit_policy_status:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
-	11, // 5: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.active_grants:type_name -> cursor_usage.ActiveCreditGrant
-	29, // 6: cursor_usage.GetUsageLimitPolicyStatusResponse.features:type_name -> cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
-	20, // 7: cursor_usage.GetFilteredUsageEventsResponse.usage_events:type_name -> cursor_usage.UsageEvent
-	21, // 8: cursor_usage.GetFilteredUsageEventsResponse.usage_events_display:type_name -> cursor_usage.UsageEventDisplay
+	33, // 0: cursor_usage.GetCurrentPeriodUsageResponse.plan_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.PlanUsage
+	34, // 1: cursor_usage.GetCurrentPeriodUsageResponse.spend_limit_usage:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.SpendLimitUsage
+	35, // 2: cursor_usage.GetCurrentPeriodUsageResponse.free_best_of_n_promotion:type_name -> cursor_usage.GetCurrentPeriodUsageResponse.FreeBestOfNPromotion
+	36, // 3: cursor_usage.GetAggregatedUsageEventsResponse.aggregations:type_name -> cursor_usage.GetAggregatedUsageEventsResponse.ModelUsageAggregation
+	37, // 4: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.usage_limit_policy_status:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus
+	14, // 5: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.active_grants:type_name -> cursor_usage.ActiveCreditGrant
+	39, // 6: cursor_usage.GetUsageLimitPolicyStatusResponse.features:type_name -> cursor_usage.GetUsageLimitPolicyStatusResponse.FeaturesEntry
+	23, // 7: cursor_usage.GetFilteredUsageEventsResponse.usage_events:type_name -> cursor_usage.UsageEvent
+	24, // 8: cursor_usage.GetFilteredUsageEventsResponse.usage_events_display:type_name -> cursor_usage.UsageEventDisplay
 	0,  // 9: cursor_usage.UsageEventDisplay.kind:type_name -> cursor_usage.UsageEventKind
-	22, // 10: cursor_usage.UsageEventDisplay.token_usage:type_name -> cursor_usage.TokenUsage
-	28, // 11: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.features:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	25, // 10: cursor_usage.UsageEventDisplay.token_usage:type_name -> cursor_usage.TokenUsage
+	26, // 11: cursor_usage.GetSandUsageStatusResponse.current_period_start:type_name -> cursor_usage.SandTimestamp
+	26, // 12: cursor_usage.GetSandUsageStatusResponse.next_reset_timestamp_utc:type_name -> cursor_usage.SandTimestamp
+	30, // 13: cursor_usage.GetSandUsageStatusResponse.upgrade_recommendation:type_name -> cursor_usage.SandUpgradeRecommendation
+	26, // 14: cursor_usage.GetSandUsageStatusResponse.sand_trial_expires_at:type_name -> cursor_usage.SandTimestamp
+	30, // 15: cursor_usage.GetSandUsageStatusResponse.upgrade_recommendations:type_name -> cursor_usage.SandUpgradeRecommendation
+	29, // 16: cursor_usage.GetSandUsageStatusResponse.on_demand_settings:type_name -> cursor_usage.SandOnDemandSettings
+	1,  // 17: cursor_usage.GetSandAccessStatusResponse.state:type_name -> cursor_usage.GetSandAccessStatusResponse.SandAccessState
+	2,  // 18: cursor_usage.GetSandAccessStatusResponse.purchase_channel:type_name -> cursor_usage.GetSandAccessStatusResponse.SandPurchaseChannel
+	3,  // 19: cursor_usage.GetSandAccessStatusResponse.block_reason:type_name -> cursor_usage.GetSandAccessStatusResponse.SandAccessBlockReason
+	38, // 20: cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.features:type_name -> cursor_usage.GetUsageLimitStatusAndActiveGrantsResponse.UsageLimitPolicyStatus.FeaturesEntry
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_cursor_usage_proto_init() }
@@ -3248,17 +4040,18 @@ func file_cursor_usage_proto_init() {
 	file_cursor_usage_proto_msgTypes[19].OneofWrappers = []any{}
 	file_cursor_usage_proto_msgTypes[20].OneofWrappers = []any{}
 	file_cursor_usage_proto_msgTypes[21].OneofWrappers = []any{}
-	file_cursor_usage_proto_msgTypes[22].OneofWrappers = []any{}
-	file_cursor_usage_proto_msgTypes[23].OneofWrappers = []any{}
-	file_cursor_usage_proto_msgTypes[25].OneofWrappers = []any{}
-	file_cursor_usage_proto_msgTypes[26].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[24].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[29].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[30].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[32].OneofWrappers = []any{}
+	file_cursor_usage_proto_msgTypes[33].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cursor_usage_proto_rawDesc), len(file_cursor_usage_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   29,
+			NumEnums:      4,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

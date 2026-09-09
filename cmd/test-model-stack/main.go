@@ -128,6 +128,7 @@ func main() {
 		}
 		printCatalog(candidate.name, out.Protocol, out.ByteLength, &catalog)
 		if candidate.name == "chromium" {
+			fmt.Printf("claude model IDs: %s\n", strings.Join(claudeModelIDs(&catalog), ", "))
 			printBrowserSignals(out.BrowserSignals)
 			goBrowserResponse, byteLength, err := goRequest(url, requestBody, headers, out.BrowserSignals)
 			if err != nil {
@@ -247,6 +248,12 @@ func runChromium(input chromiumInput) (*chromiumOutput, error) {
 }
 
 func printCatalog(name, protocol string, byteLength int, catalog *cursorpb.AiserverV1_AvailableModelsResponse) {
+	claude := claudeModelIDs(catalog)
+	fmt.Printf("%-18s protocol=%-8s bytes=%-7d models=%-3d claude=%-2d\n",
+		name, protocol, byteLength, len(catalog.GetModels()), len(claude))
+}
+
+func claudeModelIDs(catalog *cursorpb.AiserverV1_AvailableModelsResponse) []string {
 	claude := make([]string, 0)
 	for _, model := range catalog.GetModels() {
 		if strings.Contains(strings.ToLower(model.GetName()), "claude") {
@@ -254,8 +261,7 @@ func printCatalog(name, protocol string, byteLength int, catalog *cursorpb.Aiser
 		}
 	}
 	sort.Strings(claude)
-	fmt.Printf("%-18s protocol=%-8s bytes=%-7d models=%-3d claude=%-2d\n",
-		name, protocol, byteLength, len(catalog.GetModels()), len(claude))
+	return claude
 }
 
 func loadIDEAccount() (*auth.Account, error) {

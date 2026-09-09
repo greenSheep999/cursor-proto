@@ -12,19 +12,27 @@ import (
 	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 )
 
-// Cursor bills two separate included-usage bars:
+// Cursor bills three separate included-usage bars:
 //
-//	cursor  — Auto + Composer + Grok ("Cursor Models")
+//	cursor  — Auto + Composer ("Cursor Models")
 //	other   — Claude / GPT / Gemini / Kimi / … ("Other Models")
+//	bot     — Grok Bot / Sand
 //
 // CPA's scheduler only sees the model list from model.for_auth. If we
 // advertise Claude on an account whose Other Models bar is already at
 // 100%, the host still routes there. Cursor then either 429s or, worse,
 // overflows the call into the remaining Cursor Models bar. Both are
 // wrong for a pool that still has Composer quota and no Other quota.
+//
+// The bot bar is separate and opt-in per account: an account only has it
+// after claiming Sand eligibility. Grok models bill against it, NOT
+// against the Auto+Composer bar — an earlier revision classified them as
+// "cursor", which meant grok requests were gated on the wrong allowance
+// and any Sand entitlement went unused.
 const (
 	quotaBucketCursor = "cursor"
 	quotaBucketOther  = "other"
+	quotaBucketBot    = "bot"
 	quotaCacheTTL     = 45 * time.Second
 	quotaFetchTimeout = 8 * time.Second
 	// Cursor's Auto bar is a 0-1+ ratio (1.0 = 100%). We still gate the
@@ -51,10 +59,21 @@ const (
 // cannot buy usage beyond the plan). Only when both are true does the
 // pool truly refuse Other-bucket calls; that combination is what we now
 // gate on.
+//
+// The bot fields come from GetSandUsageStatus. BotFetched distinguishes
+// "the RPC failed" from "the RPC said this account has no Sand" — without
+// it a transport blip would look identical to a locked bar and silently
+// drop every grok model.
 type accountQuota struct {
 	Auto                float64
 	InSlowPool          bool
 	NoUsageBasedAllowed bool
+
+	BotFetched      bool
+	BotUnlocked     bool
+	BotHasAvailable bool
+	BotPercentUsed  float64
+	BotPlanLabel    string
 }
 
 type quotaCacheEntry struct {
@@ -87,10 +106,21 @@ func fetchAccountQuotaLive(acc *auth.Account) (accountQuota, bool) {
 	if !snap.Fetched.SlowPoolStatus || !snap.Fetched.HardLimit {
 		return accountQuota{}, false
 	}
+	// The Sand bar is deliberately NOT part of the fail-open guard above.
+	// Most accounts have no Sand entitlement at all, and on those the RPC
+	// can legitimately fail (permission denied) — treating that as "don't
+	// filter anything" would throw away the cursor/other gating we did
+	// successfully read. Instead BotFetched records whether we saw it, and
+	// the bot bucket is only gated when we did.
 	return accountQuota{
 		Auto:                snap.AutoPercentUsed,
 		InSlowPool:          snap.InSlowPool,
 		NoUsageBasedAllowed: snap.NoUsageBasedAllowed,
+		BotFetched:          snap.Fetched.SandUsage,
+		BotUnlocked:         snap.BotUnlocked,
+		BotHasAvailable:     snap.BotHasAvailable,
+		BotPercentUsed:      snap.BotPercentUsed,
+		BotPlanLabel:        snap.BotPlanLabel,
 	}, true
 }
 
@@ -161,21 +191,42 @@ func normalizeModelID(model string) string {
 	return m
 }
 
-// modelQuotaBucket classifies a request model against Cursor's two
+// modelQuotaBucket classifies a request model against Cursor's three
 // included-usage bars. Bracketed CPA variants and provider prefixes are
 // stripped first so composer-2.5[fast=true] and cursor/claude-sonnet-4-6
 // land in the same buckets as their base ids.
+//
+// Grok goes to the bot bar, not the Auto+Composer bar. Order matters: the
+// grok test runs before the composer/cursor prefixes so a hypothetical
+// "cursor-grok-*" id still bills to bot.
 func modelQuotaBucket(model string) string {
 	m := normalizeModelID(model)
 	switch {
 	case m == "" || m == "auto" || m == "auto-smart" || m == "default":
 		return quotaBucketCursor
-	case strings.HasPrefix(m, "composer-"), strings.HasPrefix(m, "cursor-"),
-		strings.HasPrefix(m, "grok-"), strings.Contains(m, "grok"):
+	case strings.Contains(m, "grok"):
+		return quotaBucketBot
+	case strings.HasPrefix(m, "composer-"), strings.HasPrefix(m, "cursor-"):
 		return quotaBucketCursor
 	default:
 		return quotaBucketOther
 	}
+}
+
+// quotaExhaustedBot reports whether the Sand bar can still take calls.
+//
+// Unknown (RPC not fetched) is deliberately "not exhausted" — fail open,
+// same principle as the other two bars. A locked bar (never claimed Sand)
+// IS exhausted: advertising grok on an account with no Sand entitlement
+// just sends the host somewhere Cursor will refuse.
+func quotaExhaustedBot(q accountQuota) bool {
+	if !q.BotFetched {
+		return false
+	}
+	if !q.BotUnlocked {
+		return true
+	}
+	return !q.BotHasAvailable
 }
 
 func filterModelsForQuota(authID string, acc *auth.Account, names []string) []string {
@@ -188,16 +239,22 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 	}
 	dropCursor := quotaExhaustedAuto(quota.Auto)
 	dropOther := quotaExhaustedOther(quota)
-	if !dropCursor && !dropOther {
+	dropBot := quotaExhaustedBot(quota)
+	if !dropCursor && !dropOther && !dropBot {
 		return names
 	}
 	out := make([]string, 0, len(names))
-	droppedCursor, droppedOther := 0, 0
+	droppedCursor, droppedOther, droppedBot := 0, 0, 0
 	for _, name := range names {
 		switch modelQuotaBucket(name) {
 		case quotaBucketCursor:
 			if dropCursor {
 				droppedCursor++
+				continue
+			}
+		case quotaBucketBot:
+			if dropBot {
+				droppedBot++
 				continue
 			}
 		default:
@@ -212,8 +269,10 @@ func filterModelsForQuota(authID string, acc *auth.Account, names []string) []st
 	if acc != nil {
 		email = acc.Email
 	}
-	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route for_auth auth=%s email=%s auto=%.4f slow_pool=%v no_usage_based=%v kept=%d dropped_cursor=%d dropped_other=%d\n",
-		strings.TrimSpace(authID), email, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed, len(out), droppedCursor, droppedOther)
+	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route for_auth auth=%s email=%s auto=%.4f slow_pool=%v no_usage_based=%v bot_fetched=%v bot_unlocked=%v bot_avail=%v bot_pct=%.4f kept=%d dropped_cursor=%d dropped_other=%d dropped_bot=%d\n",
+		strings.TrimSpace(authID), email, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed,
+		quota.BotFetched, quota.BotUnlocked, quota.BotHasAvailable, quota.BotPercentUsed,
+		len(out), droppedCursor, droppedOther, droppedBot)
 	return out
 }
 
@@ -234,12 +293,25 @@ func quotaSkipFromStorage(storage []byte, model string) (bool, string) {
 		return false, ""
 	}
 	bucket := modelQuotaBucket(model)
-	exhausted := quotaExhaustedOther(quota)
-	if bucket == quotaBucketCursor {
+	var exhausted bool
+	switch bucket {
+	case quotaBucketCursor:
 		exhausted = quotaExhaustedAuto(quota.Auto)
+	case quotaBucketBot:
+		exhausted = quotaExhaustedBot(quota)
+	default:
+		exhausted = quotaExhaustedOther(quota)
 	}
 	if !exhausted {
 		return false, ""
+	}
+	if bucket == quotaBucketBot {
+		fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route skip email=%s model=%s bucket=bot unlocked=%v avail=%v pct=%.4f plan=%q\n",
+			acc.Email, model, quota.BotUnlocked, quota.BotHasAvailable, quota.BotPercentUsed, quota.BotPlanLabel)
+		if !quota.BotUnlocked {
+			return true, fmt.Sprintf("cursor bot-models quota unavailable for %s (account has no Sand/Grok Bot entitlement)", model)
+		}
+		return true, fmt.Sprintf("cursor bot-models quota exhausted for %s (pct=%.4f plan=%q)", model, quota.BotPercentUsed, quota.BotPlanLabel)
 	}
 	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route skip email=%s model=%s bucket=%s auto=%.4f slow_pool=%v no_usage_based=%v\n",
 		acc.Email, model, bucket, quota.Auto, quota.InSlowPool, quota.NoUsageBasedAllowed)

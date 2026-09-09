@@ -1288,30 +1288,7 @@ func readAccountFromIDE(dbPath string) (*auth.Account, error) {
 	if err != nil {
 		return nil, fmt.Errorf("snapshot IDE db: %w", err)
 	}
-	db, err := sql.Open("sqlite3", "file:"+snapshot+"?mode=ro")
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
-	defer db.Close()
-	var access, email string
-	if err := db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'`).Scan(&access); err != nil {
-		return nil, fmt.Errorf("no accessToken: %w", err)
-	}
-	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'`).Scan(&email)
-
-	teamKey := ideStringValue(db, "cursorAuth/teamId")
-	cachedTeam := ideStringValue(db, "cursorAuth/cachedTeam")
-	teamID := teamIDFromIDEValues(teamKey, cachedTeam)
-
-	machineID, _ := auth.GetMachineID()
-	macID, _ := auth.GetMacMachineID()
-	return &auth.Account{
-		Email:        email,
-		AccessToken:  access,
-		TeamID:       teamID,
-		MachineID:    machineID,
-		MacMachineID: macID,
-	}, nil
+	return auth.LoadAccountFromIDEDB(snapshot)
 }
 
 // ideStringValue reads a TEXT value from the IDE state.vscdb ItemTable,

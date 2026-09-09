@@ -46,6 +46,9 @@ type Account struct {
 	ClientOS        string `json:"client_os,omitempty"`
 	ClientOSVersion string `json:"client_os_version,omitempty"`
 	ClientArch      string `json:"client_arch,omitempty"`
+	ClientVersion   string `json:"client_version,omitempty"`
+	ClientCommit    string `json:"client_commit,omitempty"`
+	ReleaseHash     string `json:"release_hash,omitempty"`
 	ClientType      string `json:"client_type,omitempty"`
 	ClientLayout    string `json:"client_layout,omitempty"`
 	ClientShell     string `json:"client_shell,omitempty"`
@@ -134,6 +137,9 @@ func (a *Account) FillSessionDefaults(now time.Time) {
 	}
 	if a.ChecksumSession == "" {
 		mid := a.ChecksumMachineID
+		if mid == "" {
+			mid = a.ReleaseHash
+		}
 		if mid == "" {
 			mid = KnownChecksumMachineID_3_16_17
 		}

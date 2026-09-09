@@ -15,18 +15,13 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
-
-	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
@@ -85,39 +80,7 @@ func loadAccount(path string) (*auth.Account, error) {
 }
 
 func loadAccountFromIDE() (*auth.Account, error) {
-	dbPath := ideStoragePath()
-	db, err := sql.Open("sqlite3", "file:"+dbPath+"?mode=ro")
-	if err != nil {
-		return nil, fmt.Errorf("open ide db: %w", err)
-	}
-	defer db.Close()
-	var access, email string
-	if err := db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'`).Scan(&access); err != nil {
-		return nil, fmt.Errorf("read accessToken from ide db: %w", err)
-	}
-	_ = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'`).Scan(&email)
-	machineID, _ := auth.GetMachineID()
-	macID, _ := auth.GetMacMachineID()
-	return &auth.Account{
-		Email:        email,
-		AccessToken:  access,
-		MachineID:    machineID,
-		MacMachineID: macID,
-	}, nil
-}
-
-func ideStoragePath() string {
-	home, _ := os.UserHomeDir()
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb")
-	case "linux":
-		return filepath.Join(home, ".config", "Cursor", "User", "globalStorage", "state.vscdb")
-	case "windows":
-		return filepath.Join(home, "AppData", "Roaming", "Cursor", "User", "globalStorage", "state.vscdb")
-	default:
-		return filepath.Join(home, ".cursor", "state.vscdb")
-	}
+	return auth.LoadAccountFromIDE()
 }
 
 func printTable(s *usage.Snapshot) {
@@ -146,6 +109,33 @@ func printTable(s *usage.Snapshot) {
 	}
 	if s.CreatedAt != "" {
 		line("created_at", s.CreatedAt)
+	}
+	fmt.Println()
+	fmt.Println("Included-usage bars (the three buckets)")
+	line("auto  (Auto+Composer)", fmt.Sprintf("%.1f%% used  %s / %s",
+		s.AutoPercentUsed*100, usage.FormatCents(s.AutoSpend), usage.FormatCents(s.AutoLimit)))
+	line("other (Claude/GPT/…)", fmt.Sprintf("%.1f%% used  %s / %s",
+		s.APIPercentUsed*100, usage.FormatCents(s.APISpend), usage.FormatCents(s.APILimit)))
+	if !s.Fetched.SandUsage {
+		line("bot   (Grok Bot/Sand)", "unknown (GetSandUsageStatus not fetched)")
+	} else if !s.BotUnlocked {
+		line("bot   (Grok Bot/Sand)", "LOCKED — account has no Sand entitlement")
+	} else {
+		avail := "exhausted"
+		if s.BotHasAvailable {
+			avail = "available"
+		}
+		detail := fmt.Sprintf("%.1f%% used  %s", s.BotPercentUsed*100, avail)
+		if s.BotPlanLabel != "" {
+			detail += "  plan=" + s.BotPlanLabel
+		}
+		line("bot   (Grok Bot/Sand)", detail)
+		if s.BotNextResetAt != nil {
+			line("  bot_next_reset", s.BotNextResetAt.Format(time.RFC3339))
+		}
+		if s.BotTrialExpires != nil {
+			line("  bot_trial_expires", s.BotTrialExpires.Format(time.RFC3339))
+		}
 	}
 	fmt.Println()
 	fmt.Println("Windowed spend")

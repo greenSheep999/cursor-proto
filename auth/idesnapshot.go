@@ -65,15 +65,10 @@ func SnapshotIDEDB(src string) (string, error) {
 	}
 
 	if dstInfo, err := os.Stat(dst); err == nil {
-		// Fast path: source mtime already matches the snapshot's
-		// stamped mtime (we set snapshot mtime = source mtime after
-		// each successful copy, see os.Chtimes below). Equality — not
-		// "source after dst" — is the right test: an IDE that
-		// overwrites state.vscdb with the SAME mtime as a prior write
-		// (rare, but possible after account switches or clock skew)
-		// would otherwise get silently ignored. Equal-mtime hits the
-		// fast path; any difference at all forces a re-copy.
-		if srcInfo.ModTime().Equal(dstInfo.ModTime()) {
+		// The main file's mtime does not move while SQLite appends to the
+		// WAL. Compare all three members; otherwise a long-lived IDE can
+		// leave the snapshot reading an old credential from a newer WAL.
+		if srcInfo.ModTime().Equal(dstInfo.ModTime()) && snapshotSiblingMatches(src+"-wal", dst+"-wal") && snapshotSiblingMatches(src+"-shm", dst+"-shm") {
 			return dst, nil
 		}
 	}
@@ -145,7 +140,29 @@ func SnapshotIDEDB(src string) (string, error) {
 	// source's mtime (not "now") means we track upstream change events,
 	// not our own copy-completed events.
 	_ = os.Chtimes(dst, srcInfo.ModTime(), srcInfo.ModTime())
+	if walCopied {
+		if info, err := os.Stat(src + "-wal"); err == nil {
+			_ = os.Chtimes(dst+"-wal", info.ModTime(), info.ModTime())
+		}
+	}
+	if shmCopied {
+		if info, err := os.Stat(src + "-shm"); err == nil {
+			_ = os.Chtimes(dst+"-shm", info.ModTime(), info.ModTime())
+		}
+	}
 	return dst, nil
+}
+
+func snapshotSiblingMatches(src, dst string) bool {
+	srcInfo, srcErr := os.Stat(src)
+	dstInfo, dstErr := os.Stat(dst)
+	if os.IsNotExist(srcErr) {
+		return os.IsNotExist(dstErr)
+	}
+	if srcErr != nil || dstErr != nil {
+		return false
+	}
+	return srcInfo.Size() == dstInfo.Size() && srcInfo.ModTime().Equal(dstInfo.ModTime())
 }
 
 // copyFile writes src's bytes to dst, replacing any existing file at dst.

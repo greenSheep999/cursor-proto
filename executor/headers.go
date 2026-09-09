@@ -18,6 +18,7 @@ const (
 	CursorClientVersion = "3.19.7"
 	CursorClientCommit  = "90de2327392570a5f5f625c656c6749d228e6430"
 	CursorReleaseHash   = auth.KnownReleaseHash_3_19_7
+	SandClientVersion   = "0.46.0"
 	UserAgent           = "connect-es/1.6.1"
 )
 
@@ -57,9 +58,9 @@ func ApplyCommonHeaders(req *http.Request, acc *auth.Account, requestID string) 
 	req.Header.Set("accept-encoding", "gzip")
 
 	req.Header.Set("x-cursor-checksum", acc.ChecksumSession)
-	req.Header.Set("x-cursor-client-version", CursorClientVersion)
+	req.Header.Set("x-cursor-client-version", clientVersion(acc))
 	if acc.InternalUser {
-		req.Header.Set("x-cursor-client-commit", CursorClientCommit)
+		req.Header.Set("x-cursor-client-commit", clientCommit(acc))
 	}
 	req.Header.Set("x-cursor-client-type", clientType)
 	req.Header.Set("x-cursor-client-os", platform.os)
@@ -69,6 +70,7 @@ func ApplyCommonHeaders(req *http.Request, acc *auth.Account, requestID string) 
 	req.Header.Set("x-cursor-client-arch", platform.arch)
 	req.Header.Set("x-cursor-client-device-type", "desktop")
 	req.Header.Set("x-cursor-client-layout", clientLayout)
+	applyClientTypeHeaders(req, clientType)
 	req.Header.Set("x-cursor-timezone", timezone())
 	if teamID := strings.TrimSpace(acc.TeamID); teamID != "" {
 		req.Header.Set("x-cursor-team-id", teamID)
@@ -81,6 +83,51 @@ func ApplyCommonHeaders(req *http.Request, acc *auth.Account, requestID string) 
 	req.Header.Set("x-client-key", acc.ClientKey)
 	req.Header.Set("x-ghost-mode", boolString(acc.PrivacyMode != 0))
 	req.Header.Set("x-new-onboarding-completed", "false")
+}
+
+// ApplyCommonHeadersWithClientType is the explicit experiment/operation hook
+// for callers that need to compare Cursor's client surfaces without mutating
+// the account record. An override of "sand" also carries the two headers
+// used by the current Grok Bot transport. Leaving override empty preserves
+// the account's stored client type and the normal IDE behaviour.
+func ApplyCommonHeadersWithClientType(req *http.Request, acc *auth.Account, requestID, override string) {
+	ApplyCommonHeaders(req, acc, requestID)
+	if clientType := strings.TrimSpace(override); clientType != "" {
+		req.Header.Set("x-cursor-client-type", clientType)
+		applyClientTypeHeaders(req, clientType)
+		if !strings.EqualFold(clientType, "sand") {
+			req.Header.Set("x-cursor-client-version", clientVersion(acc))
+		}
+	}
+}
+
+func clientVersion(acc *auth.Account) string {
+	if acc != nil && strings.TrimSpace(acc.ClientVersion) != "" {
+		return strings.TrimSpace(acc.ClientVersion)
+	}
+	return CursorClientVersion
+}
+
+func clientCommit(acc *auth.Account) string {
+	if acc != nil && strings.TrimSpace(acc.ClientCommit) != "" {
+		return strings.TrimSpace(acc.ClientCommit)
+	}
+	return CursorClientCommit
+}
+
+func applyClientTypeHeaders(req *http.Request, clientType string) {
+	if req == nil {
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(clientType), "sand") {
+		// Keep the Sand identity scoped to this surface. The current Box
+		// transport rejects the old sand-desktop source header as stale config.
+		req.Header.Del("x-cursor-client-source")
+		req.Header.Set("x-cursor-client-version", SandClientVersion)
+		req.Header.Set("x-sand-box-namespace", "prod")
+		return
+	}
+	req.Header.Del("x-sand-box-namespace")
 }
 
 func boolString(value bool) string {

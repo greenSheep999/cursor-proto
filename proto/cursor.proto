@@ -6,7 +6,7 @@ option go_package = "github.com/router-for-me/cursor-proto/gen/cursor;cursorpb";
 
 // Generated from Cursor 3.19.7 workbench.desktop.main.js
 // commit: 90de2327392570a5f5f625c656c6749d228e6430
-// Mode: core, 949 messages, 71 enums
+// Mode: core, 1022 messages, 74 enums
 
 // ============================================================
 // Namespace: agent.v1 → AgentV1
@@ -374,6 +374,19 @@ message AgentV1 {
   message AfterAgentThoughtRequestResponse {
   }
 
+  message AgentClientMessage {
+    oneof message {
+      AgentV1.AgentRunRequest run_request = 1;
+      AgentV1.ExecClientMessage exec_client_message = 2;
+      AgentV1.KvClientMessage kv_client_message = 3;
+      AgentV1.ConversationAction conversation_action = 4;
+      AgentV1.ExecClientControlMessage exec_client_control_message = 5;
+      AgentV1.InteractionResponse interaction_response = 6;
+      AgentV1.ClientHeartbeat client_heartbeat = 7;
+      AgentV1.PrewarmRequest prewarm_request = 8;
+    }
+  }
+
   message AgentRunRequest {
     AgentV1.ConversationStateStructure conversation_state = 1;
     AgentV1.ConversationAction action = 2;
@@ -591,6 +604,10 @@ message AgentV1 {
   message AskQuestionInteractionQuery {
     AgentV1.AskQuestionArgs args = 1;
     string tool_call_id = 2;
+  }
+
+  message AskQuestionInteractionResponse {
+    AgentV1.AskQuestionResult result = 1;
   }
 
   message AskQuestionRejected {
@@ -882,6 +899,9 @@ message AgentV1 {
     int32 continuation_round_delay_ms = 7;
   }
 
+  message ClientHeartbeat {
+  }
+
   message ClientLlmGatewayCredential {
     string bearer_token = 1;
   }
@@ -1029,6 +1049,25 @@ message AgentV1 {
 
   message ConnectScmRequestQuery {
     AgentV1.ConnectScmArgs args = 1;
+  }
+
+  message ConnectScmRequestResponse {
+    message Failed {
+      string error = 1;
+    }
+
+    message Rejected {
+      string reason = 1;
+    }
+
+    message Approved {
+    }
+
+    oneof result {
+      AgentV1.ConnectScmRequestResponse.Approved approved = 1;
+      AgentV1.ConnectScmRequestResponse.Rejected rejected = 2;
+      AgentV1.ConnectScmRequestResponse.Failed failed = 3;
+    }
   }
 
   message ConnectScmResult {
@@ -1345,6 +1384,10 @@ message AgentV1 {
   message CreatePlanRequestQuery {
     AgentV1.CreatePlanArgs args = 1;
     string tool_call_id = 2;
+  }
+
+  message CreatePlanRequestResponse {
+    AgentV1.CreatePlanResult result = 1;
   }
 
   message CreatePlanResult {
@@ -1669,6 +1712,22 @@ message AgentV1 {
     bool is_readonly = 3;
   }
 
+  message Error {
+    string message_ = 1;
+  }
+
+  message ExecClientControlMessage {
+    oneof message {
+      AgentV1.ExecClientStreamClose stream_close = 1;
+      AgentV1.ExecClientThrow throw = 2;
+      AgentV1.ExecClientHeartbeat heartbeat = 3;
+    }
+  }
+
+  message ExecClientHeartbeat {
+    uint32 id = 1;
+  }
+
   message ExecClientMessage {
     uint32 id = 1;
     string exec_id = 15;
@@ -1717,6 +1776,17 @@ message AgentV1 {
       AgentV1.ShellResult mini_swe_agent_bash_result = 55;
       AgentV1.AdoptResult adopt_result = 56;
     }
+  }
+
+  message ExecClientStreamClose {
+    uint32 id = 1;
+  }
+
+  message ExecClientThrow {
+    uint32 id = 1;
+    string error = 2;
+    optional string stack_trace = 3;
+    optional string error_code = 4;
   }
 
   message ExecServerAbort {
@@ -1970,6 +2040,21 @@ message AgentV1 {
     string tool_call_id = 2;
   }
 
+  message GenerateImageRequestResponse {
+    message Approved {
+      string description = 1;
+    }
+
+    message Rejected {
+      string reason = 1;
+    }
+
+    oneof result {
+      AgentV1.GenerateImageRequestResponse.Approved approved = 1;
+      AgentV1.GenerateImageRequestResponse.Rejected rejected = 2;
+    }
+  }
+
   message GenerateImageResult {
     oneof result {
       AgentV1.GenerateImageSuccess success = 1;
@@ -2025,6 +2110,11 @@ message AgentV1 {
 
   message GetBlobArgs {
     bytes blob_id = 1;
+  }
+
+  message GetBlobResult {
+    optional bytes blob_data = 1;
+    optional AgentV1.Error error = 2;
   }
 
   message GetCiStatusAction {
@@ -2279,6 +2369,23 @@ message AgentV1 {
     }
   }
 
+  message InteractionResponse {
+    uint32 id = 1;
+    oneof result {
+      AgentV1.WebSearchRequestResponse web_search_request_response = 2;
+      AgentV1.AskQuestionInteractionResponse ask_question_interaction_response = 3;
+      AgentV1.SwitchModeRequestResponse switch_mode_request_response = 4;
+      AgentV1.CreatePlanRequestResponse create_plan_request_response = 7;
+      AgentV1.SetupVmEnvironmentResult setup_vm_environment_result = 8;
+      AgentV1.WebFetchRequestResponse web_fetch_request_response = 9;
+      AgentV1.PrManagementResult pr_management_result = 10;
+      AgentV1.McpAuthRequestResponse mcp_auth_request_response = 11;
+      AgentV1.GenerateImageRequestResponse generate_image_request_response = 12;
+      AgentV1.ReplaceEnvResult replace_env_result = 13;
+      AgentV1.ConnectScmRequestResponse connect_scm_request_response = 14;
+    }
+  }
+
   message InteractionUpdate {
     optional uint64 message_started_at_ms = 25;
     oneof message {
@@ -2322,18 +2429,23 @@ message AgentV1 {
   }
 
   message InvocationContext {
-    message SlackThread {
-      string thread = 1;
-      optional string channel_name = 2;
-      optional string channel_purpose = 3;
-      optional string channel_topic = 4;
-      optional string sender_name = 5;
-      optional string sender_id = 6;
-      optional string sender_type = 7;
-      optional bool is_directly_addressed = 8;
+    message GithubPR {
+      string title = 1;
+      string description = 2;
+      string comments = 3;
+      optional string ci_failures = 4;
     }
 
     message IdeState {
+      message ViewedPullRequest {
+        int32 number = 1;
+        string url = 2;
+        optional string title = 3;
+        optional string folder_path = 4;
+        optional string summary_json = 5;
+        optional string description = 6;
+      }
+
       message File {
         message CursorPosition {
           int32 line = 1;
@@ -2345,15 +2457,6 @@ message AgentV1 {
         optional AgentV1.InvocationContext.IdeState.File.CursorPosition cursor_position = 3;
         int32 total_lines = 4;
         optional string active_command = 5;
-      }
-
-      message ViewedPullRequest {
-        int32 number = 1;
-        string url = 2;
-        optional string title = 3;
-        optional string folder_path = 4;
-        optional string summary_json = 5;
-        optional string description = 6;
       }
 
       repeated AgentV1.InvocationContext.IdeState.File visible_files = 1;
@@ -2369,11 +2472,15 @@ message AgentV1 {
       optional string team_description = 5;
     }
 
-    message GithubPR {
-      string title = 1;
-      string description = 2;
-      string comments = 3;
-      optional string ci_failures = 4;
+    message SlackThread {
+      string thread = 1;
+      optional string channel_name = 2;
+      optional string channel_purpose = 3;
+      optional string channel_topic = 4;
+      optional string sender_name = 5;
+      optional string sender_id = 6;
+      optional string sender_type = 7;
+      optional bool is_directly_addressed = 8;
     }
 
     oneof data {
@@ -2388,6 +2495,14 @@ message AgentV1 {
   message KeyAction {
     string key = 1;
     optional int32 hold_duration_ms = 2;
+  }
+
+  message KvClientMessage {
+    uint32 id = 1;
+    oneof message {
+      AgentV1.GetBlobResult get_blob_result = 2;
+      AgentV1.SetBlobResult set_blob_result = 3;
+    }
   }
 
   message KvServerMessage {
@@ -2544,6 +2659,20 @@ message AgentV1 {
 
   message McpAuthRequestQuery {
     AgentV1.McpAuthArgs args = 1;
+  }
+
+  message McpAuthRequestResponse {
+    message Rejected {
+      string reason = 1;
+    }
+
+    message Approved {
+    }
+
+    oneof result {
+      AgentV1.McpAuthRequestResponse.Approved approved = 1;
+      AgentV1.McpAuthRequestResponse.Rejected rejected = 2;
+    }
   }
 
   message McpAuthResult {
@@ -3407,6 +3536,38 @@ message AgentV1 {
     repeated string after_context_lines = 6;
   }
 
+  message PrewarmRequest {
+    AgentV1.ModelDetails model_details = 1;
+    optional string conversation_id = 2;
+    AgentV1.ConversationStateStructure conversation_state = 3;
+    AgentV1.McpTools mcp_tools = 4;
+    optional AgentV1.McpFileSystemOptions mcp_file_system_options = 5;
+    optional string best_of_n_group_id = 6;
+    optional bool try_use_best_of_n_promotion = 7;
+    optional string custom_system_prompt = 8;
+    optional AgentV1.RequestedModel requested_model = 9;
+    optional bool suggest_next_prompt = 10;
+    optional string subagent_type_name = 11;
+    optional bool exclude_workspace_context = 12;
+    optional string harness = 13;
+    repeated AgentV1.RequestedModel selected_subagent_models = 14;
+    repeated AgentV1.ModelDetails selected_subagent_model_details = 15;
+    optional string conversation_group_id = 16;
+    repeated AgentV1.PreFetchedBlob pre_fetched_blobs = 17;
+    optional bool client_supports_inline_images = 18;
+    repeated AgentV1.SubagentModelOverride subagent_model_overrides = 19;
+    optional bool can_create_cloud_subagents = 20;
+    optional bool suppress_subagent_progress_update_tool = 21;
+    optional bool client_supports_send_to_user = 22;
+    optional string computer_use_coordinate_mode = 23;
+    optional string agent_session_id = 24;
+    optional bool client_supports_prompt_context_usage_rpc = 25;
+    optional bool client_supports_routed_model_update = 26;
+    optional AgentV1.ClientLlmGatewayCredential client_llm_gateway_credential = 27;
+    optional bool client_supports_preview_card = 28;
+    optional bool started_as_new_project = 29;
+  }
+
   message ProjectDetails {
     optional string name = 1;
     optional AgentV1.ProjectSubagentDetails subagent = 2;
@@ -4147,17 +4308,17 @@ message AgentV1 {
   }
 
   message SandboxPolicy {
-    enum ReadBoundaryMode {
-      READ_BOUNDARY_MODE_UNSPECIFIED = 0;
-      READ_BOUNDARY_MODE_SYSTEM = 1;
-      READ_BOUNDARY_MODE_WORKSPACE = 2;
-    }
-
     enum Type {
       TYPE_UNSPECIFIED = 0;
       TYPE_INSECURE_NONE = 1;
       TYPE_WORKSPACE_READWRITE = 2;
       TYPE_WORKSPACE_READONLY = 3;
+    }
+
+    enum ReadBoundaryMode {
+      READ_BOUNDARY_MODE_UNSPECIFIED = 0;
+      READ_BOUNDARY_MODE_SYSTEM = 1;
+      READ_BOUNDARY_MODE_WORKSPACE = 2;
     }
 
     AgentV1.SandboxPolicy.Type type = 1;
@@ -4466,17 +4627,17 @@ message AgentV1 {
   }
 
   message SelectedVideo {
-    message BlobIdWithData {
-      bytes blob_id = 1;
-      bytes data = 2;
-    }
-
     message SignedUrl {
       string url = 1;
       string key = 2;
       int64 expires_at_unix_ms = 3;
       int64 refresh_after_unix_ms = 4;
       string conversation_id = 5;
+    }
+
+    message BlobIdWithData {
+      bytes blob_id = 1;
+      bytes data = 2;
     }
 
     string uuid = 2;
@@ -4675,6 +4836,10 @@ message AgentV1 {
   message SetBlobArgs {
     bytes blob_id = 1;
     bytes blob_data = 2;
+  }
+
+  message SetBlobResult {
+    optional AgentV1.Error error = 1;
   }
 
   message SetPrStatusAction {
@@ -5417,6 +5582,20 @@ message AgentV1 {
     AgentV1.SwitchModeArgs args = 1;
   }
 
+  message SwitchModeRequestResponse {
+    message Approved {
+    }
+
+    message Rejected {
+      string reason = 1;
+    }
+
+    oneof result {
+      AgentV1.SwitchModeRequestResponse.Approved approved = 1;
+      AgentV1.SwitchModeRequestResponse.Rejected rejected = 2;
+    }
+  }
+
   message SwitchModeResult {
     oneof result {
       AgentV1.SwitchModeSuccess success = 1;
@@ -5898,6 +6077,20 @@ message AgentV1 {
     AgentV1.SmartModeApproval smart_mode_approval = 3;
   }
 
+  message WebFetchRequestResponse {
+    message Approved {
+    }
+
+    message Rejected {
+      string reason = 1;
+    }
+
+    oneof result {
+      AgentV1.WebFetchRequestResponse.Approved approved = 1;
+      AgentV1.WebFetchRequestResponse.Rejected rejected = 2;
+    }
+  }
+
   message WebFetchResult {
     oneof result {
       AgentV1.WebFetchSuccess success = 1;
@@ -5938,6 +6131,20 @@ message AgentV1 {
 
   message WebSearchRequestQuery {
     AgentV1.WebSearchArgs args = 1;
+  }
+
+  message WebSearchRequestResponse {
+    message Approved {
+    }
+
+    message Rejected {
+      string reason = 1;
+    }
+
+    oneof result {
+      AgentV1.WebSearchRequestResponse.Approved approved = 1;
+      AgentV1.WebSearchRequestResponse.Rejected rejected = 2;
+    }
   }
 
   message WebSearchResult {
@@ -6100,10 +6307,35 @@ message AiserverV1 {
     IN_APP_AD_TRIGGER_IOS_DOWNLOAD_MENU = 5;
   }
 
+  enum InferenceMessageRole {
+    INFERENCE_MESSAGE_ROLE_UNSPECIFIED = 0;
+    INFERENCE_MESSAGE_ROLE_USER = 1;
+    INFERENCE_MESSAGE_ROLE_ASSISTANT = 2;
+    INFERENCE_MESSAGE_ROLE_TOOL = 3;
+    INFERENCE_MESSAGE_ROLE_SYSTEM = 4;
+  }
+
   enum InferenceProviderWarningTrigger {
     INFERENCE_PROVIDER_WARNING_TRIGGER_UNSPECIFIED = 0;
     INFERENCE_PROVIDER_WARNING_TRIGGER_ON_SELECT = 1;
     INFERENCE_PROVIDER_WARNING_TRIGGER_ON_ERROR = 2;
+  }
+
+  enum InferenceReason {
+    INFERENCE_REASON_UNSPECIFIED = 0;
+    INFERENCE_REASON_GEMINI_VIDEO_SUBAGENT = 1;
+  }
+
+  enum InferenceStreamErrorType {
+    INFERENCE_STREAM_ERROR_TYPE_UNSPECIFIED = 0;
+    INFERENCE_STREAM_ERROR_TYPE_UNKNOWN = 1;
+    INFERENCE_STREAM_ERROR_TYPE_INPUT_TOKEN_LIMIT = 2;
+    INFERENCE_STREAM_ERROR_TYPE_OUTPUT_TOKEN_LIMIT = 3;
+    INFERENCE_STREAM_ERROR_TYPE_RATE_LIMIT = 4;
+    INFERENCE_STREAM_ERROR_TYPE_AUTHENTICATION = 5;
+    INFERENCE_STREAM_ERROR_TYPE_PERMISSION = 6;
+    INFERENCE_STREAM_ERROR_TYPE_OVERLOADED = 7;
+    INFERENCE_STREAM_ERROR_TYPE_CONTENT_FILTER = 8;
   }
 
   enum NewRepoFlowFact {
@@ -6239,6 +6471,12 @@ message AiserverV1 {
   }
 
   message AvailableModelsResponse {
+    enum DegradationStatus {
+      DEGRADATION_STATUS_UNSPECIFIED = 0;
+      DEGRADATION_STATUS_DEGRADED = 1;
+      DEGRADATION_STATUS_DISABLED = 2;
+    }
+
     enum ModelVendorId {
       MODEL_VENDOR_ID_UNSPECIFIED = 0;
       MODEL_VENDOR_ID_ANTHROPIC = 1;
@@ -6252,10 +6490,81 @@ message AiserverV1 {
       MODEL_VENDOR_ID_META = 9;
     }
 
-    enum DegradationStatus {
-      DEGRADATION_STATUS_UNSPECIFIED = 0;
-      DEGRADATION_STATUS_DEGRADED = 1;
-      DEGRADATION_STATUS_DISABLED = 2;
+    message ModelPickerBadge {
+      enum Variant {
+        VARIANT_UNSPECIFIED = 0;
+        VARIANT_ACCENT = 1;
+        VARIANT_NEUTRAL = 2;
+        VARIANT_SUCCESS = 3;
+        VARIANT_WARN = 4;
+        VARIANT_DANGER = 5;
+      }
+
+      string label = 1;
+      AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant variant = 2;
+      bool dismiss_on_selection = 3;
+    }
+
+    message ModelVariantConfig {
+      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
+      string display_name = 2;
+      bool is_max_mode = 3;
+      optional bool is_default_max_config = 4;
+      optional bool is_default_non_max_config = 5;
+      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
+      optional string tagline = 7;
+      optional string display_name_outside_picker = 8;
+      optional string variant_string_representation = 9;
+      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
+      optional string legacy_slug = 11;
+    }
+
+    message ModelVendor {
+      AiserverV1.AvailableModelsResponse.ModelVendorId id = 1;
+      string display_name = 2;
+    }
+
+    message ModelPickerDisplayConfiguration {
+      message NamedModelsViewConfig {
+        message NamedViewToRoutedModelViewNoButton {
+        }
+
+        message NamedViewToRoutedModelViewToggle {
+          string markdown = 1;
+        }
+
+        message NamedViewToRoutedModelViewButton {
+          string markdown = 1;
+        }
+
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle named_view_to_routed_model_view_toggle = 2;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton named_view_to_routed_model_view_no_button = 3;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton named_view_to_routed_model_view_button = 4;
+      }
+
+      message RoutedModelViewConfig {
+        message RoutedModelViewToNamedViewButton {
+          string markdown = 1;
+        }
+
+        message RoutedModelViewToNamedViewToggle {
+          string title_markdown = 1;
+          optional string subtitle = 2;
+          optional bool set_to_last_named_model = 3;
+        }
+
+        optional string title = 1;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle routed_model_view_to_named_view_toggle = 2;
+        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton routed_model_view_to_named_view_button = 3;
+        optional bool hide_search_bar = 4;
+        optional bool hide_routed_model_view = 5;
+      }
+
+      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig routed_model_view_config = 1;
+      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig named_models_view_config = 2;
+      optional bool hide_search_bar = 3;
+      optional bool hide_add_models = 4;
+      optional string model_selection_restriction_message = 5;
     }
 
     message AvailableModel {
@@ -6308,81 +6617,6 @@ message AiserverV1 {
       repeated AiserverV1.AvailableModelsResponse.ModelPickerBadge model_picker_badges = 48;
     }
 
-    message ModelVendor {
-      AiserverV1.AvailableModelsResponse.ModelVendorId id = 1;
-      string display_name = 2;
-    }
-
-    message ModelVariantConfig {
-      repeated AgentV1.RequestedModel.ModelParameterValue parameter_values = 1;
-      string display_name = 2;
-      bool is_max_mode = 3;
-      optional bool is_default_max_config = 4;
-      optional bool is_default_non_max_config = 5;
-      optional AiserverV1.AvailableModelsResponse.TooltipData tooltip_data = 6;
-      optional string tagline = 7;
-      optional string display_name_outside_picker = 8;
-      optional string variant_string_representation = 9;
-      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue confirmation_dialogue = 10;
-      optional string legacy_slug = 11;
-    }
-
-    message ModelPickerDisplayConfiguration {
-      message RoutedModelViewConfig {
-        message RoutedModelViewToNamedViewToggle {
-          string title_markdown = 1;
-          optional string subtitle = 2;
-          optional bool set_to_last_named_model = 3;
-        }
-
-        message RoutedModelViewToNamedViewButton {
-          string markdown = 1;
-        }
-
-        optional string title = 1;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewToggle routed_model_view_to_named_view_toggle = 2;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig.RoutedModelViewToNamedViewButton routed_model_view_to_named_view_button = 3;
-        optional bool hide_search_bar = 4;
-        optional bool hide_routed_model_view = 5;
-      }
-
-      message NamedModelsViewConfig {
-        message NamedViewToRoutedModelViewToggle {
-          string markdown = 1;
-        }
-
-        message NamedViewToRoutedModelViewButton {
-          string markdown = 1;
-        }
-
-        message NamedViewToRoutedModelViewNoButton {
-        }
-
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewToggle named_view_to_routed_model_view_toggle = 2;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewNoButton named_view_to_routed_model_view_no_button = 3;
-        optional AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig.NamedViewToRoutedModelViewButton named_view_to_routed_model_view_button = 4;
-      }
-
-      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.RoutedModelViewConfig routed_model_view_config = 1;
-      AiserverV1.AvailableModelsResponse.ModelPickerDisplayConfiguration.NamedModelsViewConfig named_models_view_config = 2;
-      optional bool hide_search_bar = 3;
-      optional bool hide_add_models = 4;
-      optional string model_selection_restriction_message = 5;
-    }
-
-    message ConfirmationDialogue {
-      enum Presentation {
-        PRESENTATION_UNSPECIFIED = 0;
-        PRESENTATION_POST_PICKER_WARNING = 1;
-      }
-
-      string title = 1;
-      string body = 2;
-      string key = 3;
-      bool blocks_submission = 4;
-      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation presentation = 5;
-    }
-
     message FeatureModelConfig {
       string default_model = 1;
       repeated string fallback_models = 2;
@@ -6399,19 +6633,17 @@ message AiserverV1 {
       optional string markdown_content = 7;
     }
 
-    message ModelPickerBadge {
-      enum Variant {
-        VARIANT_UNSPECIFIED = 0;
-        VARIANT_ACCENT = 1;
-        VARIANT_NEUTRAL = 2;
-        VARIANT_SUCCESS = 3;
-        VARIANT_WARN = 4;
-        VARIANT_DANGER = 5;
+    message ConfirmationDialogue {
+      enum Presentation {
+        PRESENTATION_UNSPECIFIED = 0;
+        PRESENTATION_POST_PICKER_WARNING = 1;
       }
 
-      string label = 1;
-      AiserverV1.AvailableModelsResponse.ModelPickerBadge.Variant variant = 2;
-      bool dismiss_on_selection = 3;
+      string title = 1;
+      string body = 2;
+      string key = 3;
+      bool blocks_submission = 4;
+      optional AiserverV1.AvailableModelsResponse.ConfirmationDialogue.Presentation presentation = 5;
     }
 
     repeated string model_names = 1;
@@ -6460,13 +6692,10 @@ message AiserverV1 {
   }
 
   message BugConfigResponse {
-    message LinterStrategyV2 {
+    message LinterStrategyV1 {
       bool enabled = 1;
-      double wait_between_triggers_ms = 2;
-      double debounce_triggers_ms = 3;
-      int32 keep_lines_around_chunk = 4;
-      int32 prevent_triggering_for_files_with_this_many_lines = 5;
-      bool prevent_triggering_when_lints = 6;
+      bool try_trigger_on_save = 2;
+      double wait_between_triggers_ms = 3;
     }
 
     message BugBotV1 {
@@ -6491,10 +6720,13 @@ message AiserverV1 {
       optional int32 expensive_absolute_max_tokens = 19;
     }
 
-    message LinterStrategyV1 {
+    message LinterStrategyV2 {
       bool enabled = 1;
-      bool try_trigger_on_save = 2;
-      double wait_between_triggers_ms = 3;
+      double wait_between_triggers_ms = 2;
+      double debounce_triggers_ms = 3;
+      int32 keep_lines_around_chunk = 4;
+      int32 prevent_triggering_for_files_with_this_many_lines = 5;
+      bool prevent_triggering_when_lints = 6;
     }
 
     AiserverV1.BugConfigResponse.LinterStrategyV1 linter_strategy_v1 = 1;
@@ -6787,6 +7019,12 @@ message AiserverV1 {
     optional bool has_uncommitted_changes = 5;
   }
 
+  message GetSandAccessStatusRequest {
+  }
+
+  message GetSandUsageStatusRequest {
+  }
+
   message GetServerConfigRequest {
     bool telem_enabled = 1;
     repeated double bug_bot_dismissed_notification_last_10_times_unix_ms = 2;
@@ -6913,11 +7151,278 @@ message AiserverV1 {
     int32 max_sync_merkle_batch_size = 16;
   }
 
+  message InferenceAgentTool {
+    string name = 1;
+    string description = 2;
+    bytes parameters = 3;
+    optional AiserverV1.InferenceCustomToolFormat custom_tool_format = 4;
+  }
+
+  message InferenceAnthropicOptions {
+    optional AiserverV1.InferenceCacheControl cache_control = 1;
+  }
+
+  message InferenceCacheControl {
+    string type = 1;
+  }
+
+  message InferenceContentPart {
+    oneof part {
+      AiserverV1.InferenceTextPart text = 1;
+      AiserverV1.InferenceImagePart image = 2;
+      AiserverV1.InferenceFilePart file = 3;
+    }
+  }
+
+  message InferenceContentParts {
+    repeated AiserverV1.InferenceContentPart parts = 1;
+  }
+
+  message InferenceCoreMessage {
+    AiserverV1.InferenceMessageRole role = 1;
+    repeated AiserverV1.InferenceToolCall tool_calls = 4;
+    repeated AiserverV1.InferenceReasoningPart reasoning_parts = 7;
+    optional string model_provider_message_id = 8;
+    optional string openai_phase = 9;
+    optional bool openai_phase_null = 10;
+    optional string cursor_inference_reason = 11;
+    optional string cursor_feature_type = 12;
+    oneof content {
+      string text = 2;
+      AiserverV1.InferenceContentParts parts = 3;
+      AiserverV1.InferenceToolResultContent tool_content = 6;
+    }
+  }
+
+  message InferenceCursorOptions {
+    optional string image_description = 1;
+    map<int32, string> image_descriptions = 2;
+  }
+
+  message InferenceCustomToolFormat {
+    string type = 1;
+    string definition = 2;
+    string syntax_ = 3;
+  }
+
+  message InferenceExtendedUsageInfo {
+    int32 input_tokens = 1;
+    int32 output_tokens = 2;
+    int32 cache_read_tokens = 3;
+    int32 cache_write_tokens = 4;
+    int32 max_tokens = 5;
+  }
+
+  message InferenceExtraData {
+    repeated AiserverV1.InferenceTokenLogprobs token_logprobs = 1;
+    repeated AiserverV1.InferenceTokenIds token_ids = 2;
+    repeated AiserverV1.InferenceTokenIds prompt_token_ids = 3;
+    repeated AiserverV1.InferenceTokenIds extra_tokens = 4;
+    repeated AiserverV1.InferenceTokenLogprobs extra_logprobs = 5;
+    repeated AiserverV1.InferenceRoutingRow routing_matrix = 6;
+  }
+
+  message InferenceFilePart {
+    string data = 1;
+    string media_type = 2;
+    optional string filename = 3;
+    optional AiserverV1.InferenceProviderOptions provider_options = 4;
+  }
+
+  message InferenceImageDescription {
+    int32 message_index = 1;
+    int32 part_index = 2;
+    optional int32 exp_content_index = 3;
+    string description = 4;
+  }
+
+  message InferenceImageDescriptionsInfo {
+    repeated AiserverV1.InferenceImageDescription descriptions = 1;
+  }
+
+  message InferenceImagePart {
+    string data = 1;
+    optional string mime_type = 2;
+    optional AiserverV1.InferenceProviderOptions provider_options = 3;
+  }
+
+  message InferenceInvocationIdInfo {
+    string invocation_id = 1;
+  }
+
+  message InferenceModelConfig {
+    optional int32 max_tokens = 1;
+    optional float temperature = 2;
+    optional float top_p = 3;
+    repeated string stop_sequences = 4;
+  }
+
+  message InferenceModelParameterValue {
+    string id = 1;
+    string value = 2;
+  }
+
+  message InferenceNamedProviderDefinedTool {
+    string name = 1;
+    string id = 2;
+    string type = 3;
+    bytes options = 4;
+  }
+
+  message InferenceProviderMetadataInfo {
+    bytes metadata = 1;
+  }
+
+  message InferenceProviderOptions {
+    optional AiserverV1.InferenceAnthropicOptions anthropic = 1;
+    optional AiserverV1.InferenceCursorOptions cursor = 2;
+  }
+
   message InferenceProviderWarning {
     string message_ = 1;
     repeated string affected_models = 2;
     optional string fallback_model = 3;
     AiserverV1.InferenceProviderWarningTrigger trigger = 4;
+  }
+
+  message InferenceReasoningPart {
+    bool is_redacted = 1;
+    string text = 2;
+    optional string signature = 3;
+    optional string redacted_data = 4;
+    optional string model_name = 5;
+  }
+
+  message InferenceRequestedModel {
+    string model_id = 1;
+    bool max_mode = 2;
+    repeated AiserverV1.InferenceModelParameterValue parameters = 3;
+    bool built_in_model = 4;
+    bool is_variant_string_representation = 5;
+  }
+
+  message InferenceResponseInfo {
+    string id = 1;
+    string model = 2;
+    int64 created_at = 3;
+    repeated AiserverV1.InferenceResponseMessage messages = 4;
+    optional string error_message = 5;
+    optional AiserverV1.InferenceExtraData inference_extra_data = 6;
+    optional bool supports_self_summary = 7;
+    optional int32 early_compaction_context_token_threshold = 8;
+  }
+
+  message InferenceResponseMessage {
+    string id = 1;
+    AiserverV1.InferenceMessageRole role = 2;
+    optional string content = 3;
+    repeated AiserverV1.InferenceToolCall tool_calls = 4;
+    optional AiserverV1.InferenceToolResultContent tool_result = 5;
+    repeated AiserverV1.InferenceReasoningPart reasoning_parts = 6;
+  }
+
+  message InferenceRoutingRow {
+    repeated string values = 1;
+  }
+
+  message InferenceStreamError {
+    string message_ = 1;
+    string code = 2;
+    bool is_input_token_limit_error = 3;
+    bool is_output_token_limit_error = 4;
+    AiserverV1.InferenceStreamErrorType error_type = 5;
+  }
+
+  message InferenceStreamRequest {
+    repeated AiserverV1.InferenceCoreMessage messages = 1;
+    repeated AiserverV1.InferenceAgentTool tools = 2;
+    repeated AiserverV1.InferenceNamedProviderDefinedTool provider_defined_tools = 3;
+    optional AiserverV1.InferenceModelConfig model_config = 4;
+    optional string model_id = 5;
+    optional string invocation_id = 6;
+    optional AiserverV1.InferenceRequestedModel requested_model = 7;
+    optional string conversation_id = 8;
+    repeated string accepted_unadvertised_tool_names = 9;
+    optional string automation_id = 10;
+    optional AiserverV1.InferenceReason inference_reason = 11;
+    optional string conversation_group_id = 12;
+    optional string parent_request_id = 13;
+    optional string root_parent_request_id = 14;
+    optional string parent_agent_tool_call_id = 15;
+    optional string subagent_type = 16;
+  }
+
+  message InferenceStreamResponse {
+    oneof response {
+      AiserverV1.InferenceTextStreamPart text_part = 1;
+      AiserverV1.InferenceToolCallStreamPart tool_call_part = 2;
+      AiserverV1.InferenceUsageInfo usage = 3;
+      AiserverV1.InferenceResponseInfo response_info = 4;
+      AiserverV1.InferenceExtendedUsageInfo extended_usage = 5;
+      AiserverV1.InferenceProviderMetadataInfo provider_metadata = 6;
+      AiserverV1.InferenceInvocationIdInfo invocation_id = 7;
+      AiserverV1.InferenceStreamError error = 8;
+      AiserverV1.InferenceThinkingStreamPart thinking_part = 9;
+      AiserverV1.InferenceImageDescriptionsInfo image_descriptions = 10;
+    }
+  }
+
+  message InferenceTextPart {
+    string text = 1;
+    optional AiserverV1.InferenceProviderOptions provider_options = 2;
+  }
+
+  message InferenceTextStreamPart {
+    string text = 1;
+    bool is_final = 2;
+  }
+
+  message InferenceThinkingStreamPart {
+    string text = 1;
+    optional string signature = 2;
+    bool is_final = 3;
+  }
+
+  message InferenceTokenIds {
+    repeated int64 values = 1;
+  }
+
+  message InferenceTokenLogprobs {
+    repeated double values = 1;
+  }
+
+  message InferenceToolCall {
+    string tool_call_id = 1;
+    string tool_name = 2;
+    bytes args = 3;
+    optional string raw_tool_call_args = 4;
+  }
+
+  message InferenceToolCallStreamPart {
+    string tool_call_id = 1;
+    string tool_name = 2;
+    string args = 3;
+    bool is_complete = 4;
+    optional int32 tool_index = 5;
+  }
+
+  message InferenceToolResultContent {
+    repeated AiserverV1.InferenceToolResultPart parts = 1;
+  }
+
+  message InferenceToolResultPart {
+    string tool_call_id = 1;
+    string tool_name = 2;
+    bytes result = 3;
+    bool is_error = 4;
+    repeated AiserverV1.InferenceContentPart experimental_content = 5;
+    optional AiserverV1.InferenceProviderOptions provider_options = 6;
+  }
+
+  message InferenceUsageInfo {
+    int32 prompt_tokens = 1;
+    int32 completion_tokens = 2;
+    optional int32 total_tokens = 3;
   }
 
   message InteractionConfig {
@@ -6975,19 +7480,6 @@ message AiserverV1 {
       optional AiserverV1.ModelParameterDefinition.EnumParameterDefinition enum_parameter = 2;
     }
 
-    message EnumParameterDefinition {
-      message EnumParameterValue {
-        string value = 1;
-        optional string display_name = 2;
-        optional bool increases_model_cost = 3;
-        optional bool blocked_by_admin_allowlist = 4;
-        optional string markdown_tooltip = 5;
-        repeated AiserverV1.AvailableModelsResponse.ModelPickerBadge model_picker_badges = 6;
-      }
-
-      repeated AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue values = 1;
-    }
-
     message BooleanParameterDefinition {
       message BooleanParameterValue {
         string value = 1;
@@ -6999,6 +7491,19 @@ message AiserverV1 {
       }
 
       repeated AiserverV1.ModelParameterDefinition.BooleanParameterDefinition.BooleanParameterValue values = 1;
+    }
+
+    message EnumParameterDefinition {
+      message EnumParameterValue {
+        string value = 1;
+        optional string display_name = 2;
+        optional bool increases_model_cost = 3;
+        optional bool blocked_by_admin_allowlist = 4;
+        optional string markdown_tooltip = 5;
+        repeated AiserverV1.AvailableModelsResponse.ModelPickerBadge model_picker_badges = 6;
+      }
+
+      repeated AiserverV1.ModelParameterDefinition.EnumParameterDefinition.EnumParameterValue values = 1;
     }
 
     string id = 1;
