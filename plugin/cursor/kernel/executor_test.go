@@ -1602,6 +1602,26 @@ func TestCountTokens_CJK(t *testing.T) {
 
 // TestParseOpenAIPayload_NoUser ensures the parser rejects payloads
 // with no user message.
+func TestParseOpenAIPayload_PairsEmptyToolCallIDFromToolMessage(t *testing.T) {
+	shape, err := parseOpenAIPayload([]byte(`{
+		"model":"claude-sonnet-4-6",
+		"messages":[
+			{"role":"user","content":"uname"},
+			{"role":"assistant","content":null,"tool_calls":[{"id":"","type":"function","function":{"name":"Bash","arguments":"{\"command\":\"uname -sm\"}"}}]},
+			{"role":"tool","tool_call_id":"call_abc123","content":"Darwin arm64"}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("parseOpenAIPayload: %v", err)
+	}
+	if len(shape.History) < 2 {
+		t.Fatalf("history = %#v", shape.History)
+	}
+	if !strings.Contains(shape.History[1].Content, `"id":"call_abc123"`) {
+		t.Fatalf("empty tool_call id was not paired: %q", shape.History[1].Content)
+	}
+}
+
 func TestParseOpenAIPayload_NoUser(t *testing.T) {
 	_, err := parseOpenAIPayload([]byte(`{"model":"x","messages":[{"role":"system","content":"s"}]}`))
 	if err == nil {

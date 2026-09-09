@@ -298,8 +298,17 @@ func parseOpenAIPayload(body []byte) (chatShape, error) {
 	var req struct {
 		Model    string `json:"model"`
 		Messages []struct {
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
+			Role       string          `json:"role"`
+			Content    json.RawMessage `json:"content"`
+			ToolCallID string          `json:"tool_call_id"`
+			ToolCalls  []struct {
+				ID       string `json:"id"`
+				Type     string `json:"type"`
+				Function *struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
 		} `json:"messages"`
 		Stream        bool `json:"stream"`
 		StreamOptions *struct {
@@ -332,10 +341,17 @@ func parseOpenAIPayload(body []byte) (chatShape, error) {
 			systemPrompt += text
 			continue
 		}
+		role := m.Role
+		if role == "tool" {
+			role = "user"
+			text = flattenOpenAIToolResult(m.ToolCallID, m.Content)
+		} else if role == "assistant" {
+			text = joinNonEmpty(text, flattenOpenAIToolCalls(m.ToolCalls))
+		}
 		turns = append(turns, struct {
 			role string
 			text string
-		}{role: m.Role, text: text})
+		}{role: role, text: text})
 	}
 	lastUserIdx := -1
 	for i := len(turns) - 1; i >= 0; i-- {
@@ -374,7 +390,69 @@ func parseOpenAIPayload(body []byte) (chatShape, error) {
 		})
 	}
 	shape.ForceTool = parseToolChoice(req.ToolChoice)
+	pairEmptyToolUseIDs(&shape, shape.UserMessage)
 	return shape, nil
+}
+
+func flattenOpenAIToolCalls(calls []struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function *struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}) string {
+	var out strings.Builder
+	for _, call := range calls {
+		name := ""
+		args := "{}"
+		if call.Function != nil {
+			name = call.Function.Name
+			if strings.TrimSpace(call.Function.Arguments) != "" {
+				args = call.Function.Arguments
+			}
+		}
+		var input any = map[string]any{}
+		if json.Unmarshal([]byte(args), &input) != nil {
+			input = map[string]any{"raw": args}
+		}
+		block := map[string]any{"type": "tool_use", "name": name, "input": input}
+		if strings.TrimSpace(call.ID) != "" {
+			block["id"] = call.ID
+		}
+		encoded, err := json.Marshal(block)
+		if err != nil {
+			continue
+		}
+		if out.Len() > 0 {
+			out.WriteByte('\n')
+		}
+		out.WriteString(string(encoded))
+	}
+	return out.String()
+}
+
+func flattenOpenAIToolResult(toolCallID string, content json.RawMessage) string {
+	block := map[string]any{
+		"type":        "tool_result",
+		"tool_use_id": toolCallID,
+		"content":     flattenOpenAIContent(content),
+	}
+	encoded, err := json.Marshal(block)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+func joinNonEmpty(parts ...string) string {
+	var out []string
+	for _, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 // flattenOpenAIContent accepts a plain string or an array of content
