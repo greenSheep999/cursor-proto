@@ -88,6 +88,24 @@ func TestBuildConversationHistory_ToolUseAndResult(t *testing.T) {
 	}
 }
 
+func TestBuildConversationHistory_FillsEmptyToolUseIDFromResult(t *testing.T) {
+	hist := buildConversationHistory([]HistoryTurn{
+		{Role: "user", Content: "uname"},
+		{Role: "assistant", Content: `{"type":"tool_use","name":"Bash","input":{"command":"uname -sm"}}`},
+		{Role: "user", Content: `{"type":"tool_result","tool_use_id":"call_abc123","content":"Darwin arm64"}`},
+	})
+	if hist == nil || len(hist.Messages) != 3 {
+		t.Fatalf("history messages = %+v, want 3", hist)
+	}
+	call := hist.Messages[1].GetAssistant().GetContent()[0].GetToolCall()
+	if call.GetToolCallId() != "call_abc123" {
+		t.Fatalf("empty tool_use id should take the tool_result id, got %q", call.GetToolCallId())
+	}
+	if hist.Messages[2].GetTool().GetToolCallId() != "call_abc123" {
+		t.Fatalf("tool result id = %q", hist.Messages[2].GetTool().GetToolCallId())
+	}
+}
+
 func TestParseContentFragmentsAndContinuation(t *testing.T) {
 	raw := `{"type":"tool_result","tool_use_id":"toolu_123","content":"Sunny, 28 C."}`
 	got := ParseContentFragments(raw)

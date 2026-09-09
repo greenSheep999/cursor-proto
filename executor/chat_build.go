@@ -1,6 +1,8 @@
 package executor
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"strings"
 
 	"github.com/router-for-me/cursor-proto/auth"
@@ -202,6 +204,7 @@ func buildConversationHistory(turns []HistoryTurn) *cursorpb.AgentV1_Conversatio
 	if len(msgs) == 0 {
 		return nil
 	}
+	fillEmptyHistoryToolIDs(msgs)
 	replace := true
 	return &cursorpb.AgentV1_ConversationHistory{
 		Messages: msgs,
@@ -281,6 +284,53 @@ func conversationHistoryFromUser(content string) []*cursorpb.AgentV1_Conversatio
 	}
 	flushText()
 	return msgs
+}
+
+// fillEmptyHistoryToolIDs pairs assistant tool_use blocks that arrived
+// without an id (TokenSheep/NewAPI omitempty-strips them on the way in)
+// with the following tool_result tool_use_id. Vertex rejects a tool_use
+// whose id field is missing.
+func fillEmptyHistoryToolIDs(msgs []*cursorpb.AgentV1_ConversationHistoryMessage) {
+	var pending []*cursorpb.AgentV1_ConversationHistoryToolCall
+	for _, msg := range msgs {
+		if asst := msg.GetAssistant(); asst != nil {
+			for _, part := range asst.Content {
+				if tc := part.GetToolCall(); tc != nil && strings.TrimSpace(tc.GetToolCallId()) == "" {
+					pending = append(pending, tc)
+				}
+			}
+		}
+		if tool := msg.GetTool(); tool != nil && len(pending) > 0 {
+			tc := pending[0]
+			pending = pending[1:]
+			id := strings.TrimSpace(tool.GetToolCallId())
+			if id == "" {
+				id = strings.TrimSpace(tc.GetToolCallId())
+			}
+			if id == "" {
+				id = newHistoryToolID()
+			}
+			if strings.TrimSpace(tc.GetToolCallId()) == "" {
+				tc.ToolCallId = id
+			}
+			if strings.TrimSpace(tool.GetToolCallId()) == "" {
+				tool.ToolCallId = id
+			}
+		}
+	}
+	for _, tc := range pending {
+		if strings.TrimSpace(tc.GetToolCallId()) == "" {
+			tc.ToolCallId = newHistoryToolID()
+		}
+	}
+}
+
+func newHistoryToolID() string {
+	var raw [12]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "toolu_historyfallback"
+	}
+	return "toolu_" + hex.EncodeToString(raw[:])
 }
 
 func conversationHistoryFromAssistant(content string) *cursorpb.AgentV1_ConversationHistoryMessage {
