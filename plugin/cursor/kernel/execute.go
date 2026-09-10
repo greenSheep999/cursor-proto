@@ -20,8 +20,70 @@ import (
 
 	"github.com/router-for-me/cursor-proto/auth"
 	"github.com/router-for-me/cursor-proto/executor"
+	"github.com/router-for-me/cursor-proto/sdk/cpaformat"
 	"github.com/router-for-me/cursor-proto/translator"
 )
+
+type chatRetry struct {
+	events <-chan executor.ChatEvent
+	err    error
+}
+
+func persistMintedBox(runner chatRunner, storage []byte) {
+	client, ok := runner.(*executor.Client)
+	if !ok || client == nil || client.Account == nil {
+		return
+	}
+	acc := client.Account
+	if acc.RelayURL == "" || acc.BoxToken == "" {
+		return
+	}
+	file, err := cpaformat.Unmarshal(storage)
+	if err != nil {
+		return
+	}
+	if file.RelayURL == acc.RelayURL && file.BoxToken == acc.BoxToken && file.BoxMintedAtMs == acc.BoxMintedAtMs {
+		return
+	}
+	file.RelayURL = acc.RelayURL
+	file.BoxToken = acc.BoxToken
+	file.NetworkToken = acc.NetworkToken
+	file.BoxMintedAtMs = acc.BoxMintedAtMs
+	raw, err := file.Marshal()
+	if err != nil {
+		return
+	}
+	payload, err := json.Marshal(map[string]any{
+		"name": file.FileName(),
+		"json": json.RawMessage(raw),
+	})
+	if err != nil {
+		return
+	}
+	_, _ = callHost("host.auth.save", payload)
+}
+
+func retryChatOnOtherModelsLimit(ctx context.Context, runner chatRunner, chatReq *executor.ChatRequest, storage []byte, model string, cause error) chatRetry {
+	if chatReq == nil || chatReq.ClientTypeOverride == "sand" || !isCursorOtherModelsLimitError(cause) {
+		return chatRetry{err: cause}
+	}
+	file, err := cpaformat.Unmarshal(storage)
+	if err != nil {
+		return chatRetry{err: cause}
+	}
+	acc, err := file.ToAccount()
+	if err != nil || acc == nil {
+		return chatRetry{err: cause}
+	}
+	quota, ok := loadAccountQuota(acc.Email, acc)
+	if !ok || !botCanOverflow(quota) {
+		return chatRetry{err: cause}
+	}
+	fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route retry-bot email=%s model=%s err=%v\n", acc.Email, model, cause)
+	applyBotLane(chatReq, storage)
+	events, errRun := runner.RunChat(ctx, chatReq)
+	return chatRetry{events: events, err: errRun}
+}
 
 // debugLog is a stderr trace helper for tracking down streaming
 // bugs. Enabled by CURSOR_PLUGIN_DEBUG=1 in the environment; a
@@ -92,14 +154,24 @@ func handleExecutorExecute(payload []byte) ([]byte, int) {
 	defer cancel()
 	events, errRun := runner.RunChat(ctx, chatReq)
 	if errRun != nil {
-		return errorEnvelope("upstream_error", errRun.Error(), true), 0
+		if retry := retryChatOnOtherModelsLimit(ctx, runner, chatReq, req.StorageJSON, shape.Model, errRun); retry.err == nil {
+			events = retry.events
+		} else {
+			return errorEnvelope("upstream_error", errRun.Error(), true), 0
+		}
 	}
 
 	format := normaliseFormat(req.Format, req.SourceFormat)
 	body, errCollect := collectNonStreaming(format, shape, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
 	if errCollect != nil {
-		return errorEnvelope("upstream_error", errCollect.Error(), true), 0
+		if retry := retryChatOnOtherModelsLimit(ctx, runner, chatReq, req.StorageJSON, shape.Model, errCollect); retry.err == nil {
+			body, errCollect = collectNonStreaming(format, shape, shape.outputLimiter(), estimateClaudeInputTokens(shape), retry.events)
+		}
+		if errCollect != nil {
+			return errorEnvelope("upstream_error", errCollect.Error(), true), 0
+		}
 	}
+	persistMintedBox(runner, req.StorageJSON)
 	headers := map[string][]string{
 		"Content-Type": {"application/json"},
 		// Anthropic tags every response with request-id and clients surface it
@@ -816,8 +888,12 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	events, errRun := runner.RunChat(ctx, chatReq)
 	if errRun != nil {
-		cancel()
-		return errorEnvelope("upstream_error", errRun.Error(), true), 0
+		if retry := retryChatOnOtherModelsLimit(ctx, runner, chatReq, req.StorageJSON, shape.Model, errRun); retry.err == nil {
+			events = retry.events
+		} else {
+			cancel()
+			return errorEnvelope("upstream_error", errRun.Error(), true), 0
+		}
 	}
 
 	format := normaliseFormat(req.Format, req.SourceFormat)
@@ -826,6 +902,7 @@ func handleExecutorExecuteStream(payload []byte) ([]byte, int) {
 		"request-id":   {translator.NewAnthropicRequestID()},
 	}
 
+	persistMintedBox(runner, req.StorageJSON)
 	go streamEvents(ctx, cancel, req.StreamID, format, shape, shape.IncludeUsage, shape.Thinking, shape.outputLimiter(), estimateClaudeInputTokens(shape), events)
 
 	// Async streaming: return synchronously with empty chunks. The

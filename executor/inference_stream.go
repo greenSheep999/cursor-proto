@@ -369,6 +369,26 @@ func (c *Client) runInferenceStream(ctx context.Context, req *ChatRequest, acc *
 			return nil, err
 		}
 	}
+	events, err := c.postInferenceStream(ctx, req, acc, requestID, runID, inferenceReq)
+	if err != nil && isBoxRelayMissing(err) {
+		req.BoxRelayURL = ""
+		req.BoxToken = ""
+		req.BoxNetworkToken = ""
+		if acc != nil {
+			acc.RelayURL = ""
+			acc.BoxToken = ""
+			acc.NetworkToken = ""
+			acc.BoxMintedAtMs = 0
+		}
+		if prepErr := c.ensureBoxRelay(ctx, req); prepErr != nil {
+			return nil, err
+		}
+		return c.postInferenceStream(ctx, req, acc, requestID, runID, inferenceReq)
+	}
+	return events, err
+}
+
+func (c *Client) postInferenceStream(ctx context.Context, req *ChatRequest, acc *auth.Account, requestID, runID string, inferenceReq *cursorpb.AiserverV1_InferenceStreamRequest) (<-chan ChatEvent, error) {
 	payload, err := proto.Marshal(inferenceReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal InferenceStreamRequest: %w", err)
@@ -386,7 +406,11 @@ func (c *Client) runInferenceStream(ctx context.Context, req *ChatRequest, acc *
 	}
 	httpReq.Header.Set("content-type", contentType)
 	httpReq.Header.Set("accept", contentType)
-	ApplyCommonHeadersWithClientType(httpReq, acc, requestID, req.ClientTypeOverride)
+	clientType := ""
+	if req != nil {
+		clientType = req.ClientTypeOverride
+	}
+	ApplyCommonHeadersWithClientType(httpReq, acc, requestID, clientType)
 	if useBox {
 		httpReq.Header.Set("Authorization", "Bearer "+req.BoxToken)
 		if req.BoxNetworkToken != "" {

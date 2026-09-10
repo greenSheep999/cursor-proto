@@ -75,6 +75,11 @@ type accountQuota struct {
 	BotHasAvailable bool
 	BotPercentUsed  float64
 	BotPlanLabel    string
+
+	// Other is Cursor's included Other-Models bar (Claude/GPT/Gemini).
+	// OtherFetched is true when GetCurrentPeriodUsage populated it.
+	Other        float64
+	OtherFetched bool
 }
 
 type quotaCacheEntry struct {
@@ -122,6 +127,8 @@ func fetchAccountQuotaLive(acc *auth.Account) (accountQuota, bool) {
 		BotHasAvailable:     snap.BotHasAvailable,
 		BotPercentUsed:      snap.BotPercentUsed,
 		BotPlanLabel:        snap.BotPlanLabel,
+		Other:               snap.APIPercentUsed,
+		OtherFetched:        snap.Fetched.CurrentPeriodUsage,
 	}, true
 }
 
@@ -234,6 +241,37 @@ func botCanOverflow(q accountQuota) bool {
 	return q.BotFetched && q.BotUnlocked && q.BotHasAvailable
 }
 
+// shouldOverflowOtherToBot is the execute-time gate for item 5.
+//
+// quotaExhaustedOther stays conservative for catalog filtering: team
+// accounts often report api_percent_used=100 while usage-based still
+// serves Claude. Dropping those models from for_auth was the 2026-08
+// "unknown provider" incident.
+//
+// Cursor's own overflow is worse than a skip: it rewrites Claude to
+// grok-4.6 with ERROR_RATE_LIMITED_CHANGEABLE ("Other Models usage
+// limit reached"). When the included Other bar is full AND this
+// account can take Sand/bot traffic, send the original model down
+// the bot lane instead of letting Cursor swap it.
+func shouldOverflowOtherToBot(q accountQuota) bool {
+	if !botCanOverflow(q) {
+		return false
+	}
+	if quotaExhaustedOther(q) {
+		return true
+	}
+	return q.OtherFetched && normalizeAutoPercent(q.Other) >= quotaExhaustedAt
+}
+
+func isCursorOtherModelsLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "error_rate_limited_changeable") ||
+		strings.Contains(msg, "other models usage limit")
+}
+
 func nativeBucketExhausted(q accountQuota, bucket string) bool {
 	switch bucket {
 	case quotaBucketCursor:
@@ -306,6 +344,11 @@ type quotaDecision struct {
 
 func decideQuotaLaneFromQuota(model string, quota accountQuota, email string) quotaDecision {
 	bucket := modelQuotaBucket(model)
+	if bucket == quotaBucketOther && shouldOverflowOtherToBot(quota) {
+		fmt.Fprintf(os.Stderr, "[cursor-plugin] quota_route overflow email=%s model=%s from=other to=bot auto=%.4f other=%.4f slow_pool=%v no_usage_based=%v bot_pct=%.4f\n",
+			email, model, quota.Auto, quota.Other, quota.InSlowPool, quota.NoUsageBasedAllowed, quota.BotPercentUsed)
+		return quotaDecision{Lane: quotaLaneBot}
+	}
 	if !nativeBucketExhausted(quota, bucket) {
 		if bucket == quotaBucketBot {
 			return quotaDecision{Lane: quotaLaneBot}
@@ -359,20 +402,27 @@ func applyQuotaLane(chatReq *executor.ChatRequest, storage []byte, model string)
 	if dec.Skip || chatReq == nil || dec.Lane != quotaLaneBot {
 		return dec
 	}
+	applyBotLane(chatReq, storage)
+	return dec
+}
+
+func applyBotLane(chatReq *executor.ChatRequest, storage []byte) {
+	if chatReq == nil {
+		return
+	}
 	chatReq.RPCMode = executor.ChatRPCModeInferenceStream
 	chatReq.ClientTypeOverride = "sand"
 	file, err := cpaformat.Unmarshal(storage)
 	if err != nil {
-		return dec
+		return
 	}
 	if file.RelayURL == "" || file.BoxToken == "" {
-		return dec
+		return
 	}
 	if file.BoxMintedAtMs > 0 && time.Since(time.UnixMilli(file.BoxMintedAtMs)) >= 48*time.Minute {
-		return dec
+		return
 	}
 	chatReq.BoxRelayURL = file.RelayURL
 	chatReq.BoxToken = file.BoxToken
 	chatReq.BoxNetworkToken = file.NetworkToken
-	return dec
 }

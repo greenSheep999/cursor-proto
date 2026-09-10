@@ -495,7 +495,7 @@ func (r *authRegistry) LoadFromDisk() (int, error) {
 			continue
 		}
 		name := e.Name()
-		if !strings.HasPrefix(name, "cursor-") || !strings.HasSuffix(name, ".json") {
+		if !strings.HasSuffix(name, ".json") || strings.HasPrefix(name, ".") {
 			continue
 		}
 		path := filepath.Join(dir, name)
@@ -544,6 +544,10 @@ func accountFromAuthFile(file *cpaformat.AuthFile) *auth.Account {
 		ProxyURL:        file.ProxyURL,
 		Refreshable:     file.Refreshable,
 		RefreshLead:     time.Duration(file.RefreshLeadNanos),
+		RelayURL:        file.RelayURL,
+		BoxToken:        file.BoxToken,
+		NetworkToken:    file.NetworkToken,
+		BoxMintedAtMs:   file.BoxMintedAtMs,
 	}
 	acc.FillSessionDefaults(time.Now())
 	return acc

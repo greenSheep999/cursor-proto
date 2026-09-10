@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -445,6 +446,159 @@ func TestExecuteOverflowsClaudeToBotWhenOtherExhausted(t *testing.T) {
 	}
 	if gotReq.ClientTypeOverride != "sand" {
 		t.Fatalf("ClientTypeOverride = %q, want sand", gotReq.ClientTypeOverride)
+	}
+}
+
+func TestExecuteOverflowsClaudeWhenOtherPercentFullAndBotReady(t *testing.T) {
+	previous := fetchAccountQuota
+	resetQuotaCache()
+	fetchAccountQuota = func(*auth.Account) (accountQuota, bool) {
+		return accountQuota{
+			Auto:            0.12,
+			Other:           1.0,
+			OtherFetched:    true,
+			BotFetched:      true,
+			BotUnlocked:     true,
+			BotHasAvailable: true,
+		}, true
+	}
+	t.Cleanup(func() {
+		fetchAccountQuota = previous
+		resetQuotaCache()
+	})
+	var gotReq *executor.ChatRequest
+	runner := &fakeRunner{
+		events: []executor.ChatEvent{
+			buildTextDeltaEvent("ok"),
+			buildTurnEndedEvent(4, 1),
+		},
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) {
+			return captureRunner{inner: runner, got: &gotReq}, "unit@example.com", nil
+		},
+		nil,
+	)()
+
+	file := &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:        cpaformat.ProviderType,
+			AccessToken: "AT",
+			Email:       "other-full@example.com",
+		},
+	}
+	storage, err := file.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := executorRequest{
+		AuthID:       "other-full@example.com",
+		AuthProvider: "cursor",
+		Model:        "claude-sonnet-4-6",
+		Format:       "claude",
+		Payload:      []byte(`{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"hi"}]}`),
+		StorageJSON:  storage,
+	}
+	rawRequest, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, rc := dispatch("executor.execute", rawRequest)
+	if rc != 0 {
+		t.Fatalf("rc = %d envelope=%s", rc, raw)
+	}
+	var env envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatal(err)
+	}
+	if !env.OK {
+		t.Fatalf("claude should overflow to bot on full Other bar, got %s", raw)
+	}
+	if gotReq == nil || gotReq.RPCMode != executor.ChatRPCModeInferenceStream {
+		t.Fatalf("RPCMode = %#v, want inference_stream", gotReq)
+	}
+	if gotReq.ClientTypeOverride != "sand" {
+		t.Fatalf("ClientTypeOverride = %q, want sand", gotReq.ClientTypeOverride)
+	}
+}
+
+func TestExecuteKeepsClaudeNativeWhenOtherPercentFullButNoBot(t *testing.T) {
+	previous := fetchAccountQuota
+	resetQuotaCache()
+	fetchAccountQuota = func(*auth.Account) (accountQuota, bool) {
+		return accountQuota{
+			Auto:         0.12,
+			Other:        1.0,
+			OtherFetched: true,
+			BotFetched:   true,
+			BotUnlocked:  false,
+		}, true
+	}
+	t.Cleanup(func() {
+		fetchAccountQuota = previous
+		resetQuotaCache()
+	})
+	var gotReq *executor.ChatRequest
+	runner := &fakeRunner{
+		events: []executor.ChatEvent{
+			buildTextDeltaEvent("ok"),
+			buildTurnEndedEvent(4, 1),
+		},
+	}
+	defer installFakes(t,
+		func(_ string, _ []byte) (chatRunner, string, error) {
+			return captureRunner{inner: runner, got: &gotReq}, "unit@example.com", nil
+		},
+		nil,
+	)()
+
+	file := &cpaformat.AuthFile{
+		CursorTokenStorage: cpaformat.CursorTokenStorage{
+			Type:        cpaformat.ProviderType,
+			AccessToken: "AT",
+			Email:       "no-bot@example.com",
+		},
+	}
+	storage, err := file.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := executorRequest{
+		AuthID:       "no-bot@example.com",
+		AuthProvider: "cursor",
+		Model:        "claude-sonnet-4-6",
+		Format:       "claude",
+		Payload:      []byte(`{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"hi"}]}`),
+		StorageJSON:  storage,
+	}
+	rawRequest, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, rc := dispatch("executor.execute", rawRequest)
+	if rc != 0 {
+		t.Fatalf("rc = %d envelope=%s", rc, raw)
+	}
+	var env envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatal(err)
+	}
+	if !env.OK {
+		t.Fatalf("claude should stay native without bot overflow, got %s", raw)
+	}
+	if gotReq == nil || gotReq.RPCMode == executor.ChatRPCModeInferenceStream {
+		t.Fatalf("RPCMode = %#v, want native", gotReq)
+	}
+}
+
+func TestIsCursorOtherModelsLimitError(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("cursor upstream: Other Models usage limit reached: Switched to grok-4.6 after reaching Other Models usage limit. (grpc-status=8, ERROR_RATE_LIMITED_CHANGEABLE)")
+	if !isCursorOtherModelsLimitError(err) {
+		t.Fatal("expected other-models limit detector to match Cursor rewrite error")
+	}
+	if isCursorOtherModelsLimitError(fmt.Errorf("cursor upstream: permission denied")) {
+		t.Fatal("permission denied is not an other-models limit")
 	}
 }
 

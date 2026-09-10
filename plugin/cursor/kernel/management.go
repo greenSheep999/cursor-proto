@@ -139,6 +139,16 @@ func managementRegisterResult() string {
 			"Menu":        quotaSlotMenuSentinel,
 			"Description": "Plugin-quota-slot manifest — describes column layout + row actions for CPA's /quota page. Consumed by CPA-frontend PluginQuotaSection at plugin-discovery time. Absent = plugin has no slot.",
 		},
+		// Short resource path so GET /v0/resource/plugins/cursor/quota-slot-manifest
+		// works. The prefixed route above becomes
+		// /v0/resource/plugins/cursor/cli-proxy-api/cursor/quota-slot-manifest;
+		// older frontends and the Quota page fallback probe the short URL.
+		{
+			"Method":      http.MethodGet,
+			"Path":        "/quota-slot-manifest",
+			"Menu":        quotaSlotMenuSentinel,
+			"Description": "Same quota-slot manifest on the short resource path.",
+		},
 	}
 	body := map[string]any{
 		"routes":     routes,
