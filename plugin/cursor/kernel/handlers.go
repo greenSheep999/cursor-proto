@@ -306,11 +306,21 @@ func handleAuthParse(payload []byte) ([]byte, int) {
 		return errorEnvelope("marshal_storage", err.Error(), false), 1
 	}
 
+	// ID must match how CPA's ModelRegistry keys clients AND how the panel
+	// looks them up. CPA's non-plugin loader uses authIDForPath — i.e. the
+	// path relative to authDir, which for a flat auth-dir is the bare
+	// filename. Returning req.Path (an absolute path inside the container)
+	// registered the model catalog under a different key than the panel's
+	// GetAuthFileModels lookup used, so /v0/management/auth-files/models
+	// answered `{"models":[]}` even after live discovery had reported 665
+	// models registered — the exact "No available models for this credential"
+	// state observed on cpa.muxpay.xyz. Match the file-loader convention by
+	// using the filename here.
 	resp := authParseResponse{
 		Handled: true,
 		Auth: authData{
 			Provider:    pluginName,
-			ID:          req.Path,
+			ID:          fileName,
 			FileName:    fileName,
 			Label:       label,
 			Prefix:      auth.Prefix,
