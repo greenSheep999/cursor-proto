@@ -108,8 +108,18 @@ func parseConnectEndStream(raw []byte) *TrailerStatus {
 			} `json:"details"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Error == nil {
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		// Not JSON at all — cannot be a Connect end-of-stream frame.
 		return &TrailerStatus{Code: 13, Message: string(raw)}
+	}
+	if envelope.Error == nil {
+		// Connect's end-of-stream frame carries an "error" key ONLY on failure.
+		// A successful stream ends with `{}` (or `{"metadata":{...}}`). Treating
+		// that absence as code 13 turned every successful InferenceService/Stream
+		// turn into a synthetic "cursor upstream: {} (grpc-status=13)" error,
+		// which is what broke the whole Sand/box-relay lane: the text arrived
+		// and was then discarded by the caller's trailer check.
+		return &TrailerStatus{Code: 0}
 	}
 	status := &TrailerStatus{Code: connectCodeNumber(envelope.Error.Code), Message: envelope.Error.Message}
 	if len(envelope.Error.Details) > 0 && envelope.Error.Details[0].Debug.Error != "" &&
