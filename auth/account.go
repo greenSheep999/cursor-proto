@@ -93,13 +93,55 @@ func sanitizeEmail(email string) string {
 	return r.Replace(strings.ToLower(email))
 }
 
-// SaveAccount writes the account to disk (0600 perms).
+// AccountFileProviderType is the value CPA's synthesizer requires in every
+// on-disk account's top-level "type" field to accept it as a Cursor account.
+// A file written without it fails cpaformat.Unmarshal with
+// `unexpected type "" (want "cursor")` and every request routed through the
+// plugin surfaces as `bad_auth: validate storage`. Duplicated with
+// sdk/cpaformat.ProviderType to avoid an auth→cpaformat import cycle
+// (cpaformat already imports auth). Kept in sync via a test in that package.
+const AccountFileProviderType = "cursor"
+
+// SaveAccount writes the account to disk (0600 perms) in the on-disk shape
+// CPA's cpaformat.Unmarshal accepts. Two adjustments happen relative to a
+// naive struct marshal:
+//
+//   - inject "type":"cursor" — CPA rejects files without this discriminator
+//     with `unexpected type "" (want "cursor")`.
+//   - rename "auth_type" → "auth_kind" — the Go struct calls it AuthType
+//     ("Auth_0" | "workos" | ...), but CPA's on-disk field is "auth_kind".
+//     Every account already deployed to production carries this key; without
+//     the rename, refresh/telemetry paths treat the account as unclassified.
+//
+// Neither adjustment is a field addition on Account, so in-memory callers and
+// existing tests stay unchanged. The regression this closes: `cursor-login`
+// (and the three sibling import CLIs) had been writing accounts without
+// either key since the FromAccount converter was introduced but never wired
+// into the save path — this is exactly the "已经写好了却卡壳" case.
 func SaveAccount(dir string, a *Account) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	path := AccountFilePath(dir, a.Email)
-	buf, err := json.MarshalIndent(a, "", "  ")
+	raw, err := json.Marshal(a)
+	if err != nil {
+		return "", err
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return "", err
+	}
+	if _, present := obj["type"]; !present {
+		typeVal, _ := json.Marshal(AccountFileProviderType)
+		obj["type"] = typeVal
+	}
+	if v, present := obj["auth_type"]; present {
+		if _, already := obj["auth_kind"]; !already {
+			obj["auth_kind"] = v
+		}
+		delete(obj, "auth_type")
+	}
+	buf, err := json.MarshalIndent(obj, "", "  ")
 	if err != nil {
 		return "", err
 	}
