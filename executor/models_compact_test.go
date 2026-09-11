@@ -23,13 +23,13 @@ func TestCompactModelListingCollapsesVariantsToParameters(t *testing.T) {
 	resp := &cursorpb.AiserverV1_AvailableModelsResponse{
 		Models: []*cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel{
 			{
-				Name:              "claude-opus-5",
-				ClientDisplayName: strPtr("Claude Opus 5"),
-				SupportsThinking:  boolPtr(true),
-				SupportsMaxMode:   boolPtr(true),
-				SupportsImages:    boolPtr(true),
-				SupportsAgent:     boolPtr(true),
-				ContextTokenLimit: int32Ptr(200000),
+				Name:                        "claude-opus-5",
+				ClientDisplayName:           strPtr("Claude Opus 5"),
+				SupportsThinking:            boolPtr(true),
+				SupportsMaxMode:             boolPtr(true),
+				SupportsImages:              boolPtr(true),
+				SupportsAgent:               boolPtr(true),
+				ContextTokenLimit:           int32Ptr(200000),
 				ContextTokenLimitForMaxMode: int32Ptr(1000000),
 				ParameterDefinitions: []*cursorpb.AiserverV1_ModelParameterDefinition{
 					booleanParam("thinking", "Thinking", "true", "false"),

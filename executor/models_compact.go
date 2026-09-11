@@ -36,7 +36,7 @@ type CompactModel struct {
 
 	// ContextTokenLimit / ContextTokenLimitForMaxMode carry the numeric
 	// context window Cursor advertises for each mode. Zero means unknown.
-	ContextTokenLimit          int32 `json:"context_token_limit,omitempty"`
+	ContextTokenLimit           int32 `json:"context_token_limit,omitempty"`
 	ContextTokenLimitForMaxMode int32 `json:"context_token_limit_for_max_mode,omitempty"`
 
 	// Parameters describes each user-tunable knob (thinking/effort/fast/...)
