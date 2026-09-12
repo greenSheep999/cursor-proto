@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"strings"
 	"testing"
 
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
@@ -62,17 +63,70 @@ func TestRoutableModelIDsIncludeLiveVariants(t *testing.T) {
 	want := []string{
 		"claude-opus-5",
 		"claude-opus-5-high",
-		"claude-opus-5-thinking-high",
 		"claude-opus-5-low",
 		"claude-sonnet-5",
 		"claude-sonnet-5-thinking-max",
 	}
+	// VariantStringRepresentation ("claude-opus-5-thinking-high" in this
+	// fixture, but in production the exploded form
+	// "claude-opus-5[thinking=false,context=300k,effort=high,fast=false]")
+	// is DELIBERATELY excluded now. Every real client sends the LegacySlug,
+	// and advertising the parameterised form doubles the id count for zero
+	// routable benefit while flooding the management panel with
+	// cartesian-product noise (~10 short slugs + ~10 exploded forms per
+	// base model).
 	if len(got) != len(want) {
 		t.Fatalf("len = %d, want %d (%v)", len(got), len(want), got)
 	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("got[%d] = %q, want %q (all=%v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+// TestRoutableModelIDsSkipsExplodedParameterisedForm guards against the
+// specific regression that flooded the management panel's Supported Models
+// modal with 629 entries. When the catalog carries the modern parameterised
+// form alongside a LegacySlug, we advertise only the slug — the exploded
+// form is an internal wire identifier and no client (Claude Code,
+// cursor-proxy, cctest, the IDE picker itself) requests it verbatim.
+func TestRoutableModelIDsSkipsExplodedParameterisedForm(t *testing.T) {
+	resp := &cursorpb.AiserverV1_AvailableModelsResponse{
+		Models: []*cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel{
+			{
+				Name: "claude-opus-5",
+				Variants: []*cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig{
+					{
+						LegacySlug:                  strPtr("claude-opus-5-high"),
+						VariantStringRepresentation: strPtr("claude-opus-5[thinking=false,context=300k,effort=high,fast=false]"),
+					},
+					{
+						LegacySlug:                  strPtr("claude-opus-5-thinking-max"),
+						VariantStringRepresentation: strPtr("claude-opus-5[thinking=true,context=300k,effort=max,fast=false]"),
+					},
+				},
+			},
+		},
+	}
+	got := RoutableModelIDs(resp)
+	for _, id := range got {
+		if strings.Contains(id, "[") {
+			t.Fatalf("routable id %q contains exploded parameterised form; must advertise LegacySlug only", id)
+		}
+	}
+	// Verify the LegacySlug forms are still there.
+	want := map[string]bool{"claude-opus-5": true, "claude-opus-5-high": true, "claude-opus-5-thinking-max": true}
+	for id := range want {
+		found := false
+		for _, g := range got {
+			if g == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %q in routable list, got %v", id, got)
 		}
 	}
 }

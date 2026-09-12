@@ -177,8 +177,22 @@ func RoutableModelIDs(resp *cursorpb.AiserverV1_AvailableModelsResponse) []strin
 			add(name)
 		}
 		for _, variant := range model.GetVariants() {
+			// LegacySlug is the short, IDE-picker form
+			// ("claude-opus-5-high", "claude-opus-5-thinking-max"). Every
+			// real request from Claude Code, cursor-proxy, cctest, and the
+			// IDE itself uses this shape.
+			//
+			// VariantStringRepresentation is the exploded parameterised
+			// form ("claude-opus-5[thinking=false,context=300k,effort=high,
+			// fast=false]") which the catalog carries as an internal
+			// identifier — no client ever sends it, and Cursor server
+			// accepts the short slug via the alias table (see
+			// resolveRequestedModelFromCatalog). Advertising both doubles
+			// the routable id count and floods the management panel's
+			// model listing with cartesian-product noise (~10 short slugs
+			// + ~10 exploded forms per base model, so ~38 base × ~20 =
+			// 600+ rows where the IDE shows ~38). Keep only the slug.
 			add(variant.GetLegacySlug())
-			add(variant.GetVariantStringRepresentation())
 		}
 		// Some catalog revisions populate legacy_slugs without expanding the
 		// Variants field. Restrict these to children of the primary id so short
