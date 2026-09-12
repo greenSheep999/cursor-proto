@@ -105,6 +105,91 @@ func TestCompactModelListingCollapsesVariantsToParameters(t *testing.T) {
 	}
 }
 
+// TestCompactModelListingEmitsVariantsWithTierAndCostFlags pins the
+// downstream billing contract: when the catalog carries variants with
+// parameter_definitions that flag certain values as increases_model_cost,
+// CompactModelListing must project each variant slug with:
+//  1. the parameter values it resolves to (for base+params submission),
+//  2. a Tier index counting how many cost-flagged values it uses,
+//  3. is_max_mode carried over (max mode also counts one tier).
+//
+// This is the data an operations layer (New API's ModelRatio table, a
+// billing dashboard) consumes to price variants without hand-maintaining a
+// per-slug table.
+func TestCompactModelListingEmitsVariantsWithTierAndCostFlags(t *testing.T) {
+	resp := &cursorpb.AiserverV1_AvailableModelsResponse{
+		Models: []*cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel{
+			{
+				Name: "claude-opus-5",
+				ParameterDefinitions: []*cursorpb.AiserverV1_ModelParameterDefinition{
+					enumParamWithCosts("effort", "Effort", map[string]bool{
+						"low": false, "medium": false, "high": true, "xhigh": true, "max": true,
+					}),
+					booleanParamWithCosts("thinking", "Thinking", map[string]bool{
+						"true": true, "false": false,
+					}),
+					booleanParamWithCosts("fast", "Fast", map[string]bool{
+						"true": true, "false": false,
+					}),
+				},
+				Variants: []*cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig{
+					variantConfig("claude-opus-5-low", map[string]string{"effort": "low", "thinking": "false", "fast": "false"}, false, true, false),
+					variantConfig("claude-opus-5-high", map[string]string{"effort": "high", "thinking": "false", "fast": "false"}, false, false, false),
+					variantConfig("claude-opus-5-thinking-max", map[string]string{"effort": "max", "thinking": "true", "fast": "false"}, false, false, false),
+					variantConfig("claude-opus-5-thinking-max-fast", map[string]string{"effort": "max", "thinking": "true", "fast": "true"}, true, false, true),
+				},
+			},
+		},
+	}
+	compact := CompactModelListing(resp)
+	if len(compact) != 1 || compact[0].ID != "claude-opus-5" {
+		t.Fatalf("expected one CompactModel for claude-opus-5, got %+v", compact)
+	}
+	vs := compact[0].Variants
+	if len(vs) != 4 {
+		t.Fatalf("variants len = %d, want 4", len(vs))
+	}
+	// Sorted by tier ascending, then by slug.
+	// Tier 0: claude-opus-5-low   (no cost flags)
+	// Tier 1: claude-opus-5-high  (effort=high)
+	// Tier 3: claude-opus-5-thinking-max (thinking=true + effort=max + [max_mode was false here])
+	// Tier 4: claude-opus-5-thinking-max-fast (adds fast + is_max_mode=true)
+	wantOrder := []struct {
+		slug string
+		tier int
+	}{
+		{"claude-opus-5-low", 0},
+		{"claude-opus-5-high", 1},
+		{"claude-opus-5-thinking-max", 2},
+		{"claude-opus-5-thinking-max-fast", 4},
+	}
+	for i, w := range wantOrder {
+		if vs[i].Slug != w.slug || vs[i].Tier != w.tier {
+			t.Errorf("variant[%d] = %s tier=%d, want %s tier=%d",
+				i, vs[i].Slug, vs[i].Tier, w.slug, w.tier)
+		}
+	}
+	// The parameter_values map on tier-2 variant must faithfully reproduce
+	// what a base+params submission needs to reach that variant, so an
+	// operator can wire it into New API's routing table directly.
+	tier2 := vs[2]
+	if tier2.ParameterValues["thinking"] != "true" || tier2.ParameterValues["effort"] != "max" {
+		t.Errorf("tier-2 parameter_values = %+v; want thinking=true effort=max", tier2.ParameterValues)
+	}
+	if !tier2.IsDefault && tier2.IsDefault == vs[0].IsDefault && vs[0].IsDefault {
+		t.Errorf("only claude-opus-5-low was flagged default; propagation is wrong")
+	}
+	// Sanity: default flag survives round-trip.
+	if !vs[0].IsDefault {
+		t.Errorf("claude-opus-5-low should carry IsDefault=true, got %+v", vs[0])
+	}
+	// is_max_mode variant surfaces the flag AND adds one to tier.
+	last := vs[3]
+	if !last.IsMaxMode {
+		t.Errorf("claude-opus-5-thinking-max-fast is_max_mode not propagated: %+v", last)
+	}
+}
+
 // The exploded-variant catalog shape (Cursor still occasionally serves it when
 // use_model_parameters is ignored) folds every variant row back to its primary
 // id via baseModelID — the compact view must not duplicate. This test guards
@@ -203,4 +288,60 @@ func enumParam(id, name string, values []string, _ string) *cursorpb.AiserverV1_
 			},
 		},
 	}
+}
+
+func enumParamWithCosts(id, name string, valueCosts map[string]bool) *cursorpb.AiserverV1_ModelParameterDefinition {
+	vs := make([]*cursorpb.AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue, 0, len(valueCosts))
+	for v, cost := range valueCosts {
+		e := &cursorpb.AiserverV1_ModelParameterDefinition_EnumParameterDefinition_EnumParameterValue{Value: v}
+		if cost {
+			e.IncreasesModelCost = boolPtr(true)
+		}
+		vs = append(vs, e)
+	}
+	return &cursorpb.AiserverV1_ModelParameterDefinition{
+		Id:   id,
+		Name: name,
+		ParameterType: &cursorpb.AiserverV1_ModelParameterDefinition_ModelParameterType{
+			EnumParameter: &cursorpb.AiserverV1_ModelParameterDefinition_EnumParameterDefinition{
+				Values: vs,
+			},
+		},
+	}
+}
+
+func booleanParamWithCosts(id, name string, valueCosts map[string]bool) *cursorpb.AiserverV1_ModelParameterDefinition {
+	vs := make([]*cursorpb.AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue, 0, len(valueCosts))
+	for v, cost := range valueCosts {
+		e := &cursorpb.AiserverV1_ModelParameterDefinition_BooleanParameterDefinition_BooleanParameterValue{Value: v}
+		if cost {
+			e.IncreasesModelCost = boolPtr(true)
+		}
+		vs = append(vs, e)
+	}
+	return &cursorpb.AiserverV1_ModelParameterDefinition{
+		Id:   id,
+		Name: name,
+		ParameterType: &cursorpb.AiserverV1_ModelParameterDefinition_ModelParameterType{
+			BooleanParameter: &cursorpb.AiserverV1_ModelParameterDefinition_BooleanParameterDefinition{
+				Values: vs,
+			},
+		},
+	}
+}
+
+func variantConfig(slug string, params map[string]string, isMaxMode, isDefault, _ bool) *cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig {
+	pvs := make([]*cursorpb.AgentV1_RequestedModel_ModelParameterValue, 0, len(params))
+	for k, v := range params {
+		pvs = append(pvs, &cursorpb.AgentV1_RequestedModel_ModelParameterValue{Id: k, Value: v})
+	}
+	v := &cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig{
+		LegacySlug:      strPtr(slug),
+		ParameterValues: pvs,
+		IsMaxMode:       isMaxMode,
+	}
+	if isDefault {
+		v.IsDefaultNonMaxConfig = boolPtr(true)
+	}
+	return v
 }
