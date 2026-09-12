@@ -8,7 +8,11 @@ package executor
 // tools) can present the same UX the IDE does.
 
 import (
+	"fmt"
+	"os"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	cursorpb "github.com/router-for-me/cursor-proto/gen/cursor"
@@ -60,19 +64,47 @@ type CompactModel struct {
 }
 
 // CompactVariant is one routable slug for a base model. Slug is what a
-// client actually sends when it wants a specific configuration; ParameterValues
-// is the equivalent {parameter_id: value} map for base+parameters submission.
-// Tier is 0 for the default variant and increases with each "increases model
-// cost" flag on the parameter values used — see CompactModelListing for the
-// exact scoring rule.
+// client actually sends when it wants a specific configuration;
+// ParameterValues is the equivalent {parameter_id: value} map for
+// base+parameters submission.
+//
+// CostMultiplier is Cursor's own pricing factor relative to the base
+// variant (base = 1.0). It combines two sources:
+//
+//  1. The variant's tooltip_data.markdown_content string, which Cursor
+//     server writes into the picker UI. When fast mode is on, the
+//     tooltip contains "at Nx the price, using Anthropic's fast mode",
+//     so we extract the multiplier verbatim.
+//  2. Cursor's advertised max-mode pricing (6x by default), applied
+//     when is_max_mode is true. The 6x default is what Cursor's
+//     dashboard has published; override via env
+//     CURSOR_MAX_MODE_COST_MULTIPLIER to track future changes without
+//     a plugin rebuild.
+//
+// Effort tiers (low/medium/high/xhigh/max) DO NOT increase price on
+// their own — Cursor bills them at the same rate as the base — so they
+// do not contribute to CostMultiplier. Thinking on/off is the same
+// wire model with a reasoning gate; also no price change.
 type CompactVariant struct {
 	Slug            string            `json:"slug"`
 	DisplayName     string            `json:"display_name,omitempty"`
 	IsMaxMode       bool              `json:"is_max_mode,omitempty"`
 	IsDefault       bool              `json:"is_default,omitempty"`
 	ParameterValues map[string]string `json:"parameter_values,omitempty"`
-	CostFlags       []string          `json:"cost_flags,omitempty"`
-	Tier            int               `json:"tier"`
+	// CostMultiplier is the price factor Cursor charges for this variant
+	// compared to the base (base = 1.0). fast=true adds the multiplier
+	// Cursor puts in the tooltip ("2x the price"), is_max_mode adds the
+	// Cursor max-mode factor (6x by default, override via
+	// CURSOR_MAX_MODE_COST_MULTIPLIER). Both apply multiplicatively.
+	CostMultiplier float64 `json:"cost_multiplier"`
+	// CostFlags is the human-readable breakdown of what contributed to
+	// CostMultiplier. Example: ["fast=2x", "max_mode=6x"] on a
+	// fast+max variant would multiply out to 12x.
+	CostFlags []string `json:"cost_flags,omitempty"`
+	// Tier is a coarse integer bucket derived from CostMultiplier,
+	// intended for UIs that only need "base / mid / premium" grouping:
+	// 0 for 1x, 1 for <=2x, 2 for <=4x, 3 for <=8x, 4 for >8x.
+	Tier int `json:"tier"`
 }
 
 // CompactParameter matches Cursor's ModelParameterDefinition wire shape but
@@ -201,53 +233,82 @@ func compactParameterDefinitions(defs []*cursorpb.AiserverV1_ModelParameterDefin
 }
 
 // compactVariants enumerates the routable variant slugs for one base model
-// with the parameter values they resolve to and a coarse cost tier index.
+// with the parameter values they resolve to and Cursor's own cost multiplier.
 //
-// Tier scoring: each parameter value that Cursor'"'"'s catalog flagged with
-// increases_model_cost=true contributes one point, plus one point when the
-// variant sits under is_max_mode=true. Tier 0 is the default variant (no
-// upgrades). This mirrors what the IDE picker uses to badge premium tiers
-// and lets an operator generate consistent New API ModelRatio entries
-// without hand-maintaining a per-slug price table.
+// Cost model (matches Cursor's live dashboard, verified against
+// TooltipData.markdown_content from a real 3.19.7 catalog on 2026-09-12):
+//
+//   - base = 1.0x
+//   - fast=true: the tooltip carries a "Nx the price" string (typically
+//     2x for Anthropic fast mode); we parse it out per variant so a
+//     future change to that number auto-propagates.
+//   - is_max_mode=true: Cursor charges max mode at 6x by default. That
+//     number is dashboard-only (not in the wire protocol), so it lives
+//     as a plugin constant. Override via CURSOR_MAX_MODE_COST_MULTIPLIER
+//     if Cursor changes it.
+//   - effort tiers (low/medium/high/xhigh/max) and thinking on/off:
+//     Cursor does NOT bill differently — they are routing knobs, not
+//     price levers — so they do not affect CostMultiplier.
+//
+// Fast + max_mode combine multiplicatively (2 * 6 = 12x for a
+// fast max-mode variant), which is what Cursor's dashboard shows.
 //
 // The exploded parameter-string form (VariantStringRepresentation, e.g.
 // "claude-opus-5[thinking=true,context=1m,effort=max,fast=true]") is
 // deliberately not emitted here — no client submits it verbatim, and the
 // short LegacySlug ("claude-opus-5-thinking-max-fast") is the routable
 // name every real caller uses.
+// fastCostMultiplierRE captures the "at Nx the price" phrase Cursor
+// server writes into a variant tooltip when fast mode adds a premium.
+// Sampled 2026-09-12 against a live 3.19.7 catalog:
+//
+//	"...at 2x the price, using Anthropic's fast mode..."
+//
+// The regex tolerates decimal multipliers (e.g. "1.5x") in case Cursor
+// changes the number for a specific model family in the future.
+var fastCostMultiplierRE = regexp.MustCompile(`at\s+(\d+(?:\.\d+)?)x\s+the\s+price`)
+
+// defaultMaxModeCostMultiplier is Cursor's published max-mode premium
+// (6x). Not in the wire protocol — sourced from Cursor's dashboard.
+// Override at plugin startup via CURSOR_MAX_MODE_COST_MULTIPLIER.
+const defaultMaxModeCostMultiplier = 6.0
+
+func maxModeCostMultiplier() float64 {
+	raw := strings.TrimSpace(os.Getenv("CURSOR_MAX_MODE_COST_MULTIPLIER"))
+	if raw == "" {
+		return defaultMaxModeCostMultiplier
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || v <= 0 {
+		return defaultMaxModeCostMultiplier
+	}
+	return v
+}
+
+// costMultiplierTier buckets a raw multiplier into a coarse integer for
+// UIs that want a small badge instead of a decimal. 1x → 0, ≤2x → 1,
+// ≤4x → 2, ≤8x → 3, >8x → 4. Matches how Cursor's own picker groups
+// premium tiers.
+func costMultiplierTier(m float64) int {
+	switch {
+	case m <= 1.0:
+		return 0
+	case m <= 2.0:
+		return 1
+	case m <= 4.0:
+		return 2
+	case m <= 8.0:
+		return 3
+	default:
+		return 4
+	}
+}
+
 func compactVariants(model *cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel) []CompactVariant {
 	if model == nil {
 		return nil
 	}
-	// Pre-compute the (paramID, value) → increases_cost lookup from the
-	// parameter_definitions so per-variant scoring is O(1) per pair.
-	costFlagged := make(map[string]bool)
-	for _, def := range model.GetParameterDefinitions() {
-		if def == nil {
-			continue
-		}
-		id := strings.TrimSpace(def.GetId())
-		if id == "" {
-			continue
-		}
-		pt := def.GetParameterType()
-		if pt.GetBooleanParameter() != nil {
-			for _, v := range pt.GetBooleanParameter().GetValues() {
-				if v == nil || !v.GetIncreasesModelCost() {
-					continue
-				}
-				costFlagged[id+"="+strings.TrimSpace(v.GetValue())] = true
-			}
-		}
-		if pt.GetEnumParameter() != nil {
-			for _, v := range pt.GetEnumParameter().GetValues() {
-				if v == nil || !v.GetIncreasesModelCost() {
-					continue
-				}
-				costFlagged[id+"="+strings.TrimSpace(v.GetValue())] = true
-			}
-		}
-	}
+	maxMul := maxModeCostMultiplier()
 
 	seen := make(map[string]struct{})
 	out := make([]CompactVariant, 0, len(model.GetVariants()))
@@ -262,14 +323,13 @@ func compactVariants(model *cursorpb.AiserverV1_AvailableModelsResponse_Availabl
 		if _, dup := seen[slug]; dup {
 			// The catalog can repeat a slug across max/non-max context
 			// windows (context=300k vs context=1m for the same effort).
-			// Keep the first — CPA'"'"'s scheduler sees identical routing.
+			// Keep the first — CPA's scheduler sees identical routing.
 			continue
 		}
 		seen[slug] = struct{}{}
 
 		params := make(map[string]string, len(v.GetParameterValues()))
-		var flags []string
-		tier := 0
+		fastVal := ""
 		for _, pv := range v.GetParameterValues() {
 			if pv == nil {
 				continue
@@ -280,30 +340,76 @@ func compactVariants(model *cursorpb.AiserverV1_AvailableModelsResponse_Availabl
 				continue
 			}
 			params[id] = val
-			if costFlagged[id+"="+val] {
-				flags = append(flags, id+"="+val)
-				tier++
+			if id == "fast" {
+				fastVal = val
 			}
 		}
-		if v.GetIsMaxMode() {
-			tier++
-			flags = append(flags, "max_mode")
+
+		multiplier := 1.0
+		var flags []string
+		if fastVal == "true" {
+			fastMul := extractFastCostMultiplier(v)
+			if fastMul <= 0 {
+				fastMul = 2.0 // fallback matches Cursor's default fast pricing
+			}
+			multiplier *= fastMul
+			flags = append(flags, fmt.Sprintf("fast=%sx", trimTrailingZeros(fastMul)))
 		}
+		if v.GetIsMaxMode() {
+			multiplier *= maxMul
+			flags = append(flags, fmt.Sprintf("max_mode=%sx", trimTrailingZeros(maxMul)))
+		}
+
 		out = append(out, CompactVariant{
 			Slug:            slug,
 			DisplayName:     strings.TrimSpace(v.GetDisplayName()),
 			IsMaxMode:       v.GetIsMaxMode(),
 			IsDefault:       v.GetIsDefaultNonMaxConfig() || v.GetIsDefaultMaxConfig(),
 			ParameterValues: params,
+			CostMultiplier:  multiplier,
 			CostFlags:       flags,
-			Tier:            tier,
+			Tier:            costMultiplierTier(multiplier),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Tier != out[j].Tier {
-			return out[i].Tier < out[j].Tier
+		if out[i].CostMultiplier != out[j].CostMultiplier {
+			return out[i].CostMultiplier < out[j].CostMultiplier
 		}
 		return out[i].Slug < out[j].Slug
 	})
 	return out
+}
+
+// extractFastCostMultiplier reads the price multiplier out of the
+// variant's tooltip markdown, which Cursor server populates with a
+// literal "at Nx the price" phrase when fast mode adds a premium.
+// Returns 0 when the tooltip isn't present (older catalogs) so the
+// caller can fall back to the default.
+func extractFastCostMultiplier(v *cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig) float64 {
+	if v == nil {
+		return 0
+	}
+	td := v.GetTooltipData()
+	if td == nil {
+		return 0
+	}
+	candidates := []string{td.GetMarkdownContent(), td.GetSecondaryText(), td.GetPrimaryText()}
+	for _, s := range candidates {
+		if s == "" {
+			continue
+		}
+		if m := fastCostMultiplierRE.FindStringSubmatch(s); len(m) == 2 {
+			if val, err := strconv.ParseFloat(m[1], 64); err == nil && val > 0 {
+				return val
+			}
+		}
+	}
+	return 0
+}
+
+// trimTrailingZeros formats a float without unnecessary trailing zeros
+// (2.0 → "2", 1.5 → "1.5") so cost_flags read naturally.
+func trimTrailingZeros(v float64) string {
+	s := strconv.FormatFloat(v, 'f', -1, 64)
+	return s
 }

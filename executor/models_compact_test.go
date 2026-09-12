@@ -149,44 +149,136 @@ func TestCompactModelListingEmitsVariantsWithTierAndCostFlags(t *testing.T) {
 	if len(vs) != 4 {
 		t.Fatalf("variants len = %d, want 4", len(vs))
 	}
-	// Sorted by tier ascending, then by slug.
-	// Tier 0: claude-opus-5-low   (no cost flags)
-	// Tier 1: claude-opus-5-high  (effort=high)
-	// Tier 3: claude-opus-5-thinking-max (thinking=true + effort=max + [max_mode was false here])
-	// Tier 4: claude-opus-5-thinking-max-fast (adds fast + is_max_mode=true)
-	wantOrder := []struct {
-		slug string
-		tier int
-	}{
-		{"claude-opus-5-low", 0},
-		{"claude-opus-5-high", 1},
-		{"claude-opus-5-thinking-max", 2},
-		{"claude-opus-5-thinking-max-fast", 4},
+	// Cursor's real pricing (verified live 2026-09-12 against the 3.19.7
+	// catalog): effort tiers and thinking are FREE upgrades. Only fast
+	// mode and max_mode change the multiplier. Sort order is by
+	// CostMultiplier ascending, then by slug.
+	//
+	//   claude-opus-5-low                  → 1.0x (base)
+	//   claude-opus-5-high                 → 1.0x (effort tier alone, free)
+	//   claude-opus-5-thinking-max         → 1.0x (thinking alone, free)
+	//   claude-opus-5-thinking-max-fast    → 12.0x (fast=2x × max_mode=6x)
+	//
+	// The last variant is is_max_mode=true so it pays both fast and
+	// max_mode. The first two both stay at 1.0x, tiebreak by slug puts
+	// -high before -low alphabetically? Actually 'high' < 'low' → yes.
+	wantMultipliers := map[string]float64{
+		"claude-opus-5-high":              1.0,
+		"claude-opus-5-low":               1.0,
+		"claude-opus-5-thinking-max":      1.0,
+		"claude-opus-5-thinking-max-fast": 12.0,
 	}
-	for i, w := range wantOrder {
-		if vs[i].Slug != w.slug || vs[i].Tier != w.tier {
-			t.Errorf("variant[%d] = %s tier=%d, want %s tier=%d",
-				i, vs[i].Slug, vs[i].Tier, w.slug, w.tier)
+	seen := map[string]float64{}
+	for _, v := range vs {
+		seen[v.Slug] = v.CostMultiplier
+	}
+	for slug, want := range wantMultipliers {
+		got, ok := seen[slug]
+		if !ok {
+			t.Errorf("missing variant %q in compact output", slug)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s: CostMultiplier = %g, want %g", slug, got, want)
 		}
 	}
-	// The parameter_values map on tier-2 variant must faithfully reproduce
-	// what a base+params submission needs to reach that variant, so an
-	// operator can wire it into New API's routing table directly.
-	tier2 := vs[2]
-	if tier2.ParameterValues["thinking"] != "true" || tier2.ParameterValues["effort"] != "max" {
-		t.Errorf("tier-2 parameter_values = %+v; want thinking=true effort=max", tier2.ParameterValues)
+	// Fast + max_mode variant must expose both cost flags.
+	var fastMax *CompactVariant
+	for i, v := range vs {
+		if v.Slug == "claude-opus-5-thinking-max-fast" {
+			fastMax = &vs[i]
+			break
+		}
 	}
-	if !tier2.IsDefault && tier2.IsDefault == vs[0].IsDefault && vs[0].IsDefault {
-		t.Errorf("only claude-opus-5-low was flagged default; propagation is wrong")
+	if fastMax == nil {
+		t.Fatal("fast+max variant missing")
 	}
-	// Sanity: default flag survives round-trip.
-	if !vs[0].IsDefault {
-		t.Errorf("claude-opus-5-low should carry IsDefault=true, got %+v", vs[0])
+	if !fastMax.IsMaxMode {
+		t.Errorf("is_max_mode not propagated on fast+max variant: %+v", fastMax)
 	}
-	// is_max_mode variant surfaces the flag AND adds one to tier.
-	last := vs[3]
-	if !last.IsMaxMode {
-		t.Errorf("claude-opus-5-thinking-max-fast is_max_mode not propagated: %+v", last)
+	if len(fastMax.CostFlags) != 2 {
+		t.Errorf("cost_flags = %v, want two entries (fast + max_mode)", fastMax.CostFlags)
+	}
+	if fastMax.Tier != 4 {
+		t.Errorf("Tier(12x) = %d, want 4", fastMax.Tier)
+	}
+	// parameter_values must survive so a client can submit base+params
+	// to reach this exact variant.
+	if fastMax.ParameterValues["fast"] != "true" || fastMax.ParameterValues["effort"] != "max" {
+		t.Errorf("fast+max parameter_values = %+v", fastMax.ParameterValues)
+	}
+	// Default flag survives round-trip.
+	var lowVariant *CompactVariant
+	for i, v := range vs {
+		if v.Slug == "claude-opus-5-low" {
+			lowVariant = &vs[i]
+			break
+		}
+	}
+	if lowVariant == nil || !lowVariant.IsDefault {
+		t.Errorf("claude-opus-5-low should carry IsDefault=true, got %+v", lowVariant)
+	}
+}
+
+// TestCompactVariantsFastCostFromTooltip pins the fast-mode multiplier
+// extraction against the exact tooltip Cursor's server emits. Sampled
+// live 2026-09-12 from a real 3.19.7 catalog. Regressions here would
+// silently misprice fast variants in downstream billing.
+func TestCompactVariantsFastCostFromTooltip(t *testing.T) {
+	resp := &cursorpb.AiserverV1_AvailableModelsResponse{
+		Models: []*cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel{
+			{
+				Name: "claude-opus-5",
+				ParameterDefinitions: []*cursorpb.AiserverV1_ModelParameterDefinition{
+					booleanParam("fast", "Fast", "true", "false"),
+				},
+				Variants: []*cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig{
+					variantConfig("claude-opus-5", map[string]string{"fast": "false"}, false, true, false),
+					{
+						LegacySlug:      strPtr("claude-opus-5-fast"),
+						ParameterValues: []*cursorpb.AgentV1_RequestedModel_ModelParameterValue{{Id: "fast", Value: "true"}},
+						TooltipData: &cursorpb.AiserverV1_AvailableModelsResponse_TooltipData{
+							MarkdownContent: strPtr("**Claude Opus 5 (fast)**<br />The same Claude Opus 5 model at 2x the price, using Anthropic's fast mode.<br />"),
+						},
+					},
+				},
+			},
+		},
+	}
+	c := CompactModelListing(resp)
+	if len(c) != 1 || len(c[0].Variants) != 2 {
+		t.Fatalf("unexpected: %+v", c)
+	}
+	byID := map[string]CompactVariant{}
+	for _, v := range c[0].Variants {
+		byID[v.Slug] = v
+	}
+	if got := byID["claude-opus-5"].CostMultiplier; got != 1.0 {
+		t.Errorf("base multiplier = %g, want 1.0", got)
+	}
+	if got := byID["claude-opus-5-fast"].CostMultiplier; got != 2.0 {
+		t.Errorf("fast multiplier = %g, want 2.0 (parsed from tooltip)", got)
+	}
+}
+
+// TestCompactVariantsMaxModeCostMultiplier pins the max-mode premium.
+// Cursor's dashboard published 6x at time of writing. The env override
+// is what lets ops track a future change without a plugin rebuild.
+func TestCompactVariantsMaxModeCostMultiplier(t *testing.T) {
+	t.Setenv("CURSOR_MAX_MODE_COST_MULTIPLIER", "8")
+	resp := &cursorpb.AiserverV1_AvailableModelsResponse{
+		Models: []*cursorpb.AiserverV1_AvailableModelsResponse_AvailableModel{
+			{
+				Name: "claude-opus-5",
+				Variants: []*cursorpb.AiserverV1_AvailableModelsResponse_ModelVariantConfig{
+					{LegacySlug: strPtr("claude-opus-5-max"), IsMaxMode: true},
+				},
+			},
+		},
+	}
+	c := CompactModelListing(resp)
+	if got := c[0].Variants[0].CostMultiplier; got != 8.0 {
+		t.Errorf("max multiplier with override = %g, want 8.0", got)
 	}
 }
 
